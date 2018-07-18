@@ -49,4 +49,4 @@ camera.speed_table_index = 0
 camera.gain = 1
 ```
 
-More information on how to use this wrapper and how it works can be found [here](Documents\PyVCAM+Wrapper.md)
+More information on how to use this wrapper and how it works can be found [here](Documents\\PyVCAM+Wrapper.md)
