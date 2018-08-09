@@ -3,14 +3,15 @@
 PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK
 
 ## Getting Started
-Follow the bellow instructions to get PyVCAM up and running on your machine for development and testing
+Follow the instructions below to get PyVCAM up and running on your machine for development and testing
 
 
 ### Prerequisites
-* Note that a good understanding of PVCAM is very helpful for understandingPyVCAM.
+* Note that a good understanding of PVCAM is very helpful for understanding PyVCAM.
 * The wrapper needs to be compiled so it will be necessary to have a C/C++ compiler to install this application
 * You will need to have the newest version of Python 3 installed on your machine which can be downloaded [here](https://www.python.org/downloads/)
 * You will also need to have the PVCam SDK installed this can be downloaded [here](https://www.photometrics.com/support/software/#software).
+* PyVCAM was developed using Microsoft Windows 10/64-bit.  The build package would need to be modified for Linux. 
 
 
 ### Installing
