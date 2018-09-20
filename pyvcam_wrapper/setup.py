@@ -130,7 +130,7 @@ shutil.rmtree('pyvcam.egg-info', ignore_errors=True, onerror=None)
 
 if is_linux:
     print('************************************************************\n')
-    print('Preinstall necessary package  \n')
+    print('Preinstall the necessary packages  \n')
     print('   sudo apt-get install python3-pip  \n')
     print('   sudo pip3 install numpy  \n')
     print('************************************************************\n')
@@ -140,7 +140,7 @@ if is_linux:
     print('************************************************************\n')
 elif is_windows:
     print('************************************************************\n')
-    print('Preinstall necessary package  \n')
+    print('Preinstall the necessary packages  \n')
     print('   python3 -m pip install --upgrade pip setuptools wheel  \n')
     print('   pip install "numpy-1.15.0+mkl-cp37-cp37m-win_amd64.whl"  \n')
     print('************************************************************\n')
@@ -148,45 +148,5 @@ elif is_windows:
     print('Using "python3 setup.py install"  to install this package \n')
     print('Using "pip uninstall pyvcam"  to uninstall this package \n')
     print('************************************************************\n')
-=======
-import os
-import numpy
-from setuptools import setup, find_packages
-from setuptools.extension import Extension
-import pip
-import shutil
-
-pvcam_sdk_path = os.environ["PVCAM_SDK_PATH"]
-
-packages = ['pyvcam']
-package_dir = {'pyvcam': 'src/pyvcam'}
-py_modules = ['pyvcam.constants']
-include_dirs = ["{}/inc/".format(pvcam_sdk_path),
-                numpy.get_include()]
-lib_dirs = ['{}/Lib/amd64'.format(pvcam_sdk_path)]
-libs = ['pvcam64']
-ext_modules = [Extension('pyvcam.pvc',
-                         ['src/pyvcam/pvcmodule.cpp'],
-                         include_dirs=include_dirs,
-                         library_dirs=lib_dirs,
-                         libraries=libs)]
-setup(name='pyvcam',
-      version='1.1',
-      description='Python wrapper for PVCAM functionality.',
-      packages=packages,
-      package_dir=package_dir,
-      py_modules=py_modules,
-      ext_modules=ext_modules)
-print('\nPyVCAM installed, removing temp directories\n\n')
-
-#TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
-#pip.main(['install', 'wxPython'])
-#pip.main(['install', 'pyserial'])
-#pip.main(['install', 'opencv-python'])
-#pip.main(['install', 'git+https://github.com/pearu/pylibtiff.git'])
-#os.system('conda install -y -c conda-forge opencv=3.2.0')
-shutil.rmtree('build')
-shutil.rmtree('dist')
-shutil.rmtree('pyvcam.egg-info')
 
 print('\n\n*************** Finished Installing PyVCAM ***************\n')
