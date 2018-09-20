@@ -1,5 +1,4 @@
 import os,platform
-import numpy
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 import pip
@@ -66,6 +65,7 @@ elif is_windows:
     print('Using "pip3 uninstall pyvcam"  to uninstall this package \n')
     print('************************************************************\n')
 
+import numpy
 pvcam_sdk_path = ''
 packages = ['pyvcam']
 package_dir = {'pyvcam': 'src/pyvcam'}
