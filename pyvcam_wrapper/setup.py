@@ -34,7 +34,7 @@ if is_linux:
    elif is_arch_aarch64:
        print(' Machine architecture is aarch64')
    else:
-       print(' The machine architecture is not supported, it must be x86_64, i686 or aarch64.')
+       print(' The machine architecture are not supported, it must be x86_64, i686 or aarch64.')
        quit()
 elif is_windows:
     if is_arch_x86_64:
@@ -42,7 +42,7 @@ elif is_windows:
     elif is_32bit:
         print(' Machine is x86 32bit')
     else:
-       print(' The machine architecture is not supported, it must be amd64 or x86 32bit.')
+       print(' This machine architecture is not supported, it must be amd64 or x86 32bit.')
        quit()
 
 if is_linux:
@@ -65,9 +65,6 @@ elif is_windows:
     print('Using "python3 setup.py install"  to install this package \n')
     print('Using "pip3 uninstall pyvcam"  to uninstall this package \n')
     print('************************************************************\n')
-
-
-
 
 pvcam_sdk_path = ''
 packages = ['pyvcam']
@@ -127,26 +124,5 @@ print('\nPyVCAM built, removing temp directories\n\n')
 shutil.rmtree('build', ignore_errors=True, onerror=None)
 shutil.rmtree('dist', ignore_errors=True, onerror=None)
 shutil.rmtree('pyvcam.egg-info', ignore_errors=True, onerror=None)
-
-if is_linux:
-    print('************************************************************\n')
-    print('Preinstall the necessary packages  \n')
-    print('   sudo apt-get install python3-pip  \n')
-    print('   sudo pip3 install numpy  \n')
-    print('************************************************************\n')
-    print('Using "sudo python3 setup.py build"  to build this package \n')
-    print('Using "sudo python3 setup.py install"  to install this package \n')
-    print('Using "sudo pip3 uninstall pyvcam"  to uninstall this package \n')
-    print('************************************************************\n')
-elif is_windows:
-    print('************************************************************\n')
-    print('Preinstall the necessary packages  \n')
-    print('   python3 -m pip install --upgrade pip setuptools wheel  \n')
-    print('   pip install "numpy-1.15.0+mkl-cp37-cp37m-win_amd64.whl"  \n')
-    print('************************************************************\n')
-    print('Using "python3 setup.py build"  to build this package \n')
-    print('Using "python3 setup.py install"  to install this package \n')
-    print('Using "pip uninstall pyvcam"  to uninstall this package \n')
-    print('************************************************************\n')
 
 print('\n\n*************** Finished Installing PyVCAM ***************\n')
