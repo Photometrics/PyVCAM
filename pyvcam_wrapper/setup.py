@@ -46,7 +46,7 @@ elif is_windows:
 
 if is_linux:
     print('************************************************************\n')
-    print('Preinstall necessary package  \n')
+    print('Preinstall necessary packages  \n')
     print('   sudo apt-get install python3-pip  \n')
     print('   sudo pip3 install numpy  \n')
     print('************************************************************\n')
@@ -56,7 +56,7 @@ if is_linux:
     print('************************************************************\n')
 elif is_windows:
     print('************************************************************\n')
-    print('Preinstall necessary package  \n')
+    print('Preinstall necessary packages  \n')
     print('   python3 -m pip install --upgrade pip setuptools wheel  \n')
     print('   pip install "numpy-1.15.0+mkl-cp37-cp37m-win_amd64.whl"  \n')
     print('************************************************************\n')
