@@ -217,7 +217,7 @@ pvc_close_camera(PyObject *self, PyObject *args)
 {
     int16 hcam;
     /* Parse the arguments provided by the user. */
-    if (!PyArg_ParseTuple(args, "i", &hcam)) {
+    if (!PyArg_ParseTuple(args, "h", &hcam)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
