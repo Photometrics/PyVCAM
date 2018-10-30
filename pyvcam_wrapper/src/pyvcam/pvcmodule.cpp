@@ -93,7 +93,7 @@ static PyObject *
 pvc_get_cam_fw_version(PyObject *self, PyObject* args)
 {
 	int16 hcam;
-	if (!PyArg_ParseTuple(args, "i", &hcam)) {
+	if (!PyArg_ParseTuple(args, "h", &hcam)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
@@ -170,7 +170,7 @@ pvc_get_cam_name(PyObject *self, PyObject *args)
        PyArg_ParseTuple unsuccessfully parses the arguments. The second argument
        to the function call ("i") denotes the types of the incoming argument
        to the function; "i" = int. */
-    if (!PyArg_ParseTuple(args, "i", &cam_num)) {
+    if (!PyArg_ParseTuple(args, "h", &cam_num)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -240,7 +240,7 @@ pvc_get_param(PyObject *self, PyObject *args)
     uns32 param_id;
     int16 param_attribute;
     /* Parse the arguments provided by the user. */
-    if (!PyArg_ParseTuple(args, "iii", &hcam, &param_id, &param_attribute)) {
+    if (!PyArg_ParseTuple(args, "hih", &hcam, &param_id, &param_attribute)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -417,7 +417,7 @@ pvc_set_param(PyObject *self, PyObject *args)
     void *param_value;
     /* Build the string to determine the type of the parameter value. */
     /* Parse the arguments provided by the user. */
-    if (!PyArg_ParseTuple(args, "iii", &hcam, &param_id, &param_value)) {
+    if (!PyArg_ParseTuple(args, "hii", &hcam, &param_id, &param_value)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -450,7 +450,7 @@ pvc_check_param(PyObject *self, PyObject *args)
 
     /* Build the string to determine the type of the parameter value. */
     /* Parse the arguments provided by the user. */
-    if (!PyArg_ParseTuple(args, "ii", &hcam, &param_id)) {
+    if (!PyArg_ParseTuple(args, "hi", &hcam, &param_id)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -489,7 +489,7 @@ pvc_get_frame(PyObject *self, PyObject *args)
     uns16 pbin;    /* Parallel binning. */
     uns32 expTime; /* Exposure time. */
     int16 expMode; /* Exposure mode. */
-    if (!PyArg_ParseTuple(args, "iiiiiiiii", &hcam, &s1, &s2, &sbin,
+    if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin,
         &p1, &p2, &pbin,
         &expTime, &expMode)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
@@ -574,7 +574,7 @@ pvc_start_live(PyObject *self, PyObject *args)
 	const int16 bufferMode = CIRC_OVERWRITE;
 	const uns16 circBufferFrames = 16;
 
-	if (!PyArg_ParseTuple(args, "iiiiiiiii", &hcam, &s1, &s2, &sbin, &p1, &p2,
+	if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
                                                 &pbin, &expTime, &expMode)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
@@ -621,7 +621,7 @@ pvc_get_live_frame(PyObject *self, PyObject *args)
 	uns32 byte_cnt;			/*Byte count*/
 	uns32 buffer_cnt;		/*Buffer Count*/
 
-	if (!PyArg_ParseTuple(args, "ii", &hcam, &exposureBytes)) {
+	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
@@ -669,7 +669,7 @@ pvc_start_live_cb(PyObject *self, PyObject *args)
   const int16 bufferMode = CIRC_OVERWRITE;
   const uns16 circBufferFrames = 16;
 
-  if (!PyArg_ParseTuple(args, "iiiiiiiii", &hcam, &s1, &s2, &sbin, &p1, &p2,
+  if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
                                                 &pbin, &expTime, &expMode)) {
     PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
     return NULL;
@@ -723,7 +723,7 @@ pvc_get_live_frame_cb(PyObject *self, PyObject *args)
 	const int16 bufferMode = CIRC_OVERWRITE;
 	const uns16 circBufferFrames = 20;
 
-	if (!PyArg_ParseTuple(args, "ii", &hcam, &exposureBytes)) {
+	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
@@ -749,7 +749,7 @@ pvc_stop_live(PyObject *self, PyObject *args)
 {
 	int16 hcam;    /* Camera handle. */
 
-	if (!PyArg_ParseTuple(args, "i", &hcam)) {
+	if (!PyArg_ParseTuple(args, "h", &hcam)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
@@ -778,7 +778,7 @@ pvc_set_exp_modes(PyObject *self, PyObject *args)
 
      int16 hcam;    /* Camera handle. */
      int16 expMode; /* Exposure mode. */
-     if (!PyArg_ParseTuple(args, "ii", &hcam, &expMode)) {
+     if (!PyArg_ParseTuple(args, "hh", &hcam, &expMode)) {
          PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
          return NULL;
      }
@@ -853,7 +853,7 @@ pvc_read_enum(PyObject *self, PyObject *args)
 {
     int16 hcam;
     uns32 param_id;
-    if (!PyArg_ParseTuple(args, "ii", &hcam, &param_id)) {
+    if (!PyArg_ParseTuple(args, "hi", &hcam, &param_id)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -904,7 +904,7 @@ pvc_reset_pp(PyObject *self, PyObject *args)
 {
     int16 hcam;
     /* Parse the arguments provided by the user. */
-    if (!PyArg_ParseTuple(args, "i", &hcam)) {
+    if (!PyArg_ParseTuple(args, "h", &hcam)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
