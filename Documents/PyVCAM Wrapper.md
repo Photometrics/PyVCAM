@@ -97,7 +97,7 @@ cam.open()                         # Open the camera.
 All getters and setters can be accessed using the example below. There is one large implementation point to make note of: 
 <ul><li>All getters/setters are accessed by attribute. This means that it will appear that we are accessing instance variables from a camera, but in reality, these getters/setters are making specially formatted calls to the Camera method get_param/set_param. These getters/setters make use of the property decorator that is built into Python. The reasoning behind the usage of the property decorator is that attributes will change dynamically during a Camera's lifetime and in order to abstract PVCAM as far away from the end user as possible, the property decorator allows for users to intuitively view and change camera settings. The downside to this approach is that when a new parameter is required, an associated getter/setter needs to be written and tested. Another downside to this implementation is that attribute lookup time is not instant; instead, a call must be made to the pvcmodule wrapper which will then call PVCAM, which will then return a result to the wrapper, which will finally return the result to the user. The time it takes is currently considered insignificant, but if this were to become an issue, the code could be refactored such that all attributes also have instance variables which are changed only when set_param or their associated setter is called on them. </li></ul>
 
-<br>
+
 ##### Using Getters/Setters
 ```
 # Assume cam is an already constructed camera.  
@@ -240,10 +240,13 @@ If you wish to return None, simply use the Py_RETURN_NONE macro (see the PyArg_P
 | pvc_set_exp_modes | Given a camera, exposure mode, and an expose out mode, change the camera's exposure mode to be the bitwise-or of the exposure mode and expose out mode parameters. ValueError is raised if invalid parameters are supplied including invalid modes for either exposure mode or expose out mode. RuntimeError is raised upon failure. <br><br>**Parameters:**<br><ul><li>Python int (camera handle). </li><li>Python int (exposure mode). </li><li>Python int (expose out mode). </li></ul>|
 | valid_enum_param | Helper function that determines if a given value is a valid selection for an enumerated type. Should any PVCAM function calls in this function fail, a "falsy" value wil be returned. "Truthy" is returned if it is a valid enumerated value for a parameter. **Note: This function is not exposed to Python, so no Python parameters are required.** <br><br>**Parameters:**<br><ul><li>hcam (int16): The handle of the camera. </li><li>param_id (uns32): The parameter ID. </li><li>selected_val (int32): The value to check if it is a valid selection. </li></ul>|
 | pvc_read_enum | Function that when given a camera handle and a enumerated parameter will return a list mapping all valid setting names to their values for the camera. ValueError is raised if invalid parameters are supplied. AttributeError is raised if an invalid setting for the camera is supplied. RuntimeError is raised upon failure. A Python list of dictionaries is returned upon success. <br><br>**Parameters:**<br><ul><li>Python int (camera handle). </li><li>Python int (parameter ID). </li></ul>
+
+
 #### The Method Table
 All functions that need to be exposed to Python programs need to be included in the method table. The method table is partially responsible for allowing Python programs to call functions from an extension module. It does this by creating a list of PyMethodDef structs with a sentinel struct at the end of the list. The list of method definitions are then passed to the PyModuleDef struct, which contains the necessary information to construct the module. 
 
-The method table is a list of PyMethodDef structs, which have the following four fields: 
+The method table is a list of PyMethodDef structs, which have the following four fields:
+
 | Field Name | C Type      | Description                                                             |
 | -----------| ----------- | ----------------------------------------------------------------------- |
 | ml_name    | char *      | Name of the method (when called from Python)                            |
@@ -255,6 +258,7 @@ All docstrings for the functions inside of pvcmodule.cpp are statically defined 
 
 #### The Module Definition
 The PyModuleDef structure contains all of the information required to create the top-level module object.
+
 | Field Name | C Type           | Description                                                              |
 | -----------| ---------------- | ------------------------------------------------------------------------ |
 | m_base     | PyModuleDef_Base | Always initialize this member to PyModuleDef_HEAD_INIT                   |
