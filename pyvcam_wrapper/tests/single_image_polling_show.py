@@ -10,6 +10,8 @@ def main():
     frame = cam.get_frame(exp_time=20).reshape(cam.sensor_size[::-1])
     plt.imshow(frame, cmap="gray")
     plt.show()
+    cam.close()
+    pvc.uninit_pvcam()
 
 if __name__=="__main__":
     main()
