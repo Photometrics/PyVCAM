@@ -38,6 +38,9 @@ def main():
         print('Min:{}\tMax:{}\tAverage:{:.0f}\tFrame Rate: {:.1f}\n'.format(low, high, average, fps))
         cnt += 1
         tot += 1
+    
+    cam.close()
+    pvc.uninit_pvcam()
 
     print('Total frames: {}\nAverage fps: {}\n'.format(tot, (tot/(time.time()-start))))
 if __name__ == "__main__":
