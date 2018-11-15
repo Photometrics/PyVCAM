@@ -11,5 +11,8 @@ def main():
     for i in range(5):
         frame = cam.get_frame(exp_time=20)
         print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))
+    cam.close()
+    pvc.uninit_pvcam()
+
 if __name__ == "__main__":
     main()
