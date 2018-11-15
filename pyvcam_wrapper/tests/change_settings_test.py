@@ -33,3 +33,7 @@ apply_settings(camera)
 
 print("\nAfter changing settings:")
 print_settings(camera)
+
+# Cleanup before exit
+camera.close()
+pvc.uninit_pvcam()
