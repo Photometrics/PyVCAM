@@ -1074,17 +1074,25 @@ pvc_fast_acquisition(PyObject *self, PyObject *args)
 
 	// Prepare and run acquisition
 	auto helper = std::make_shared<Helper>();
+
+	if (!helper->InstallTerminationHandlers())
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not install termination handlers!!!");
+		return NULL;
+	}
+
 	if (!helper->ApplySettings(camIndex, expTotal, expTime, expMode, regions, path))
 	{
 		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!!!");
+		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!");
 		return NULL;
 	}
 
 	if (!helper->RunAcquisition())
 	{
 		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!!!");
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!");
 		return NULL;
 	}
 

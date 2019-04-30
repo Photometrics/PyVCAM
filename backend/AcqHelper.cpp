@@ -6,6 +6,13 @@
 #include <string>
 #include <thread>
 
+#if defined(_WIN32)
+	#include <Windows.h>
+#else
+	#include <cstring>
+	#include <signal.h>
+#endif
+
 /* PVCAM */
 #include <master.h>
 #include <pvcam.h>
@@ -22,6 +29,12 @@
 #include "TrackRuntimeLoader.h"
 #include "Utils.h"
 #include "AcqHelper.h"
+
+// Global variables, used only for termination handlers!
+// Global copy of Acquisition pointer
+std::shared_ptr<pm::Acquisition> g_acquisition(nullptr);
+// Global flag to abort current operation
+std::atomic<bool> g_userAbortFlag(false);
 
 using HandlerProto = bool(Helper::*)(const std::string&);
 
@@ -127,7 +140,7 @@ bool Helper::RunAcquisition()
 	const int16 camIndex = m_settings.GetCamIndex();
 	if (camIndex >= totalCams)
 	{
-		pm::Log::LogE("There is not so many cameras to select from index %d",
+		pm::Log::LogE("There is not enough cameras to select index %d",
 			camIndex);
 		return false;
 	}
@@ -158,21 +171,102 @@ bool Helper::RunAcquisition()
 		m_settings.SetRegions(regions);
 	}
 
-	/* One additional note, is that the print statements in this code
-	are for demonstration only, and it is not normally recommended
-	to print this verbosely during an acquisition, because it may
-	affect the performance of the system. */
+	// Setup acquisition with m_settings
 	if (!m_camera->SetupExp(m_settings))
 	{
-		pm::Log::LogE("Please review your commandline parameters "
+		pm::Log::LogE("Please review your settings "
 			"and ensure they are supported by this camera");
 		return false;
 	}
 
+	// Run acquisition
+	g_userAbortFlag = false;
 	if (m_acquisition->Start())
 	{
+		g_acquisition = m_acquisition;
 		m_acquisition->WaitForStop(true);
+		g_acquisition = nullptr;
 	}
 
 	return true;
+}
+
+/*
+
+*******************************************************
+* Abort handling. Abort an acquisition using <CTRL>+C *
+*******************************************************
+*/
+
+#if defined(_WIN32)
+static BOOL WINAPI ConsoleCtrlHandler(DWORD dwCtrlType)
+{
+	/* Return TRUE if handled this message, further handler functions won't be called.
+	Return FALSE to pass this message to further handlers until default handler
+	calls ExitProcess(). */
+
+	switch (dwCtrlType)
+	{
+	case CTRL_C_EVENT: // Ctrl+C
+	case CTRL_BREAK_EVENT: // Ctrl+Break
+	case CTRL_CLOSE_EVENT: // Closing the console window
+	case CTRL_LOGOFF_EVENT: // User logs off. Passed only to services!
+	case CTRL_SHUTDOWN_EVENT: // System is shutting down. Passed only to services!
+		break;
+	default:
+		pm::Log::LogE("Unknown console control type!");
+		return FALSE;
+	}
+
+	if (g_acquisition)
+	{
+		// On first abort it gives a chance to finish processing.
+		// On second abort it forces full stop.
+		g_acquisition->RequestAbort(g_userAbortFlag);
+		pm::Log::LogI((!g_userAbortFlag)
+			? "\n>>> Acquisition stop requested\n"
+			: "\n>>> Acquisition interruption forced\n");
+		g_userAbortFlag = true;
+	}
+
+	return TRUE;
+}
+#else
+static void TerminalSignalHandler(int sigNum)
+{
+	if (g_acquisition)
+	{
+		// On first abort it gives a chance to finish processing.
+		// On second abort it forces full stop.
+		g_acquisition->RequestAbort(g_userAbortFlag);
+		pm::Log::LogI((!g_userAbortFlag)
+			? "\n>>> Acquisition stop requested\n"
+			: "\n>>> Acquisition interruption forced\n");
+		g_userAbortFlag = true;
+	}
+}
+#endif
+
+// Sets handlers that properly end acquisition on Ctrl+C, Ctrl+Break, Log-off, etc.
+bool Helper::InstallTerminationHandlers()
+{
+	bool retVal;
+
+#if defined(_WIN32)
+	retVal = (TRUE == SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE));
+#else
+	struct sigaction newAction;
+	memset(&newAction, 0, sizeof(newAction));
+	newAction.sa_handler = TerminalSignalHandler;
+	retVal = true;
+	if (0 != sigaction(SIGINT, &newAction, NULL)
+		|| 0 != sigaction(SIGHUP, &newAction, NULL)
+		|| 0 != sigaction(SIGTERM, &newAction, NULL))
+		retVal = false;
+#endif
+
+	if (!retVal)
+		pm::Log::LogE("Unable to install termination handler(s)!");
+
+	return retVal;
 }
