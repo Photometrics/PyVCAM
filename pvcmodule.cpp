@@ -1089,12 +1089,14 @@ pvc_fast_acquisition(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
+	Py_BEGIN_ALLOW_THREADS // Release Python GIL
 	if (!helper->RunAcquisition())
 	{
 		pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!");
 		return NULL;
 	}
+	Py_END_ALLOW_THREADS // Reacquire Python GIL
 
 	// Uninitialize logging subsystem
 	pm::Log::Flush();
