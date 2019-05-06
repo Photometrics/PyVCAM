@@ -13,7 +13,7 @@
 #
 # Bugs: [See constants_generator.py]
 ###############################################################################
-import ctypes,os
+import ctypes
 ### DEFINES ###
 MAX_CAM = 16
 CAM_NAME_LEN = 32
