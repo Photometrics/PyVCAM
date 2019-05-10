@@ -1,10 +1,9 @@
-from sgctrl.pyvcam import pvc
-from sgctrl.pyvcam import constants as const
-
 import os
 import time
 import numpy as np
 
+from sgctrl.pyvcam import pvc
+from sgctrl.pyvcam import constants as const
 
 def fast_acquisition(num_frames, outdir, cam_idx=0, exp_time=10, roi=None):
     """
