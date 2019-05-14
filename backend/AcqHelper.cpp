@@ -65,7 +65,7 @@ bool Helper::ApplySettings(uns16 camIndex, uns32 expTotal, uns32 expTime, int16 
 	// MAKE THIS CHANGEABLE
 	m_settings.SetAcqMode(pm::AcqMode::SnapCircBuffer);
 	m_settings.SetStorageType(pm::StorageType::Tiff);
-	//m_settings.SetMaxStackSize(4000000000); // 4 gigabytes
+	m_settings.SetMaxStackSize(2147483647); // 0xFFFFFFFF / 2 bytes (~2.15 GB)
 	m_settings.SetSaveDir(path);
 	return true;
 }
