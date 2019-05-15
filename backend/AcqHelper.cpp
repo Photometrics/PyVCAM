@@ -179,12 +179,14 @@ bool Helper::RunAcquisition()
 
 	// Run acquisition
 	g_userAbortFlag = false;
+	aborted = false;
 	if (m_acquisition->Start())
 	{
 		g_acquisition = m_acquisition;
 		m_acquisition->WaitForStop(true);
 		g_acquisition = nullptr;
 	}
+	aborted = g_userAbortFlag;
 
 	return true;
 }

@@ -1127,6 +1127,13 @@ static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
 	}
 	Py_END_ALLOW_THREADS // Reacquire Python GIL
 
+    if ((self->helpPtr)->aborted)
+    {
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted!");
+		return NULL;
+    }
+
 	pm::Log::Flush();
     Py_RETURN_NONE;
 }
