@@ -56,9 +56,8 @@ bool Helper::HandleTargetFps(const std::string& value)
 	return pm::StrToNumber<unsigned int>(value, m_targetFps);
 }
 
-bool Helper::ApplySettings(uns16 camIndex, uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path)
+bool Helper::ApplySettings(uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path)
 {
-	m_settings.SetCamIndex(camIndex);
 	m_settings.SetAcqFrameCount(expTotal);
 	m_settings.SetExposure(expTime);
 	m_settings.SetRegions(regions);
@@ -126,37 +125,31 @@ void Helper::UninitAcquisition()
 
 	m_acquisition = nullptr;
 	m_camera = nullptr;
+	acq_ready = false;
 }
 
-bool Helper::RunAcquisition()
+bool Helper::AttachCamera(std::string camName)
 {
 	if (!InitAcquisition())
 	{
 		return false;
 	}
 
-	int16 totalCams;
-	if (!m_camera->GetCameraCount(totalCams))
-	{
-		totalCams = 0;
-	}
-	pm::Log::LogI("We have %d camera(s)", totalCams);
-
-	const int16 camIndex = m_settings.GetCamIndex();
-	if (camIndex >= totalCams)
-	{
-		pm::Log::LogE("There is not enough cameras to select index %d",
-			camIndex);
-		return false;
-	}
-
-	std::string camName;
-	if (!m_camera->GetName(camIndex, camName))
-		return false;
-
 	if (!m_camera->Open(camName))
+	{
+		return false;
+	}
+
+	acq_ready = true;
+	return true;
+}
+
+bool Helper::RunAcquisition()
+{
+	if (!acq_ready)
 		return false;
 
+	// Apply settings
 	if (!m_camera->ReviseSettings(m_settings, m_optionController, false))
 		return false;
 

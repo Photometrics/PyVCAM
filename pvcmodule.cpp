@@ -1039,7 +1039,6 @@ static void StreamSaver_dealloc(StreamSaver *self)
 static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
 {
 	// Parse input
-	uns16 camIndex;   /* Camera index. */
 	uns32 expTotal;   /* Number of frames to get */
 	uns32 expTime;    /* Exposure time. */
 	int16 expMode;    /* Exposure mode. */
@@ -1051,7 +1050,7 @@ static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
 	uns16 pbin;    /* Parallel binning. */
 	const char *path; /* Output TIFF */
 
-	if (!PyArg_ParseTuple(args, "HIIhHHHHHHs", &camIndex, &expTotal, &expTime, &expMode,
+	if (!PyArg_ParseTuple(args, "IIhHHHHHHs", &expTotal, &expTime, &expMode,
 		&s1, &s2, &sbin, &p1, &p2, &pbin, &path)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
@@ -1067,28 +1066,50 @@ static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
 	rgn.p2 = p2;
 	regions.push_back(rgn);
 
-	if (!(self->helpPtr)->ApplySettings(camIndex, expTotal, expTime, expMode, regions, path))
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Applying settings!");
+	if (!(self->helpPtr)->ApplySettings(expTotal, expTime, expMode, regions, path))
 	{
 		pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!");
 		return NULL;
 	}
 
+	pm::Log::Flush();
 	Py_RETURN_NONE;
 }
 
-static PyObject *StreamSaver_show_settings(StreamSaver *self)
+static PyObject *StreamSaver_attach_camera(StreamSaver *self, PyObject *args)
 {
-    (self->helpPtr)->ShowSettings();
-	Py_RETURN_NONE;
+    // Parse input
+	const char *camName; /* Camera name */
+	if (!PyArg_ParseTuple(args, "s", &camName)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Attaching camera!");
+    std::string camNameStr(camName);
+    if (!(self->helpPtr)->AttachCamera(camNameStr))
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not setup acquisition!!!");
+		return NULL;
+	}
+
+	pm::Log::Flush();
+    Py_RETURN_NONE;
 }
 
 static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
 {
     // Start Log
 	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
-	pm::Log::LogI("Stream Saving Tool");
-	pm::Log::LogI("==================\n");
+	pm::Log::LogI("Running Acquisition!");
+	pm::Log::LogI("====================\n");
 
 	if (!(self->helpPtr)->InstallTerminationHandlers())
 	{
@@ -1106,23 +1127,31 @@ static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
 	}
 	Py_END_ALLOW_THREADS // Reacquire Python GIL
 
-	// Uninitialize logging subsystem
 	pm::Log::Flush();
     Py_RETURN_NONE;
 }
 
 static PyMethodDef StreamSaver_methods[] = {
-    {"apply_settings", (PyCFunction)StreamSaver_apply_settings, METH_VARARGS, "Apply acq settings"},
-    {"show_settings", (PyCFunction)StreamSaver_show_settings, METH_NOARGS, "Prints acq settings"},
-    {"run_acquisition", (PyCFunction)StreamSaver_run_acquisition, METH_NOARGS, "Run the acquisition"},
+    {"attach_camera",
+        (PyCFunction)StreamSaver_attach_camera,
+        METH_VARARGS,
+        "Attach a camera for the acquisition."},
+    {"apply_settings",
+        (PyCFunction)StreamSaver_apply_settings,
+        METH_VARARGS,
+        "Apply acquisition settings."},
+    {"run_acquisition",
+        (PyCFunction)StreamSaver_run_acquisition,
+        METH_NOARGS,
+        "Run the acquisition. NOTE: attach_camera and apply_settings must be called first!"},
     {NULL} /* Sentinel */
 };
 
 static PyTypeObject StreamSaverType = {
     PyVarObject_HEAD_INIT(NULL, 0) "pvc.StreamSaver",  /* tp_name */
-    sizeof(StreamSaver),                           /* tp_basicsize */
+    sizeof(StreamSaver),                      /* tp_basicsize */
     0,                                        /* tp_itemsize */
-    (destructor)StreamSaver_dealloc,               /* tp_dealloc */
+    (destructor)StreamSaver_dealloc,          /* tp_dealloc */
     0,                                        /* tp_print */
     0,                                        /* tp_getattr */
     0,                                        /* tp_setattr */
@@ -1138,22 +1167,22 @@ static PyTypeObject StreamSaverType = {
     0,                                        /* tp_setattro */
     0,                                        /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
-    "StreamSaver objects",                         /* tp_doc */
+    "StreamSaver class adapted from PVCAM StreamSaving example.", /* tp_doc */
     0,                                        /* tp_traverse */
     0,                                        /* tp_clear */
     0,                                        /* tp_richcompare */
     0,                                        /* tp_weaklistoffset */
     0,                                        /* tp_iter */
     0,                                        /* tp_iternext */
-    StreamSaver_methods,                           /* tp_methods */
-    0,                           /* tp_members */
+    StreamSaver_methods,                      /* tp_methods */
+    0,                                        /* tp_members */
     0,                                        /* tp_getset */
     0,                                        /* tp_base */
     0,                                        /* tp_dict */
     0,                                        /* tp_descr_get */
     0,                                        /* tp_descr_set */
     0,                                        /* tp_dictoffset */
-    (initproc)StreamSaver_init,                    /* tp_init */
+    (initproc)StreamSaver_init,               /* tp_init */
     0,                                        /* tp_alloc */
     PyType_GenericNew,                        /* tp_new */
 };

@@ -15,9 +15,10 @@ public:
 
 public:
 	bool InstallTerminationHandlers();
-	bool ApplySettings(uns16 camIndex, uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path);
+	bool ApplySettings(uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path);
 	void ShowSettings();
-	bool RunAcquisition();
+	bool AttachCamera(std::string camName); // Attach/connect camera
+	bool RunAcquisition(); // Run the acquisition
 
 private: // CLI option handlers
 	bool HandleTargetFps(const std::string& value);
@@ -27,6 +28,7 @@ private:
 	void UninitAcquisition();
 
 private:
+	bool acq_ready = false;
 	pm::Settings m_settings;
 	pm::OptionController m_optionController;
 	unsigned int m_targetFps; // Not stored in Settings
