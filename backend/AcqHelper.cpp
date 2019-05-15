@@ -70,6 +70,11 @@ bool Helper::ApplySettings(uns16 camIndex, uns32 expTotal, uns32 expTime, int16 
 	return true;
 }
 
+void Helper::ShowSettings()
+{
+	std::cout << "Cam index: " << m_settings.GetCamIndex() << std::endl;
+}
+
 bool Helper::InitAcquisition()
 {
 	// Get Camera instance

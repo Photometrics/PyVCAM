@@ -15,8 +15,8 @@ public:
 
 public:
 	bool InstallTerminationHandlers();
-	void ShowHelp();
 	bool ApplySettings(uns16 camIndex, uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path);
+	void ShowSettings();
 	bool RunAcquisition();
 
 private: // CLI option handlers

@@ -1051,7 +1051,7 @@ pvc_fast_acquisition(PyObject *self, PyObject *args)
 	uns16 pbin;    /* Parallel binning. */
 	const char *path; /* Output TIFF */
 
-	if (!PyArg_ParseTuple(args, "HIIhHHHHHHs", &camIndex, &expTotal, &expTime, &expMode, 
+	if (!PyArg_ParseTuple(args, "HIIhHHHHHHs", &camIndex, &expTotal, &expTime, &expMode,
 		&s1, &s2, &sbin, &p1, &p2, &pbin, &path)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
@@ -1105,6 +1105,152 @@ pvc_fast_acquisition(PyObject *self, PyObject *args)
 	// Successfully completed acquisition
 	Py_RETURN_NONE;
 }
+
+// **************************************
+// *       CLASS IMPLEMENTATION
+// **************************************
+
+// Define PyHelper object
+typedef struct {
+    PyObject_HEAD
+    Helper *helpPtr;
+} PyHelper;
+
+// Initialize PyHelper object
+static int PyHelper_init(PyHelper *self, PyObject *args, PyObject *kwargs)
+{
+    self->helpPtr = new Helper();
+    return 0;
+}
+
+// Destruct PyHelper object
+static void PyHelper_dealloc(PyHelper *self)
+{
+    delete self->helpPtr;
+    Py_TYPE(self)->tp_free(self);
+}
+
+static PyObject *PyHelper_apply_settings(PyHelper *self, PyObject *args)
+{
+	// Parse input
+	uns16 camIndex;   /* Camera index. */
+	uns32 expTotal;   /* Number of frames to get */
+	uns32 expTime;    /* Exposure time. */
+	int16 expMode;    /* Exposure mode. */
+	uns16 s1;      /* First pixel in serial register. */
+	uns16 s2;      /* Last pixel in serial register. */
+	uns16 sbin;    /* Serial binning. */
+	uns16 p1;      /* First pixel in parallel register. */
+	uns16 p2;      /* Last pixel in serial register. */
+	uns16 pbin;    /* Parallel binning. */
+	const char *path; /* Output TIFF */
+
+	if (!PyArg_ParseTuple(args, "HIIhHHHHHHs", &camIndex, &expTotal, &expTime, &expMode,
+		&s1, &s2, &sbin, &p1, &p2, &pbin, &path)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+	// Pack ROI's
+	std::vector<rgn_type> regions;
+	rgn_type rgn;
+	rgn.sbin = sbin;
+	rgn.pbin = pbin;
+	rgn.s1 = s1;
+	rgn.s2 = s2;
+	rgn.p1 = p1;
+	rgn.p2 = p2;
+	regions.push_back(rgn);
+
+	if (!(self->helpPtr)->ApplySettings(camIndex, expTotal, expTime, expMode, regions, path))
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!");
+		return NULL;
+	}
+
+	Py_RETURN_NONE;
+}
+
+static PyObject *PyHelper_show_settings(PyHelper *self)
+{
+    (self->helpPtr)->ShowSettings();
+	Py_RETURN_NONE;
+}
+
+static PyObject *PyHelper_run_acquisition(PyHelper *self)
+{
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Stream Saving Tool");
+	pm::Log::LogI("==================\n");
+
+	if (!(self->helpPtr)->InstallTerminationHandlers())
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not install termination handlers!!!");
+		return NULL;
+	}
+
+	Py_BEGIN_ALLOW_THREADS // Release Python GIL
+	if (!(self->helpPtr)->RunAcquisition())
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!");
+		return NULL;
+	}
+	Py_END_ALLOW_THREADS // Reacquire Python GIL
+
+	// Uninitialize logging subsystem
+	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyMethodDef PyHelper_methods[] = {
+    {"apply_settings", (PyCFunction)PyHelper_apply_settings, METH_VARARGS, "Apply acq settings"},
+    {"show_settings", (PyCFunction)PyHelper_show_settings, METH_NOARGS, "Prints acq settings"},
+    {"run_acquisition", (PyCFunction)PyHelper_run_acquisition, METH_NOARGS, "Run the acquisition"},
+    {NULL} /* Sentinel */
+};
+
+static PyTypeObject PyHelperType = {
+    PyVarObject_HEAD_INIT(NULL, 0) "pvc.PyHelper",  /* tp_name */
+    sizeof(PyHelper),                           /* tp_basicsize */
+    0,                                        /* tp_itemsize */
+    (destructor)PyHelper_dealloc,               /* tp_dealloc */
+    0,                                        /* tp_print */
+    0,                                        /* tp_getattr */
+    0,                                        /* tp_setattr */
+    0,                                        /* tp_reserved */
+    0,                                        /* tp_repr */
+    0,                                        /* tp_as_number */
+    0,                                        /* tp_as_sequence */
+    0,                                        /* tp_as_mapping */
+    0,                                        /* tp_hash  */
+    0,                                        /* tp_call */
+    0,                                        /* tp_str */
+    0,                                        /* tp_getattro */
+    0,                                        /* tp_setattro */
+    0,                                        /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
+    "PyHelper objects",                         /* tp_doc */
+    0,                                        /* tp_traverse */
+    0,                                        /* tp_clear */
+    0,                                        /* tp_richcompare */
+    0,                                        /* tp_weaklistoffset */
+    0,                                        /* tp_iter */
+    0,                                        /* tp_iternext */
+    PyHelper_methods,                           /* tp_methods */
+    0,                           /* tp_members */
+    0,                                        /* tp_getset */
+    0,                                        /* tp_base */
+    0,                                        /* tp_dict */
+    0,                                        /* tp_descr_get */
+    0,                                        /* tp_descr_set */
+    0,                                        /* tp_dictoffset */
+    (initproc)PyHelper_init,                    /* tp_init */
+    0,                                        /* tp_alloc */
+    PyType_GenericNew,                        /* tp_new */
+};
 
 /* When writing a new function, include it in the Method Table definitions!
  *
@@ -1231,10 +1377,21 @@ static struct PyModuleDef pvcmodule = {
     "pvc",            // Name of module
     module_docstring, // Module Documentation
     -1,               // Module keeps state in global variables
-    PvcMethods        // Our list of module functions.
+    PvcMethods,        // Our list of module functions.
 };
 
-PyMODINIT_FUNC PyInit_pvc(void)
+PyMODINIT_FUNC
+PyInit_pvc(void)
 {
-    return PyModule_Create(&pvcmodule);
+    Py_Initialize();
+    PyObject *m = PyModule_Create(&pvcmodule);
+
+    // Object definitions
+    if (PyType_Ready(&PyHelperType) < 0)
+        return NULL;
+
+    Py_INCREF(&PyHelperType);
+    PyModule_AddObject(m, "PyHelper", (PyObject *)&PyHelperType);
+
+    return m;
 }
