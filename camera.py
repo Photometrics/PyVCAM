@@ -5,34 +5,6 @@ import numpy as np
 from sgctrl.pyvcam import pvc
 from sgctrl.pyvcam import constants as const
 
-def fast_acquisition(num_frames, outdir, cam_idx=0, exp_time=10, roi=None):
-    """
-    Most efficient acquisition method. Calls pvc.fast_acquisition function
-    which runs an acquisition thread and saving thread simultaneously.
-    Parameter:
-        num_frames (int): Number of frames to capture in the sequence
-        exp_time (int): The exposure time (optional)
-    Returns:
-        None
-    """
-    if roi is None:
-        roi = (0, 2960, 0, 2960)
-    x_start, x_end, y_start, y_end = roi
-    bin_x = 1
-    bin_y = 1
-    
-    # Check path
-    if not os.path.isdir(outdir):
-        os.mkdir(outdir)
-    
-    # Run acquisition
-    #log_out = os.path.join(outdir, "output.txt")
-    #log_err = os.path.join(outdir, "error.txt")
-    pvc.fast_acquisition( cam_idx, num_frames, exp_time, 0,
-                                 x_start, x_end - 1, bin_x,
-                                 y_start, y_end - 1, bin_y, outdir )
-    return
-
 class Camera:
     """Models a class currently connected to the system.
 
@@ -69,6 +41,9 @@ class Camera:
         self.__roi = None
         self.__shape = None
 
+        # StreamSaving object
+        self.__stream_saver = None
+
     def __repr__(self):
         return self.name
 
@@ -79,12 +54,10 @@ class Camera:
         Returns:
             A Camera object.
         """
-        cam_count = 0
         total = pvc.get_cam_total()
-        while cam_count < total:
+        for cam_idx in range(total):
             try:
-                yield Camera(pvc.get_cam_name(cam_count))
-                cam_count += 1
+                yield Camera(pvc.get_cam_name(cam_idx))
             except RuntimeError:
                 raise RuntimeError('Failed to create a detected camera.')
 
@@ -140,6 +113,7 @@ class Camera:
             pvc.close_camera(self.__handle)
             self.__handle = -1
             self.__is_open = False
+            self.__stream_saver = None
         except:
             raise RuntimeError('Failed to close camera.')
 
@@ -298,7 +272,7 @@ class Camera:
                 time.sleep(interval/1000)
 
         return stack
-    
+
     def get_sequence_fast(self, num_frames, exp_time=None):
         """
         Wayyyyy more efficient than get_sequence. Calls pvc.get_sequence function
@@ -315,12 +289,12 @@ class Camera:
 
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
-            
-        buffer_array = pvc.get_sequence( self.__handle, num_frames, 
+
+        buffer_array = pvc.get_sequence( self.__handle, num_frames,
                                          x_start, x_end - 1, self.bin_x,
-                                         y_start, y_end - 1, self.bin_y, 
+                                         y_start, y_end - 1, self.bin_y,
                                          exp_time, self.__mode )
-        
+
         stack = np.reshape(buffer_array, (num_frames, self.__shape[1], self.__shape[0]))
 
         return stack
@@ -435,6 +409,37 @@ class Camera:
         frame, fps = pvc.get_live_frame_cb(self.__handle, self.__exposure_bytes)
 
         return frame.reshape(self.__shape[1], self.__shape[0]), fps
+
+    def fast_acquisition(self, num_frames, outdir):
+        """
+        Most efficient acquisition method. Runs a capture sequence using the
+        pvc StreamSaver class (adapted from pvcam StreamSaving example).
+        The class runs an acquisition thread and saving thread simultaneously.
+        Parameter:
+            num_frames (int): Number of frames to capture
+            outdir (str): Path to the directory to save the images
+        Returns:
+            None
+        """
+        # Check inputs
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+        x_start, x_end, y_start, y_end = self.__roi
+
+        # Setup acquisition
+        if self.__stream_saver is None:
+            self.__stream_saver = pvc.StreamSaver()
+            # pvc gets reinitialized when camera is attached
+            pvc.uninit_pvcam()
+            self.__stream_saver.attach_camera(self.name)
+
+        self.__stream_saver.apply_settings(num_frames, self.exp_time, 0,
+                                            x_start, x_end - 1, self.bin_x,
+                                            y_start, y_end - 1, self.bin_y, outdir,)
+
+        # Run acquisition
+        self.__stream_saver.run_acquisition()
+        return
 
 
     ### Getters/Setters below ###
@@ -658,7 +663,7 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         return self.get_param(const.PARAM_ADC_OFFSET)
-    
+
     @property
     def max_gain(self):
         return self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MAX)
