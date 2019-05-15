@@ -14,40 +14,6 @@
 #include <pvcam.h>
 
 /*
- *Global Variables
- */
-char g_msg[ERROR_MSG_LEN]; // Global Error Message Variable.
-bool DEBUG = false;
-extern FRAME_INFO *g_pFrameInfo;
-uns16 *frameAddress2;
-int16 hcam2;
-/*
- * Common data types
- */
-// Name-Value Pair type - an item in enumeration type
-typedef struct NVP
-{
-    int32 value;
-    std::string name;
-} NVP;
-// Name-Value Pair Container type - an enumeration type
-typedef std::vector<NVP> NVPC;
-
-/* Each camera has one or more ports, this structure holds information
- * with port descriptions. Each camera port has one or more speeds
- * (readout frequencies). On most EM cameras there are two ports - one
- * EM and one non-EM port with one or two speeds per port.
- * On non-EM camera there is usually one port only with multiple speeds. */
-typedef struct READOUT_OPTION
-{
-    NVP port;
-    int16 speedIndex;
-    float reaoutFrequency;
-    int16 bitDepth;
-    std::vector<int16> gains;
-}READOUT_OPTION;
-
-/*
  * Documentation Strings
  */
 static char module_docstring[] =
@@ -98,8 +64,6 @@ static char read_enum_docstring[] =
 "Returns a list of all key-value pairs of a given enum type.";
 static char reset_pp_docstring[] =
 "Resets all post-processing modules to their default values.";
-static char my_set_callback_docstring[] =
-"Initializes a python callback";
 
 /*
  * Functions
@@ -128,6 +92,5 @@ static PyObject *pvc_stop_live(PyObject *self, PyObject *args);
 static PyObject *pvc_set_exp_modes(PyObject *self, PyObject *args);
 int valid_enum_param(int16 hcam, uns32 param_id, int32 selected_val);
 static PyObject *pvc_reset_pp(PyObject *self, PyObject *args);
-static PyObject *pvc_my_set_callback(PyObject *self, PyObject *args);
 
 #endif // PVC_MODULE_H_

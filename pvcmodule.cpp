@@ -12,7 +12,10 @@
 
 #define NPY_NO_DEPRECATED_API
 
-static PyObject *my_callback = NULL;
+/*
+Global variables
+*/
+char g_msg[ERROR_MSG_LEN]; // Error Message Variable.
 uns16 *g_frameAddress;	/*Address of the frame*/
 uns16 *g_singleFrameAddress;	/*Address of the frame*/
 auto g_prevTime = std::chrono::high_resolution_clock::now();
@@ -38,14 +41,14 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
     g_timeDelta = std::chrono::duration_cast<std::chrono::duration<double>>(g_curTime - g_prevTime);
 
     if (g_timeDelta.count() >= 0.25){
-      g_FPS = g_frameCnt/g_timeDelta.count();
-      //printf("framecnt: %d\nfps: %lf\ntime: %lf", g_frameCnt,g_FPS,g_timeDelta);
-      g_frameCnt = 0;
-      g_prevTime = g_curTime;
+        g_FPS = g_frameCnt/g_timeDelta.count();
+        //printf("framecnt: %d\nfps: %lf\ntime: %lf", g_frameCnt,g_FPS,g_timeDelta);
+        g_frameCnt = 0;
+        g_prevTime = g_curTime;
     }
 
     if (PV_OK != pl_exp_get_latest_frame(pFrameInfo->hCam, (void **)&g_frameAddress)) {
-      PyErr_SetString(PyExc_ValueError, "Failed to get latest frame");
+        PyErr_SetString(PyExc_ValueError, "Failed to get latest frame");
   	}
 }
 
@@ -746,58 +749,58 @@ pvc_get_live_frame(PyObject *self, PyObject *args)
 static PyObject *
 pvc_start_live_cb(PyObject *self, PyObject *args)
 {
-  SampleContext dataContext;
-  //dataContext.myData1 = 0;
-  //dataContext.myData2 = 100;
+    SampleContext dataContext;
+    //dataContext.myData1 = 0;
+    //dataContext.myData2 = 100;
 
-  int16 hcam;    /* Camera handle. */
-  uns16 s1;      /* First pixel in serial register. */
-  uns16 s2;      /* Last pixel in serial register. */
-  uns16 sbin;    /* Serial binning. */
-  uns16 p1;      /* First pixel in parallel register. */
-  uns16 p2;      /* Last pixel in serial register. */
-  uns16 pbin;    /* Parallel binning. */
-  uns32 expTime; /* Exposure time. */
-  int16 expMode; /* Exposure mode. */
-  const int16 bufferMode = CIRC_OVERWRITE;
-  const uns16 circBufferFrames = 16;
+    int16 hcam;    /* Camera handle. */
+    uns16 s1;      /* First pixel in serial register. */
+    uns16 s2;      /* Last pixel in serial register. */
+    uns16 sbin;    /* Serial binning. */
+    uns16 p1;      /* First pixel in parallel register. */
+    uns16 p2;      /* Last pixel in serial register. */
+    uns16 pbin;    /* Parallel binning. */
+    uns32 expTime; /* Exposure time. */
+    int16 expMode; /* Exposure mode. */
+    const int16 bufferMode = CIRC_OVERWRITE;
+    const uns16 circBufferFrames = 16;
 
-  if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
-                                                &pbin, &expTime, &expMode)) {
-    PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-    return NULL;
-  }
-  if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
-            (void *)NewFrameHandler, (void *)&dataContext))
-    {
+    if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
+                                                    &pbin, &expTime, &expMode)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-        printf("couldn't regiester callback");
+        return NULL;
     }
-    /* Struct that contains the frame size and binning information. */
-  	rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-  	uns32 exposureBytes;
-    g_prevTime = std::chrono::high_resolution_clock::now();
-  	/* Setup the acquisition. */
-  	uns16 rgn_total = 1;
-  	if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
-  		expTime, &exposureBytes, bufferMode)) {
-  		set_g_msg();
-  		PyErr_SetString(PyExc_RuntimeError, g_msg);
-  		return NULL;
-  	}
-  	uns16 *circBufferInMemory =
-  		new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
-  	if (circBufferInMemory == NULL) {
-  		PyErr_SetString(PyExc_MemoryError,
-  			"Unable to properly allocate memory for frame.");
-  		return NULL;
-  	}
-  	if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
-  		set_g_msg();
-  		PyErr_SetString(PyExc_RuntimeError, g_msg);
-  		return NULL;
-  	}
-  return PyLong_FromLong(exposureBytes);
+    if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
+            (void *)NewFrameHandler, (void *)&dataContext))
+        {
+            PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+            printf("couldn't register callback");
+        }
+        /* Struct that contains the frame size and binning information. */
+        rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
+        uns32 exposureBytes;
+        g_prevTime = std::chrono::high_resolution_clock::now();
+        /* Setup the acquisition. */
+        uns16 rgn_total = 1;
+        if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
+            expTime, &exposureBytes, bufferMode)) {
+            set_g_msg();
+            PyErr_SetString(PyExc_RuntimeError, g_msg);
+            return NULL;
+        }
+        uns16 *circBufferInMemory =
+            new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
+        if (circBufferInMemory == NULL) {
+            PyErr_SetString(PyExc_MemoryError,
+                "Unable to properly allocate memory for frame.");
+            return NULL;
+        }
+        if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
+            set_g_msg();
+            PyErr_SetString(PyExc_RuntimeError, g_msg);
+            return NULL;
+        }
+    return PyLong_FromLong(exposureBytes);
 }
 
 static PyObject *
@@ -836,7 +839,6 @@ pvc_get_live_frame_cb(PyObject *self, PyObject *args)
 	PyTuple_SetItem(tup, 1, fps);
 	return tup;
 }
-
 
 static PyObject *
 pvc_stop_live(PyObject *self, PyObject *args)
@@ -1010,127 +1012,31 @@ pvc_reset_pp(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static PyObject *
-pvc_my_set_callback(PyObject *self, PyObject *args)
-{
-    PyObject *result = NULL;
-    PyObject *temp;
-
-    if (PyArg_ParseTuple(args, "O:set_callback", &temp)) {
-        if (!PyCallable_Check(temp)) {
-            PyErr_SetString(PyExc_TypeError, "parameter must be callable");
-            return NULL;
-        }
-        Py_XINCREF(temp);         /* Add a reference to new callback */
-        Py_XDECREF(my_callback);  /* Dispose of previous callback */
-        my_callback = temp;       /* Remember new callback */
-        /* Boilerplate to return "None" */
-        Py_INCREF(Py_None);
-        result = Py_None;
-    }
-    return result;
-}
-
 /*
---------------------------- STREAMSAVING ACQUISITION -------------------------------
- Runs an acquisition completely within C++. Most efficient image acquisition method.
+--------------------------- STREAMSAVER ACQUISITION CLASS -------------------------------
+ Class to run an acquisition completely within C++. Most efficient image acquisition method.
 */
-static PyObject *
-pvc_fast_acquisition(PyObject *self, PyObject *args)
-{
-	// Parse input
-	uns16 camIndex;   /* Camera index. */
-	uns32 expTotal;   /* Number of frames to get */
-	uns32 expTime;    /* Exposure time. */
-	int16 expMode;    /* Exposure mode. */
-	uns16 s1;      /* First pixel in serial register. */
-	uns16 s2;      /* Last pixel in serial register. */
-	uns16 sbin;    /* Serial binning. */
-	uns16 p1;      /* First pixel in parallel register. */
-	uns16 p2;      /* Last pixel in serial register. */
-	uns16 pbin;    /* Parallel binning. */
-	const char *path; /* Output TIFF */
-
-	if (!PyArg_ParseTuple(args, "HIIhHHHHHHs", &camIndex, &expTotal, &expTime, &expMode,
-		&s1, &s2, &sbin, &p1, &p2, &pbin, &path)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-	// Pack ROI's
-	std::vector<rgn_type> regions;
-	rgn_type rgn;
-	rgn.sbin = sbin;
-	rgn.pbin = pbin;
-	rgn.s1 = s1;
-	rgn.s2 = s2;
-	rgn.p1 = p1;
-	rgn.p2 = p2;
-	regions.push_back(rgn);
-
-	// Start Log
-	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
-	pm::Log::LogI("Stream Saving Tool");
-	pm::Log::LogI("==================\n");
-
-	// Prepare and run acquisition
-	auto helper = std::make_shared<Helper>();
-
-	if (!helper->InstallTerminationHandlers())
-	{
-		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Could not install termination handlers!!!");
-		return NULL;
-	}
-
-	if (!helper->ApplySettings(camIndex, expTotal, expTime, expMode, regions, path))
-	{
-		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!");
-		return NULL;
-	}
-
-	Py_BEGIN_ALLOW_THREADS // Release Python GIL
-	if (!helper->RunAcquisition())
-	{
-		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!");
-		return NULL;
-	}
-	Py_END_ALLOW_THREADS // Reacquire Python GIL
-
-	// Uninitialize logging subsystem
-	pm::Log::Flush();
-	//pm::Log::Uninit();
-
-	// Successfully completed acquisition
-	Py_RETURN_NONE;
-}
-
-// **************************************
-// *       CLASS IMPLEMENTATION
-// **************************************
-
-// Define PyHelper object
+// Define StreamSaver object
 typedef struct {
     PyObject_HEAD
     Helper *helpPtr;
-} PyHelper;
+} StreamSaver;
 
-// Initialize PyHelper object
-static int PyHelper_init(PyHelper *self, PyObject *args, PyObject *kwargs)
+// Initialize StreamSaver object
+static int StreamSaver_init(StreamSaver *self, PyObject *args, PyObject *kwargs)
 {
     self->helpPtr = new Helper();
     return 0;
 }
 
-// Destruct PyHelper object
-static void PyHelper_dealloc(PyHelper *self)
+// Destruct StreamSaver object
+static void StreamSaver_dealloc(StreamSaver *self)
 {
     delete self->helpPtr;
     Py_TYPE(self)->tp_free(self);
 }
 
-static PyObject *PyHelper_apply_settings(PyHelper *self, PyObject *args)
+static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
 {
 	// Parse input
 	uns16 camIndex;   /* Camera index. */
@@ -1171,13 +1077,13 @@ static PyObject *PyHelper_apply_settings(PyHelper *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-static PyObject *PyHelper_show_settings(PyHelper *self)
+static PyObject *StreamSaver_show_settings(StreamSaver *self)
 {
     (self->helpPtr)->ShowSettings();
 	Py_RETURN_NONE;
 }
 
-static PyObject *PyHelper_run_acquisition(PyHelper *self)
+static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
 {
     // Start Log
 	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
@@ -1205,18 +1111,18 @@ static PyObject *PyHelper_run_acquisition(PyHelper *self)
     Py_RETURN_NONE;
 }
 
-static PyMethodDef PyHelper_methods[] = {
-    {"apply_settings", (PyCFunction)PyHelper_apply_settings, METH_VARARGS, "Apply acq settings"},
-    {"show_settings", (PyCFunction)PyHelper_show_settings, METH_NOARGS, "Prints acq settings"},
-    {"run_acquisition", (PyCFunction)PyHelper_run_acquisition, METH_NOARGS, "Run the acquisition"},
+static PyMethodDef StreamSaver_methods[] = {
+    {"apply_settings", (PyCFunction)StreamSaver_apply_settings, METH_VARARGS, "Apply acq settings"},
+    {"show_settings", (PyCFunction)StreamSaver_show_settings, METH_NOARGS, "Prints acq settings"},
+    {"run_acquisition", (PyCFunction)StreamSaver_run_acquisition, METH_NOARGS, "Run the acquisition"},
     {NULL} /* Sentinel */
 };
 
-static PyTypeObject PyHelperType = {
-    PyVarObject_HEAD_INIT(NULL, 0) "pvc.PyHelper",  /* tp_name */
-    sizeof(PyHelper),                           /* tp_basicsize */
+static PyTypeObject StreamSaverType = {
+    PyVarObject_HEAD_INIT(NULL, 0) "pvc.StreamSaver",  /* tp_name */
+    sizeof(StreamSaver),                           /* tp_basicsize */
     0,                                        /* tp_itemsize */
-    (destructor)PyHelper_dealloc,               /* tp_dealloc */
+    (destructor)StreamSaver_dealloc,               /* tp_dealloc */
     0,                                        /* tp_print */
     0,                                        /* tp_getattr */
     0,                                        /* tp_setattr */
@@ -1232,14 +1138,14 @@ static PyTypeObject PyHelperType = {
     0,                                        /* tp_setattro */
     0,                                        /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
-    "PyHelper objects",                         /* tp_doc */
+    "StreamSaver objects",                         /* tp_doc */
     0,                                        /* tp_traverse */
     0,                                        /* tp_clear */
     0,                                        /* tp_richcompare */
     0,                                        /* tp_weaklistoffset */
     0,                                        /* tp_iter */
     0,                                        /* tp_iternext */
-    PyHelper_methods,                           /* tp_methods */
+    StreamSaver_methods,                           /* tp_methods */
     0,                           /* tp_members */
     0,                                        /* tp_getset */
     0,                                        /* tp_base */
@@ -1247,7 +1153,7 @@ static PyTypeObject PyHelperType = {
     0,                                        /* tp_descr_get */
     0,                                        /* tp_descr_set */
     0,                                        /* tp_dictoffset */
-    (initproc)PyHelper_init,                    /* tp_init */
+    (initproc)StreamSaver_init,                    /* tp_init */
     0,                                        /* tp_alloc */
     PyType_GenericNew,                        /* tp_new */
 };
@@ -1328,10 +1234,6 @@ static PyMethodDef PvcMethods[] = {
 		pvc_get_sequence,
 		METH_VARARGS,
 		get_sequence_docstring },
-	{ "fast_acquisition",
-		pvc_fast_acquisition,
-		METH_VARARGS,
-		fast_acquisition_docstring },
 	{"start_live",
 		pvc_start_live,
 		METH_VARARGS,
@@ -1364,10 +1266,6 @@ static PyMethodDef PvcMethods[] = {
 		pvc_reset_pp,
 		METH_VARARGS,
 		reset_pp_docstring},
-	{"my_set_callback",
-  		pvc_my_set_callback,
-  		METH_VARARGS,
-  		my_set_callback_docstring},
 
     {NULL, NULL, 0, NULL}
 };
@@ -1387,11 +1285,10 @@ PyInit_pvc(void)
     PyObject *m = PyModule_Create(&pvcmodule);
 
     // Object definitions
-    if (PyType_Ready(&PyHelperType) < 0)
+    if (PyType_Ready(&StreamSaverType) < 0)
         return NULL;
-
-    Py_INCREF(&PyHelperType);
-    PyModule_AddObject(m, "PyHelper", (PyObject *)&PyHelperType);
+    Py_INCREF(&StreamSaverType);
+    PyModule_AddObject(m, "StreamSaver", (PyObject *)&StreamSaverType);
 
     return m;
 }
