@@ -1012,6 +1012,14 @@ pvc_reset_pp(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+
+static PyObject *
+pvc_abort_acquisition(PyObject *self, PyObject *args)
+{
+    Helper::AbortAcquisition();
+    Py_RETURN_NONE;
+}
+
 /*
 --------------------------- STREAMSAVER ACQUISITION CLASS -------------------------------
  Class to run an acquisition completely within C++. Most efficient image acquisition method.
@@ -1302,6 +1310,10 @@ static PyMethodDef PvcMethods[] = {
 		pvc_reset_pp,
 		METH_VARARGS,
 		reset_pp_docstring},
+	{"abort_acquisition",
+		pvc_abort_acquisition,
+		METH_VARARGS,
+		abort_acquisition_docstring},
 
     {NULL, NULL, 0, NULL}
 };

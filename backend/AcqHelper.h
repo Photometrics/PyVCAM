@@ -20,6 +20,7 @@ public:
 	void ShowSettings();
 	bool AttachCamera(std::string camName); // Attach/connect camera
 	bool RunAcquisition(); // Run the acquisition
+	static void AbortAcquisition(); // Abort any running acquisition
 
 private: // CLI option handlers
 	bool HandleTargetFps(const std::string& value);

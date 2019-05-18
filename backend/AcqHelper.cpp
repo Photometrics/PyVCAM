@@ -191,6 +191,19 @@ bool Helper::RunAcquisition()
 	return true;
 }
 
+void Helper::AbortAcquisition()
+{
+	if (g_acquisition)
+	{
+		// On first abort it gives a chance to finish processing.
+		// On second abort it forces full stop.
+		g_acquisition->RequestAbort(g_userAbortFlag);
+		pm::Log::LogI((!g_userAbortFlag)
+			? "\n>>> Acquisition stop requested\n"
+			: "\n>>> Acquisition interruption forced\n");
+		g_userAbortFlag = true;
+	}
+}
 /*
 
 *******************************************************
