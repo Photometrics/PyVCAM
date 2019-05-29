@@ -12,7 +12,6 @@ is_32bit= ''
 if is_linux:
    is_arch_x86_64 =  (platform.machine().lower().find("x86_64") > -1)
    is_arch_i686 =  (platform.machine().lower().find("i686") > -1)
-   is_arch_aarch64 =  (platform.machine().lower().find("aarch64") > -1)
 elif is_windows:
    is_arch_x86_64 =  (platform.machine().lower().find("amd64") > -1)
    is_32bit =  (platform.machine().lower().find("x86") > -1)
@@ -30,10 +29,8 @@ if is_linux:
        print(' Machine architecture is x86_64')
    elif is_arch_i686:
        print(' Machine architecture is i686')
-   elif is_arch_aarch64:
-       print(' Machine architecture is aarch64')
    else:
-       print(' The machine architecture are not supported, it must be x86_64, i686 or aarch64.')
+       print(' The machine architecture are not supported, it must be x86_64 or i686.')
        quit()
 elif is_windows:
     if is_arch_x86_64:
@@ -82,8 +79,6 @@ if is_linux:
         lib_dirs = ['{}/library/x86_64'.format(pvcam_sdk_path)]
     elif is_arch_i686:
         lib_dirs = ['{}/library/i686'.format(pvcam_sdk_path)]
-    elif is_arch_aarch64:
-        lib_dirs = ['{}/library/aarch64'.format(pvcam_sdk_path)]
 
     ext_modules = [Extension('pyvcam.pvc',
                          ['src/pyvcam/pvcmodule.cpp'],
