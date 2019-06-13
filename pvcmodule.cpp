@@ -23,6 +23,7 @@ auto g_curTime = std::chrono::high_resolution_clock::now();
 std::chrono::duration<double> g_timeDelta;
 int g_frameCnt = 0;
 double g_FPS = 0;
+int g_live = 0; // flag [1 for active, 0 for inactive]
 
 /** Sets the global error message. */
 void set_g_msg(void) { pl_error_message(pl_error_code(), g_msg); }
@@ -652,102 +653,9 @@ pvc_get_sequence(PyObject *self, PyObject *args)
 	PyArray_Return(numpy_frame);
 }
 
+
 static PyObject *
 pvc_start_live(PyObject *self, PyObject *args)
-{
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
-	*/
-	int16 hcam;    /* Camera handle. */
-	uns16 s1;      /* First pixel in serial register. */
-	uns16 s2;      /* Last pixel in serial register. */
-	uns16 sbin;    /* Serial binning. */
-	uns16 p1;      /* First pixel in parallel register. */
-	uns16 p2;      /* Last pixel in serial register. */
-	uns16 pbin;    /* Parallel binning. */
-	uns32 expTime; /* Exposure time. */
-	int16 expMode; /* Exposure mode. */
-	const int16 bufferMode = CIRC_OVERWRITE;
-	const uns16 circBufferFrames = 16;
-
-	if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
-                                                &pbin, &expTime, &expMode)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-	/* Struct that contains the frame size and binning information. */
-	rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-	uns32 exposureBytes;
-
-	/* Setup the acquisition. */
-	uns16 rgn_total = 1;
-	if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
-		expTime, &exposureBytes, bufferMode)) {
-		set_g_msg();
-		PyErr_SetString(PyExc_RuntimeError, g_msg);
-		return NULL;
-	}
-	uns16 *circBufferInMemory =
-		new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
-	if (circBufferInMemory == NULL) {
-		PyErr_SetString(PyExc_MemoryError,
-			"Unable to properly allocate memory for frame.");
-		return NULL;
-	}
-	if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
-		set_g_msg();
-		PyErr_SetString(PyExc_RuntimeError, g_msg);
-		return NULL;
-	}
-
-	return PyLong_FromLong(exposureBytes);
-}
-
-static PyObject *
-pvc_get_live_frame(PyObject *self, PyObject *args)
-{
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
-	*/
-	int16 hcam;				/* Camera handle. */
-	uns32 exposureBytes;	 /* Bytes Exposed */
-
-	uns16 *frameAddress;	/*Address of the frame*/
-	int16 status;			/*Operation status*/
-	uns32 byte_cnt;			/*Byte count*/
-	uns32 buffer_cnt;		/*Buffer Count*/
-
-	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-	while (pl_exp_check_cont_status(hcam, &status, &byte_cnt, &buffer_cnt)
-		&& status != FRAME_AVAILABLE) {
-		// Waiting for frame exposure and readout
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
-
-	if (status == READOUT_FAILED) {
-		PyErr_SetString(PyExc_ValueError, "Frame readout failed\n");
-		return NULL;
-	}
-	if (PV_OK != pl_exp_get_latest_frame(hcam, (void **)&frameAddress)) {
-		PyErr_SetString(PyExc_ValueError, "Failed to get last frame\n");
-		return NULL;
-	}
-	import_array();  /* Initialize PyArrayObject. */
-	int dimensions = 1;
-	npy_intp dimension_lengths = exposureBytes / sizeof(uns16);
-	int type = NPY_UINT16;
-	PyArrayObject *numpy_frame = (PyArrayObject *)
-		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
-		(void *)frameAddress);
-
-	PyArray_Return(numpy_frame);
-}
-
-static PyObject *
-pvc_start_live_cb(PyObject *self, PyObject *args)
 {
     SampleContext dataContext;
     //dataContext.myData1 = 0;
@@ -773,8 +681,8 @@ pvc_start_live_cb(PyObject *self, PyObject *args)
     if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
             (void *)NewFrameHandler, (void *)&dataContext))
         {
-            PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-            printf("couldn't register callback");
+            PyErr_SetString(PyExc_RuntimeError, "Failed to register frame callback EX3.");
+            return NULL;
         }
         /* Struct that contains the frame size and binning information. */
         rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
@@ -800,17 +708,18 @@ pvc_start_live_cb(PyObject *self, PyObject *args)
             PyErr_SetString(PyExc_RuntimeError, g_msg);
             return NULL;
         }
+        g_live = 1;
     return PyLong_FromLong(exposureBytes);
 }
 
 static PyObject *
-pvc_get_live_frame_cb(PyObject *self, PyObject *args)
+pvc_get_live_frame(PyObject *self, PyObject *args)
 {
 	/* TODO: Make setting acquisition apart of this function. Do not make them
 	pass into the function call as arguments.
 	*/
-	int16 hcam;				/* Camera handle. */
-	uns32 exposureBytes;	 /* Bytes Exposed */
+	int16 hcam;			 /* Camera handle. */
+	uns32 exposureBytes; /* Bytes Exposed */
 
 	uns16 *frameAddress;	/*Address of the frame*/
 	int16 status;			/*Operation status*/
@@ -824,6 +733,11 @@ pvc_get_live_frame_cb(PyObject *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
+
+    if (!g_live) {
+		PyErr_SetString(PyExc_RuntimeError, "Camera live feed is not active!");
+        return NULL;
+    }
 
 	import_array();  /* Initialize PyArrayObject. */
 	int dimensions = 1;
@@ -853,6 +767,7 @@ pvc_stop_live(PyObject *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "Buffer failed to stop");
 		return NULL;
 	}
+    g_live = 0;
 	Py_RETURN_NONE;
 }
 
@@ -1282,18 +1197,10 @@ static PyMethodDef PvcMethods[] = {
 		pvc_start_live,
 		METH_VARARGS,
 		start_live_docstring},
-	{"start_live_cb",
-  		pvc_start_live_cb,
-  		METH_VARARGS,
-  		start_live_cb_docstring},
 	{ "get_live_frame",
 		pvc_get_live_frame,
 		METH_VARARGS,
 		get_live_frame_docstring },
-	{ "get_live_frame_cb",
-  		pvc_get_live_frame_cb,
-  		METH_VARARGS,
-  		get_live_frame_cb_docstring },
 	{ "stop_live",
 		pvc_stop_live,
 		METH_VARARGS,

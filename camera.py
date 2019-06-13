@@ -244,40 +244,12 @@ class Camera:
                                     self.__mode).reshape(self.__shape[1], self.__shape[0])
         return np.copy(tmpFrame)
 
-    def get_sequence(self, num_frames, exp_time=None, interval=None):
-        """Calls the pvc.get_frame function with the current camera settings in
-            rapid-succession for the specified number of frames
-
-        Parameter:
-            num_frames (int): Number of frames to capture in the sequence
-            exp_time (int): The exposure time (optional)
-            interval (int): The time in milliseconds to wait between captures
-        Returns:
-            A 3D np.array containing the pixel data from the captured frames.
+    def get_sequence(self, num_frames, exp_time=None):
         """
-        x_start, x_end, y_start, y_end = self.__roi
+        Calls pvc.get_sequence function which captures the sequence and stores
+        in a frame buffer in memory. Frame buffer is then wrapped in a numpy
+        array, reshaped, and returned.
 
-        if not isinstance(exp_time, int):
-            exp_time = self.exp_time
-
-        stack = np.empty((num_frames, self.__shape[1], self.__shape[0]), dtype=np.uint16)
-
-        for i in range(num_frames):
-            stack[i] = pvc.get_frame(self.__handle, x_start, x_end - 1, self.bin_x,
-                                    y_start, y_end - 1, self.bin_y, exp_time,
-                                    self.__mode).reshape(self.__shape[1],
-                                    self.__shape[0])
-
-            if isinstance(interval, int):
-                time.sleep(interval/1000)
-
-        return stack
-
-    def get_sequence_fast(self, num_frames, exp_time=None):
-        """
-        Wayyyyy more efficient than get_sequence. Calls pvc.get_sequence function
-        which captures the sequence and stores in a frame buffer in memory.
-        Frame buffer is then wrapped in a numpy array, reshaped, and returned.
         Parameter:
             num_frames (int): Number of frames to capture in the sequence
             exp_time (int): The exposure time (optional)
@@ -370,43 +342,14 @@ class Camera:
         return pvc.stop_live(self.__handle)
 
     def get_live_frame(self):
-        """Calls the pvc.get_live_frame function with the current camera settings.
+        """Calls the pvc.get_live_frame function.
 
         Parameter:
             None
         Returns:
             A 2D np.array containing the pixel data from the captured frame.
         """
-        return pvc.get_live_frame(self.__handle, self.__exposure_bytes).reshape(
-                                                 self.__shape[1], self.__shape[0])
-
-    def start_live_cb(self, exp_time=None):
-        """Calls the pvc.start_live_cb function to setup a circular buffer acquisition with callbacks.
-
-        Parameter:
-            exp_time (int): The exposure time (optional).
-        Returns:
-            None
-        """
-        x_start, x_end, y_start, y_end = self.__roi
-
-        if not isinstance(exp_time, int):
-            exp_time = self.exp_time
-
-        self.__exposure_bytes = pvc.start_live_cb(self.__handle, x_start, x_end - 1,
-                                                  self.bin_x, y_start, y_end - 1,
-                                                  self.bin_x, exp_time, self.__mode)
-        return self.__exposure_bytes
-
-    def get_live_frame_cb(self):
-        """Calls the pvc.get_live_frame_cb function.
-
-        Parameter:
-            None
-        Returns:
-            A 2D np.array containing the pixel data from the captured frame.
-        """
-        frame, fps = pvc.get_live_frame_cb(self.__handle, self.__exposure_bytes)
+        frame, fps = pvc.get_live_frame(self.__handle, self.__exposure_bytes)
 
         return frame.reshape(self.__shape[1], self.__shape[0]), fps
 
