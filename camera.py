@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+Modified version of the pyvcam camera module.
+Various improvements have been made to the wrapper,
+particularly the acquisition methods.
+
+@author: jthom
+"""
+import os
 import time
 import numpy as np
 
