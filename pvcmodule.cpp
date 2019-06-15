@@ -678,6 +678,11 @@ pvc_start_live(PyObject *self, PyObject *args)
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
+    if (g_live) {
+        PyErr_SetString(PyExc_RuntimeError, "Live sequence already running!");
+        return NULL;
+    }
+
     if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
             (void *)NewFrameHandler, (void *)&dataContext))
         {
@@ -763,6 +768,10 @@ pvc_stop_live(PyObject *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
+    if (!g_live) {
+        PyErr_SetString(PyExc_RuntimeError, "Live sequence is not running!");
+        return NULL;
+    }
 	if (PV_OK != pl_exp_stop_cont(hcam, CCS_CLEAR)) {	//stop the circular buffer aquisition
 		PyErr_SetString(PyExc_ValueError, "Buffer failed to stop");
 		return NULL;
@@ -1027,7 +1036,7 @@ static PyObject *StreamSaver_attach_camera(StreamSaver *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
+static PyObject *StreamSaver_start_acquisition(StreamSaver *self)
 {
     // Start Log
 	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
@@ -1041,16 +1050,29 @@ static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
 		return NULL;
 	}
 
-	Py_BEGIN_ALLOW_THREADS // Release Python GIL
-	if (!(self->helpPtr)->RunAcquisition())
+	if (!(self->helpPtr)->StartAcquisition())
 	{
 		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Acquisition failed!!!");
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition start failed!");
 		return NULL;
 	}
-	Py_END_ALLOW_THREADS // Reacquire Python GIL
 
-    if ((self->helpPtr)->aborted)
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
+{
+
+    Py_BEGIN_ALLOW_THREADS
+    if (!(self->helpPtr)->JoinAcquisition())
+    {
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition join failed!");
+		return NULL;
+    }
+    Py_END_ALLOW_THREADS
+
+    if ((self->helpPtr)->m_aborted)
     {
 		pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted!");
@@ -1058,6 +1080,18 @@ static PyObject *StreamSaver_run_acquisition(StreamSaver *self)
     }
 
 	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_acquisition_status(StreamSaver *self)
+{
+    if ((self->helpPtr)->AcquisitionStatus()) Py_RETURN_TRUE;
+    else Py_RETURN_FALSE;
+}
+
+static PyObject *StreamSaver_input_tick(StreamSaver *self)
+{
+    (self->helpPtr)->InputTimerTick();
     Py_RETURN_NONE;
 }
 
@@ -1070,10 +1104,22 @@ static PyMethodDef StreamSaver_methods[] = {
         (PyCFunction)StreamSaver_apply_settings,
         METH_VARARGS,
         "Apply acquisition settings."},
-    {"run_acquisition",
-        (PyCFunction)StreamSaver_run_acquisition,
+    {"start_acquisition",
+        (PyCFunction)StreamSaver_start_acquisition,
         METH_NOARGS,
-        "Run the acquisition. NOTE: attach_camera and apply_settings must be called first!"},
+        "Start the acquisition. NOTE: attach_camera and apply_settings must be called first!"},
+    {"join_acquisition",
+        (PyCFunction)StreamSaver_join_acquisition,
+        METH_NOARGS,
+        "Join the acquisition (wait for completion)."},
+    {"acquisition_status",
+        (PyCFunction)StreamSaver_acquisition_status,
+        METH_NOARGS,
+        "Check status of current acquisition."},
+    {"input_tick",
+        (PyCFunction)StreamSaver_input_tick,
+        METH_NOARGS,
+        "Input timer tick to acquisition."},
     {NULL} /* Sentinel */
 };
 

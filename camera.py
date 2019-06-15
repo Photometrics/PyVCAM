@@ -361,7 +361,7 @@ class Camera:
 
         return frame.reshape(self.__shape[1], self.__shape[0]), fps
 
-    def fast_acquisition(self, num_frames, outdir):
+    def start_acquisition(self, num_frames, outdir):
         """
         Most efficient acquisition method. Runs a capture sequence using the
         pvc StreamSaver class (adapted from pvcam StreamSaving example).
@@ -389,9 +389,14 @@ class Camera:
                                             y_start, y_end - 1, self.bin_y, outdir,)
 
         # Run acquisition
-        self.__stream_saver.run_acquisition()
+        self.__stream_saver.start_acquisition()
         return
 
+    def check_acquisition(self):
+        return self.__stream_saver.acquisition_status()
+
+    def join_acquisition(self):
+        self.__stream_saver.join_acquisition()
 
     ### Getters/Setters below ###
     @property

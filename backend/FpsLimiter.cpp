@@ -1,6 +1,7 @@
 #include "FpsLimiter.h"
 
 /* System */
+#include <iostream>
 #include <algorithm>
 
 pm::FpsLimiter::FpsLimiter()
@@ -24,6 +25,7 @@ pm::FpsLimiter::~FpsLimiter()
 
 bool pm::FpsLimiter::Start(IFpsLimiterListener* listener)
 {
+	std::cout << "FPS Limiter Starting" << std::endl;
     std::unique_lock<std::mutex> lock(m_mutex);
 
     if (m_thread)

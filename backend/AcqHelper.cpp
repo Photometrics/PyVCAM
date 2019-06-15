@@ -36,13 +36,20 @@ std::shared_ptr<pm::Acquisition> g_acquisition(nullptr);
 // Global flag to abort current operation
 std::atomic<bool> g_userAbortFlag(false);
 
+void PyListener::OnFpsLimiterEvent (pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
+{
+	std::cout << "FPS Limiter Event: " << frame << std::endl;
+}
+
 using HandlerProto = bool(Helper::*)(const std::string&);
 
 Helper::Helper()
 	: m_settings(),
 	m_optionController(),
 	m_camera(nullptr),
-	m_acquisition(nullptr)
+	m_acquisition(nullptr),
+	m_fpslimiter(nullptr),
+	m_listener()
 {
 }
 
@@ -87,6 +94,17 @@ bool Helper::InitAcquisition()
 	if (!m_camera->Initialize())
 		return false;
 
+	// Get FPS Limiter instance
+	m_fpslimiter = std::make_shared<pm::FpsLimiter>();
+	if (!m_fpslimiter)
+	{
+		pm::Log::LogE("Failure getting FPS limiter instance!!!");
+		return false;
+	}
+
+	if (!m_fpslimiter->Start(&m_listener))
+		return false;
+
 	// Get Acquisition instance
 	m_acquisition = std::make_shared<pm::Acquisition>(m_camera);
 	if (!m_acquisition)
@@ -126,6 +144,7 @@ void Helper::UninitAcquisition()
 	m_acquisition = nullptr;
 	m_camera = nullptr;
 	acq_ready = false;
+	acq_active = false;
 }
 
 bool Helper::AttachCamera(std::string camName)
@@ -144,9 +163,12 @@ bool Helper::AttachCamera(std::string camName)
 	return true;
 }
 
-bool Helper::RunAcquisition()
+bool Helper::StartAcquisition()
 {
 	if (!acq_ready)
+		return false;
+
+	if (acq_active)
 		return false;
 
 	// Apply settings
@@ -179,16 +201,39 @@ bool Helper::RunAcquisition()
 
 	// Run acquisition
 	g_userAbortFlag = false;
-	aborted = false;
-	if (m_acquisition->Start())
+	m_aborted = false;
+	if (!m_acquisition->Start(m_fpslimiter))
 	{
 		g_acquisition = m_acquisition;
-		m_acquisition->WaitForStop(true);
-		g_acquisition = nullptr;
+		return false;
 	}
-	aborted = g_userAbortFlag;
+	else
+	{
+		acq_active = true;
+	}
 
 	return true;
+}
+
+bool Helper::JoinAcquisition()
+{
+	m_acquisition->WaitForStop(true);
+	g_acquisition = nullptr;
+	m_aborted = g_userAbortFlag;
+	acq_active = false;
+
+	pm::Log::LogI("Acquisition exited!");
+	return true;
+}
+
+bool Helper::AcquisitionStatus()
+{
+	return acq_active;
+}
+
+void Helper::InputTimerTick()
+{
+	m_fpslimiter->InputTimerTick();
 }
 
 void Helper::AbortAcquisition()
