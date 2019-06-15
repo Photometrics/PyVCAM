@@ -29,12 +29,10 @@ public:
 	bool StartAcquisition(); // Start the acquisition
 	bool JoinAcquisition(); // Wait for acquisition to finish
 	bool AcquisitionStatus(); // Return true if acquisition is active, false otherwise
-	void InputTimerTick(); // Input FPS limiter timer tick
 	void AbortAcquisition(); // Abort any running acquisition
+	void InputTimerTick(); // Input FPS limiter timer tick
 
-private: // CLI option handlers
-	bool HandleTargetFps(const std::string& value);
-
+private:
 	bool InitAcquisition();
 	void UninitAcquisition();
 

@@ -31,9 +31,7 @@
 #include "AcqHelper.h"
 
 // Global variables, used only for termination handlers!
-// Global copy of Acquisition pointer
 std::shared_ptr<pm::Acquisition> g_acquisition(nullptr);
-// Global flag to abort current operation
 std::atomic<bool> g_userAbortFlag(false);
 
 void PyListener::OnFpsLimiterEvent (pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
@@ -56,11 +54,6 @@ Helper::Helper()
 Helper::~Helper()
 {
 	UninitAcquisition();
-}
-
-bool Helper::HandleTargetFps(const std::string& value)
-{
-	return pm::StrToNumber<unsigned int>(value, m_targetFps);
 }
 
 bool Helper::ApplySettings(uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path)
@@ -125,6 +118,11 @@ void Helper::UninitAcquisition()
 		m_acquisition->WaitForStop(false);
 	}
 
+	if (m_fpslimiter)
+	{
+		m_fpslimiter->Stop();
+	}
+
 	if (m_camera)
 	{
 		// Ignore errors
@@ -142,6 +140,7 @@ void Helper::UninitAcquisition()
 	}
 
 	m_acquisition = nullptr;
+	m_fpslimiter = nullptr;
 	m_camera = nullptr;
 	acq_ready = false;
 	acq_active = false;
@@ -231,11 +230,6 @@ bool Helper::AcquisitionStatus()
 	return acq_active;
 }
 
-void Helper::InputTimerTick()
-{
-	m_fpslimiter->InputTimerTick();
-}
-
 void Helper::AbortAcquisition()
 {
 	if (m_acquisition)
@@ -249,6 +243,12 @@ void Helper::AbortAcquisition()
 		m_userAbortFlag = true;
 	}
 }
+
+void Helper::InputTimerTick()
+{
+	m_fpslimiter->InputTimerTick();
+}
+
 /*
 
 *******************************************************

@@ -1032,7 +1032,7 @@ static PyObject *StreamSaver_start_acquisition(StreamSaver *self)
 {
     // Start Log
 	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
-	pm::Log::LogI("Running Acquisition!");
+	pm::Log::LogI("Starting Acquisition!");
 	pm::Log::LogI("====================\n");
 
 	if (!(self->helpPtr)->InstallTerminationHandlers())
@@ -1054,6 +1054,7 @@ static PyObject *StreamSaver_start_acquisition(StreamSaver *self)
 
 static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
 {
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
 
     Py_BEGIN_ALLOW_THREADS
     if (!(self->helpPtr)->JoinAcquisition())
@@ -1071,6 +1072,7 @@ static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
 		return NULL;
     }
 
+	pm::Log::LogI("Acquisition exited!");
 	pm::Log::Flush();
     Py_RETURN_NONE;
 }
