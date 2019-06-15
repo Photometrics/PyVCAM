@@ -20,7 +20,7 @@ public:
 	Helper();
 	~Helper();
 
-	bool m_aborted = false;
+	bool m_userAbortFlag = false;
 
 	bool InstallTerminationHandlers();
 	bool ApplySettings(uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path);
@@ -30,7 +30,7 @@ public:
 	bool JoinAcquisition(); // Wait for acquisition to finish
 	bool AcquisitionStatus(); // Return true if acquisition is active, false otherwise
 	void InputTimerTick(); // Input FPS limiter timer tick
-	static void AbortAcquisition(); // Abort any running acquisition
+	void AbortAcquisition(); // Abort any running acquisition
 
 private: // CLI option handlers
 	bool HandleTargetFps(const std::string& value);

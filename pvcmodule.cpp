@@ -936,14 +936,6 @@ pvc_reset_pp(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-
-static PyObject *
-pvc_abort_acquisition(PyObject *self, PyObject *args)
-{
-    Helper::AbortAcquisition();
-    Py_RETURN_NONE;
-}
-
 /*
 --------------------------- STREAMSAVER ACQUISITION CLASS -------------------------------
  Class to run an acquisition completely within C++. Most efficient image acquisition method.
@@ -1072,7 +1064,7 @@ static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
     }
     Py_END_ALLOW_THREADS
 
-    if ((self->helpPtr)->m_aborted)
+    if ((self->helpPtr)->m_userAbortFlag)
     {
 		pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted!");
@@ -1080,6 +1072,12 @@ static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
     }
 
 	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_abort_acquisition(StreamSaver *self)
+{
+    (self->helpPtr)->AbortAcquisition();
     Py_RETURN_NONE;
 }
 
@@ -1112,6 +1110,10 @@ static PyMethodDef StreamSaver_methods[] = {
         (PyCFunction)StreamSaver_join_acquisition,
         METH_NOARGS,
         "Join the acquisition (wait for completion)."},
+    {"abort_acquisition",
+        (PyCFunction)StreamSaver_abort_acquisition,
+        METH_NOARGS,
+        "Signal the acquisition to abort."},
     {"acquisition_status",
         (PyCFunction)StreamSaver_acquisition_status,
         METH_NOARGS,
@@ -1263,10 +1265,6 @@ static PyMethodDef PvcMethods[] = {
 		pvc_reset_pp,
 		METH_VARARGS,
 		reset_pp_docstring},
-	{"abort_acquisition",
-		pvc_abort_acquisition,
-		METH_VARARGS,
-		abort_acquisition_docstring},
 
     {NULL, NULL, 0, NULL}
 };

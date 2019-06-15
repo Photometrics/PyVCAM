@@ -201,7 +201,7 @@ bool Helper::StartAcquisition()
 
 	// Run acquisition
 	g_userAbortFlag = false;
-	m_aborted = false;
+	m_userAbortFlag = false;
 	if (!m_acquisition->Start(m_fpslimiter))
 	{
 		g_acquisition = m_acquisition;
@@ -218,8 +218,8 @@ bool Helper::StartAcquisition()
 bool Helper::JoinAcquisition()
 {
 	m_acquisition->WaitForStop(true);
+	if (g_userAbortFlag) m_userAbortFlag = true;
 	g_acquisition = nullptr;
-	m_aborted = g_userAbortFlag;
 	acq_active = false;
 
 	pm::Log::LogI("Acquisition exited!");
@@ -238,15 +238,15 @@ void Helper::InputTimerTick()
 
 void Helper::AbortAcquisition()
 {
-	if (g_acquisition)
+	if (m_acquisition)
 	{
 		// On first abort it gives a chance to finish processing.
 		// On second abort it forces full stop.
-		g_acquisition->RequestAbort(g_userAbortFlag);
-		pm::Log::LogI((!g_userAbortFlag)
+		m_acquisition->RequestAbort(m_userAbortFlag);
+		pm::Log::LogI((!m_userAbortFlag)
 			? "\n>>> Acquisition stop requested\n"
 			: "\n>>> Acquisition interruption forced\n");
-		g_userAbortFlag = true;
+		m_userAbortFlag = true;
 	}
 }
 /*

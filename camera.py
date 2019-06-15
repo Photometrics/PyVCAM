@@ -398,6 +398,9 @@ class Camera:
     def join_acquisition(self):
         self.__stream_saver.join_acquisition()
 
+    def abort_acquisition(self):
+        self.__stream_saver.abort_acquisition()
+
     ### Getters/Setters below ###
     @property
     def name(self):

@@ -58,8 +58,6 @@ static char read_enum_docstring[] =
 "Returns a list of all key-value pairs of a given enum type.";
 static char reset_pp_docstring[] =
 "Resets all post-processing modules to their default values.";
-static char abort_acquisition_docstring[] =
-"Sets the global acquisition abort signal to True.";
 
 /*
  * Functions
@@ -85,6 +83,5 @@ static PyObject *pvc_stop_live(PyObject *self, PyObject *args);
 static PyObject *pvc_set_exp_modes(PyObject *self, PyObject *args);
 int valid_enum_param(int16 hcam, uns32 param_id, int32 selected_val);
 static PyObject *pvc_reset_pp(PyObject *self, PyObject *args);
-static PyObject *pvc_abort_acquisition(PyObject *self, PyObject *args);
 
 #endif // PVC_MODULE_H_
