@@ -230,6 +230,17 @@ bool Helper::AcquisitionStatus()
 	return acq_active;
 }
 
+void Helper::AcquisitionStats(double& acqFps, size_t& acqFramesValid,
+        size_t& acqFramesLost, size_t& acqFramesMax, size_t& acqFramesCached,
+		double& diskFps, size_t& diskFramesValid,
+        size_t& diskFramesLost, size_t& diskFramesMax, size_t& diskFramesCached)
+{
+	m_acquisition->GetAcqStats(acqFps, acqFramesValid,
+        acqFramesLost, acqFramesMax, acqFramesCached);
+	m_acquisition->GetDiskStats(diskFps, diskFramesValid,
+        diskFramesLost, diskFramesMax, diskFramesCached);
+}
+
 void Helper::AbortAcquisition()
 {
 	if (m_acquisition)

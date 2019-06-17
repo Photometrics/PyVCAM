@@ -5,12 +5,9 @@
 #include "backend/Log.h"
 
 // System
-#include <numpy/arrayobject.h>
 #include <new>
 #include <chrono>
 #include <thread>
-
-#define NPY_NO_DEPRECATED_API
 
 /*
 Global variables
@@ -726,11 +723,6 @@ pvc_get_live_frame(PyObject *self, PyObject *args)
 	int16 hcam;			 /* Camera handle. */
 	uns32 exposureBytes; /* Bytes Exposed */
 
-	uns16 *frameAddress;	/*Address of the frame*/
-	int16 status;			/*Operation status*/
-	uns32 byte_cnt;			/*Byte count*/
-	uns32 buffer_cnt;		/*Buffer Count*/
-
 	const int16 bufferMode = CIRC_OVERWRITE;
 	const uns16 circBufferFrames = 20;
 
@@ -940,6 +932,7 @@ pvc_reset_pp(PyObject *self, PyObject *args)
 --------------------------- STREAMSAVER ACQUISITION CLASS -------------------------------
  Class to run an acquisition completely within C++. Most efficient image acquisition method.
 */
+
 // Define StreamSaver object
 typedef struct {
     PyObject_HEAD
@@ -1095,6 +1088,51 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
     Py_RETURN_NONE;
 }
 
+static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
+{
+    double* acqFps = new double;
+    size_t* acqFramesValid = new size_t;
+    size_t* acqFramesLost = new size_t;
+    size_t* acqFramesMax = new size_t;
+    size_t* acqFramesCached = new size_t;
+
+    double* diskFps = new double;
+    size_t* diskFramesValid = new size_t;
+    size_t* diskFramesLost = new size_t;
+    size_t* diskFramesMax = new size_t;
+    size_t* diskFramesCached = new size_t;
+
+    // Get acquisition related statistics
+    (self->helpPtr)->AcquisitionStats(*acqFps, *acqFramesValid, *acqFramesLost,
+            *acqFramesMax, *acqFramesCached, *diskFps, *diskFramesValid, *diskFramesLost,
+            *diskFramesMax, *diskFramesCached);
+
+	PyObject *py_acqFps = PyFloat_FromDouble(*acqFps);
+    PyObject *py_acqFramesValid = PyLong_FromSize_t(*acqFramesValid);
+    PyObject *py_acqFramesLost = PyLong_FromSize_t(*acqFramesLost);
+    PyObject *py_acqFramesMax = PyLong_FromSize_t(*acqFramesMax);
+    PyObject *py_acqFramesCached = PyLong_FromSize_t(*acqFramesCached);
+
+	PyObject *py_diskFps = PyFloat_FromDouble(*diskFps);
+    PyObject *py_diskFramesValid = PyLong_FromSize_t(*diskFramesValid);
+    PyObject *py_diskFramesLost = PyLong_FromSize_t(*acqFramesLost);
+    PyObject *py_diskFramesMax = PyLong_FromSize_t(*acqFramesMax);
+    PyObject *py_diskFramesCached = PyLong_FromSize_t(*acqFramesCached);
+
+	PyObject *tup = PyTuple_New(10);
+	PyTuple_SetItem(tup, 0, py_acqFps);
+	PyTuple_SetItem(tup, 1, py_acqFramesValid);
+	PyTuple_SetItem(tup, 2, py_acqFramesLost);
+	PyTuple_SetItem(tup, 3, py_acqFramesMax);
+	PyTuple_SetItem(tup, 4, py_acqFramesCached);
+	PyTuple_SetItem(tup, 5, py_diskFps);
+	PyTuple_SetItem(tup, 6, py_diskFramesValid);
+	PyTuple_SetItem(tup, 7, py_diskFramesLost);
+	PyTuple_SetItem(tup, 8, py_diskFramesMax);
+	PyTuple_SetItem(tup, 9, py_diskFramesCached);
+    return tup;
+}
+
 static PyMethodDef StreamSaver_methods[] = {
     {"attach_camera",
         (PyCFunction)StreamSaver_attach_camera,
@@ -1107,7 +1145,8 @@ static PyMethodDef StreamSaver_methods[] = {
     {"start_acquisition",
         (PyCFunction)StreamSaver_start_acquisition,
         METH_NOARGS,
-        "Start the acquisition. NOTE: attach_camera and apply_settings must be called first!"},
+        "Start the acquisition. NOTE: attach_camera and apply_settings must be "
+        "called first!"},
     {"join_acquisition",
         (PyCFunction)StreamSaver_join_acquisition,
         METH_NOARGS,
@@ -1120,10 +1159,15 @@ static PyMethodDef StreamSaver_methods[] = {
         (PyCFunction)StreamSaver_acquisition_status,
         METH_NOARGS,
         "Check status of current acquisition."},
+    {"acquisition_stats",
+        (PyCFunction)StreamSaver_acquisition_stats,
+        METH_NOARGS,
+        "Get acquisition and disk thread stats for current acquisition."},
     {"input_tick",
         (PyCFunction)StreamSaver_input_tick,
         METH_NOARGS,
-        "Input timer tick to acquisition."},
+        "Input timer tick to acquisition. Signals the acquisition to send next "
+        "frame to the callback function."},
     {NULL} /* Sentinel */
 };
 
@@ -1284,6 +1328,11 @@ PyInit_pvc(void)
 {
     Py_Initialize();
     PyObject *m = PyModule_Create(&pvcmodule);
+
+    // Ensure GIL has been created
+    if (!PyEval_ThreadsInitialized()) {
+        PyEval_InitThreads();
+    }
 
     // Object definitions
     if (PyType_Ready(&StreamSaverType) < 0)

@@ -1,8 +1,13 @@
 #ifndef PVC_MODULE_H_
 #define PVC_MODULE_H_
 
-// System
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+
+// Python
 #include <Python.h>
+#include <numpy/arrayobject.h>
+
+// System
 #include <string>
 #include <vector>
 

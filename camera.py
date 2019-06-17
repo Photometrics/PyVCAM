@@ -392,6 +392,25 @@ class Camera:
         self.__stream_saver.start_acquisition()
         return
 
+    def get_acquisition_frame(self):
+        self.__stream_saver.input_tick()
+
+    def get_acquisition_stats(self):
+        stat_tup = self.__stream_saver.acquisition_stats()
+        stat_dict = {
+            "acqFps" : stat_tup[0],
+            "acqFramesValid" : stat_tup[1],
+            "acqFramesLost" : stat_tup[2],
+            "acqFramesMax" : stat_tup[3],
+            "acqFramesCached" : stat_tup[4],
+            "diskFps" : stat_tup[5],
+            "diskFramesValid" : stat_tup[6],
+            "diskFramesLost" : stat_tup[7],
+            "diskFramesMax" : stat_tup[8],
+            "diskFramesCached" : stat_tup[9],
+        }
+        return stat_dict
+
     def check_acquisition(self):
         return self.__stream_saver.acquisition_status()
 

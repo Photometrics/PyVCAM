@@ -8,6 +8,7 @@
 #include "Camera.h"
 #include "Settings.h"
 
+// PyListener class
 class PyListener : public pm::IFpsLimiterListener
 {
 	void OnFpsLimiterEvent(pm::FpsLimiter* sender,
@@ -29,6 +30,10 @@ public:
 	bool StartAcquisition(); // Start the acquisition
 	bool JoinAcquisition(); // Wait for acquisition to finish
 	bool AcquisitionStatus(); // Return true if acquisition is active, false otherwise
+	void AcquisitionStats(double& acqFps, size_t& acqFramesValid,
+        size_t& acqFramesLost, size_t& acqFramesMax, size_t& acqFramesCached,
+		double& diskFps, size_t& diskFramesValid,
+        size_t& diskFramesLost, size_t& diskFramesMax, size_t& diskFramesCached); // Get acquisition stats
 	void AbortAcquisition(); // Abort any running acquisition
 	void InputTimerTick(); // Input FPS limiter timer tick
 
