@@ -1092,15 +1092,18 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
 static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
 {
     const void *frame_data;
+    const md_frame *frame_metadata;
 
-    if (!(self->helpPtr)->GetFrame(frame_data))
+    if (!(self->helpPtr)->GetFrame(frame_data, frame_metadata))
     {
 		PyErr_SetString(PyExc_RuntimeError, "Could not get frame data!");
 		return NULL;
     }
 
 	std::cout << "Got frame: " << frame_data << std::endl;
+
     // Wrap frame in numpy array
+    std::cout << "Frame bytes: " << (frame_metadata->roiArray[0]).dataSize << std::endl;
 
     Py_RETURN_NONE;
 }
@@ -1188,7 +1191,7 @@ static PyMethodDef StreamSaver_methods[] = {
     {"get_acquisition_frame",
         (PyCFunction)StreamSaver_get_acquisition_frame,
         METH_NOARGS,
-        "Get last frame from PyListener. Frames are only cached after "
+        "Get last frame from listener. Frames are only cached after "
         "input_tick has been called. Exactly one frame will be cached "
         "per tick."},
     {NULL} /* Sentinel */

@@ -8,20 +8,7 @@
 #include "Camera.h"
 #include "Settings.h"
 
-// PyListener class
-class PyListener : public pm::IFpsLimiterListener
-{
-public:
-	PyListener();
-	~PyListener();
-
-	void OnFpsLimiterEvent(pm::FpsLimiter* sender,
-            std::shared_ptr<pm::Frame> frame);
-	bool frame_ready = false;
-	const void *frame_data;
-};
-
-class Helper
+class Helper final : private pm::IFpsLimiterListener
 {
 public:
 	Helper();
@@ -42,7 +29,15 @@ public:
         size_t& diskFramesLost, size_t& diskFramesMax, size_t& diskFramesCached); // Get acquisition stats
 	void AbortAcquisition(); // Abort any running acquisition
 	void InputTimerTick(); // Input FPS limiter timer tick
-	bool GetFrame(const void*& frame_data);
+	bool GetFrame(const void*& frame_data, const md_frame* frame_metadata);
+
+private: // IFpsLimiterListener
+    virtual void OnFpsLimiterEvent(pm::FpsLimiter* sender,
+            std::shared_ptr<pm::Frame> frame) override;
+
+	bool frame_ready = false;
+	const void *frame_data;
+	const md_frame *frame_metadata;
 
 private:
 	bool InitAcquisition();
@@ -57,5 +52,4 @@ private:
 	std::shared_ptr<pm::Camera> m_camera;
 	std::shared_ptr<pm::Acquisition> m_acquisition;
 	std::shared_ptr<pm::FpsLimiter> m_fpslimiter;
-	PyListener* m_listener;
 };

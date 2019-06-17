@@ -34,23 +34,6 @@
 std::shared_ptr<pm::Acquisition> g_acquisition(nullptr);
 std::atomic<bool> g_userAbortFlag(false);
 
-PyListener::PyListener()
-	: frame_data(nullptr)
-{
-}
-
-PyListener::~PyListener()
-{
-}
-
-void PyListener::OnFpsLimiterEvent (pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
-{
-	frame_data = frame->GetData();
-	frame_ready = true;
-
-	std::cout << "FPS Limiter Event: " << frame_data << std::endl;
-}
-
 using HandlerProto = bool(Helper::*)(const std::string&);
 
 Helper::Helper()
@@ -59,7 +42,8 @@ Helper::Helper()
 	m_camera(nullptr),
 	m_acquisition(nullptr),
 	m_fpslimiter(nullptr),
-	m_listener(nullptr)
+	frame_data(nullptr),
+	frame_metadata(nullptr)
 {
 }
 
@@ -111,8 +95,7 @@ bool Helper::InitAcquisition()
 	}
 
 	// Get FPS Listener instance
-	m_listener = new PyListener;
-	if (!m_fpslimiter->Start(m_listener))
+	if (!m_fpslimiter->Start(this))
 	{
 		pm::Log::LogE("Failure starting FPS listener instance!!!");
 		return false;
@@ -280,16 +263,24 @@ void Helper::InputTimerTick()
 	m_fpslimiter->InputTimerTick();
 }
 
-bool Helper::GetFrame(const void*& frame_data)
+bool Helper::GetFrame(const void*& frame_data, const md_frame* frame_metadata)
 {
-	if (!m_listener){
+	if (!frame_ready){
 		return false;
 	}
-	if (!m_listener->frame_ready){
-		return false;
-	}
-	frame_data = m_listener->frame_data;
+	frame_data = this->frame_data;
+	frame_metadata = this->frame_metadata;
 	return true;
+}
+
+void Helper::OnFpsLimiterEvent(pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
+{
+	frame->CopyData();
+	frame_data = frame->GetData();
+	frame_metadata = frame->GetMetadata();
+	frame_ready = true;
+
+	std::cout << "FPS Limiter Event: " << frame_data << std::endl;
 }
 
 /*
