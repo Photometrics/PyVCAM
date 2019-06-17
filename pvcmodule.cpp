@@ -6,6 +6,7 @@
 
 // System
 #include <new>
+#include <iostream>
 #include <chrono>
 #include <thread>
 
@@ -1088,6 +1089,22 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
     Py_RETURN_NONE;
 }
 
+static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
+{
+    const void *frame_data;
+
+    if (!(self->helpPtr)->GetFrame(frame_data))
+    {
+		PyErr_SetString(PyExc_RuntimeError, "Could not get frame data!");
+		return NULL;
+    }
+
+	std::cout << "Got frame: " << frame_data << std::endl;
+    // Wrap frame in numpy array
+
+    Py_RETURN_NONE;
+}
+
 static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
 {
     double* acqFps = new double;
@@ -1166,8 +1183,14 @@ static PyMethodDef StreamSaver_methods[] = {
     {"input_tick",
         (PyCFunction)StreamSaver_input_tick,
         METH_NOARGS,
-        "Input timer tick to acquisition. Signals the acquisition to send next "
-        "frame to the callback function."},
+        "Input timer tick to acquisition. Signals the acquisition to cache next "
+        "frame."},
+    {"get_acquisition_frame",
+        (PyCFunction)StreamSaver_get_acquisition_frame,
+        METH_NOARGS,
+        "Get last frame from PyListener. Frames are only cached after "
+        "input_tick has been called. Exactly one frame will be cached "
+        "per tick."},
     {NULL} /* Sentinel */
 };
 
