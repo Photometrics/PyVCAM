@@ -1094,14 +1094,21 @@ static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
 {
     void *data;
     uns32 frameBytes = 0;
-    pm::Frame::Info frameInfo;
+    uns32 frameNum = 0;
+    uns16 frameW = 0;
+    uns16 frameH = 0;
 
-    if (!(self->helpPtr)->GetFrameData(&data, &frameBytes, frameInfo))
+    if (!(self->helpPtr)->GetFrameData(&data, &frameBytes, &frameNum, &frameW, &frameH))
     {
 	    pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Frame is empty/invalid!");
 		return NULL;
     }
+
+    std::cout << "frameBytes: " << frameBytes << std::endl;
+    std::cout << "frameNum: " << frameNum << std::endl;
+    std::cout << "frameW: " << frameW << std::endl;
+    std::cout << "frameH: " << frameH << std::endl;
 
     // Wrap frame in numpy array
 	import_array();

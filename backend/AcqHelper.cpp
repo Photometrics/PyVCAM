@@ -259,23 +259,28 @@ void Helper::InputTimerTick()
 	m_fpslimiter->InputTimerTick();
 }
 
-bool Helper::GetFrameData(void** data, uns32* frameBytes, pm::Frame::Info frameInfo)
+bool Helper::GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16* frameW, uns16* frameH)
 {
+	// Make sure frame is valid
 	if (!m_frame || !m_frame->IsValid()) {
-		std::cout << "Frame invalid" << std::endl << std::flush;
+		std::cout << "Live frame is empty/invalid!" << std::endl << std::flush;
 		return false;
 	}
-	// Get frame data size
-	*frameBytes = (uns32)m_frame->GetAcqCfg().GetFrameBytes();
-	frameInfo = m_frame->GetInfo();
 
 	// Allocate mem and copy frame data
+	*frameBytes = (uns32)m_frame->GetAcqCfg().GetFrameBytes();
 	*data = (void*)new uint8_t[*frameBytes];
 	if (!*data) {
-		std::cout << "Data pointer invalid" << std::endl << std::flush;
+		std::cout << "Failed to allocate live frame memory!" << std::endl << std::flush;
 		return false;
 	}
 	memcpy(*data, m_frame->GetData(), *frameBytes);
+
+	// Get frame stats
+	*frameNum = m_frame->GetInfo().GetFrameNr();
+	rgn_type rgn = m_settings.GetRegions()[0];
+	*frameW = (rgn.s2 - rgn.s1 + 1) / rgn.sbin;
+    *frameH = (rgn.p2 - rgn.p1 + 1) / rgn.pbin;
 	return true;
 }
 

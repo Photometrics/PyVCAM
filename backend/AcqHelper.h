@@ -29,7 +29,7 @@ public:
         size_t& diskFramesLost, size_t& diskFramesMax, size_t& diskFramesCached); // Get acquisition stats
 	void AbortAcquisition(); // Abort any running acquisition
 	void InputTimerTick(); // Input FPS limiter timer tick
-	bool GetFrameData(void** data, uns32* frameBytes, pm::Frame::Info frameInfo);
+	bool GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16* frameW, uns16* frameH);
 
 private: // IFpsLimiterListener
     virtual void OnFpsLimiterEvent(pm::FpsLimiter* sender,
