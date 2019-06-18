@@ -1105,19 +1105,13 @@ static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
 		return NULL;
     }
 
-    std::cout << "frameBytes: " << frameBytes << std::endl;
-    std::cout << "frameNum: " << frameNum << std::endl;
-    std::cout << "frameW: " << frameW << std::endl;
-    std::cout << "frameH: " << frameH << std::endl;
-
     // Wrap frame in numpy array
 	import_array();
 	int type = NPY_UINT16;
-	int dimensions = 1;
-	npy_intp dimension_lengths = frameBytes / sizeof(uns16);
+	int ndims = 2;
+	npy_intp dims[2] = {frameW, frameH};
 	PyArrayObject *numpy_frame = (PyArrayObject *)
-		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
-		data);
+		PyArray_SimpleNewFromData(ndims, dims, type, data);
 	// Tell numpy to free the memory when the array is destroyed
 	PyArray_ENABLEFLAGS((PyArrayObject*)numpy_frame, NPY_ARRAY_OWNDATA);
 	PyArray_Return(numpy_frame);
