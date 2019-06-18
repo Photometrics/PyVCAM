@@ -394,6 +394,7 @@ class Camera:
 
     def get_acquisition_frame(self):
         self.__stream_saver.input_tick()
+        return self.__stream_saver.get_acquisition_frame()
 
     def get_acquisition_stats(self):
         stat_tup = self.__stream_saver.acquisition_stats()

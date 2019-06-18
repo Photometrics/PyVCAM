@@ -166,10 +166,7 @@ bool Helper::AttachCamera(std::string camName)
 
 bool Helper::StartAcquisition()
 {
-	if (!acq_ready)
-		return false;
-
-	if (acq_active)
+	if (!acq_ready || acq_active)
 		return false;
 
 	// Apply settings
@@ -262,16 +259,23 @@ void Helper::InputTimerTick()
 	m_fpslimiter->InputTimerTick();
 }
 
-bool Helper::GetFrameData(const void** data, uns32* frameBytes, pm::Frame::Info frameInfo)
+bool Helper::GetFrameData(void** data, uns32* frameBytes, pm::Frame::Info frameInfo)
 {
 	if (!m_frame || !m_frame->IsValid()) {
 		std::cout << "Frame invalid" << std::endl << std::flush;
 		return false;
 	}
-
-	*data = m_frame->GetData();
+	// Get frame data size
 	*frameBytes = (uns32)m_frame->GetAcqCfg().GetFrameBytes();
 	frameInfo = m_frame->GetInfo();
+
+	// Allocate mem and copy frame data
+	*data = (void*)new uint8_t[*frameBytes];
+	if (!*data) {
+		std::cout << "Data pointer invalid" << std::endl << std::flush;
+		return false;
+	}
+	memcpy(*data, m_frame->GetData(), *frameBytes);
 	return true;
 }
 
@@ -281,7 +285,6 @@ void Helper::OnFpsLimiterEvent(pm::FpsLimiter* sender, std::shared_ptr<pm::Frame
 }
 
 /*
-
 *******************************************************
 * Abort handling. Abort an acquisition using <CTRL>+C *
 *******************************************************
