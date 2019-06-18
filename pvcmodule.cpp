@@ -3,6 +3,7 @@
 #include "backend/AcqHelper.h"
 #include "backend/ConsoleLogger.h"
 #include "backend/Log.h"
+#include "backend/Frame.h"
 
 // System
 #include <new>
@@ -1091,19 +1092,17 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
 
 static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
 {
-    const void *frame_data;
-    const md_frame *frame_metadata;
-
-    if (!(self->helpPtr)->GetFrame(frame_data, frame_metadata))
+    const void* data;
+    pm::Frame::Info frameInfo;
+    if (!(self->helpPtr)->GetFrameData(&data, frameInfo))
     {
-		PyErr_SetString(PyExc_RuntimeError, "Could not get frame data!");
+	    pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Frame is empty/invalid!");
 		return NULL;
     }
 
-	std::cout << "Got frame: " << frame_data << std::endl;
-
     // Wrap frame in numpy array
-    std::cout << "Frame bytes: " << (frame_metadata->roiArray[0]).dataSize << std::endl;
+	std::cout << "Got frame data: " << data << std::endl;
 
     Py_RETURN_NONE;
 }

@@ -42,8 +42,7 @@ Helper::Helper()
 	m_camera(nullptr),
 	m_acquisition(nullptr),
 	m_fpslimiter(nullptr),
-	frame_data(nullptr),
-	frame_metadata(nullptr)
+	m_frame(nullptr)
 {
 }
 
@@ -263,24 +262,19 @@ void Helper::InputTimerTick()
 	m_fpslimiter->InputTimerTick();
 }
 
-bool Helper::GetFrame(const void*& frame_data, const md_frame* frame_metadata)
+bool Helper::GetFrameData(const void** data, pm::Frame::Info frameInfo)
 {
-	if (!frame_ready){
+	if (!m_frame || !m_frame->IsValid()) {
 		return false;
 	}
-	frame_data = this->frame_data;
-	frame_metadata = this->frame_metadata;
+	*data = m_frame->GetData();
+	frameInfo = m_frame->GetInfo();
 	return true;
 }
 
 void Helper::OnFpsLimiterEvent(pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
 {
-	frame->CopyData();
-	frame_data = frame->GetData();
-	frame_metadata = frame->GetMetadata();
-	frame_ready = true;
-
-	std::cout << "FPS Limiter Event: " << frame_data << std::endl;
+	m_frame = frame;
 }
 
 /*
