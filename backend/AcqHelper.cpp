@@ -262,12 +262,15 @@ void Helper::InputTimerTick()
 	m_fpslimiter->InputTimerTick();
 }
 
-bool Helper::GetFrameData(const void** data, pm::Frame::Info frameInfo)
+bool Helper::GetFrameData(const void** data, uns32* frameBytes, pm::Frame::Info frameInfo)
 {
 	if (!m_frame || !m_frame->IsValid()) {
+		std::cout << "Frame invalid" << std::endl << std::flush;
 		return false;
 	}
+
 	*data = m_frame->GetData();
+	*frameBytes = (uns32)m_frame->GetAcqCfg().GetFrameBytes();
 	frameInfo = m_frame->GetInfo();
 	return true;
 }

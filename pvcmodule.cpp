@@ -1093,18 +1093,30 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
 static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
 {
     const void* data;
+    uns32 frameBytes = 0;
     pm::Frame::Info frameInfo;
-    if (!(self->helpPtr)->GetFrameData(&data, frameInfo))
+
+    if (!(self->helpPtr)->GetFrameData(&data, &frameBytes, frameInfo))
     {
 	    pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Frame is empty/invalid!");
 		return NULL;
     }
 
-    // Wrap frame in numpy array
-	std::cout << "Got frame data: " << data << std::endl;
+    std::cout << "Frame num.: " << frameInfo.GetFrameNr() << std::endl;
+    std::cout << "Frame bytes: " << frameBytes << std::endl << std::flush;
 
-    Py_RETURN_NONE;
+    // Wrap frame in numpy array
+	import_array();
+	int type = NPY_UINT16;
+	int dimensions = 1;
+	npy_intp dimension_lengths = frameBytes / sizeof(uns16);
+	PyArrayObject *numpy_frame = (PyArrayObject *)
+		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
+		(void*)data);
+	// Tell numpy to free the memory when the array is destroyed
+	PyArray_ENABLEFLAGS((PyArrayObject*)numpy_frame, NPY_ARRAY_OWNDATA);
+	PyArray_Return(numpy_frame);
 }
 
 static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
