@@ -2,7 +2,6 @@
 
 /* Local */
 #include "Log.h"
-#include "Option.h"
 #include "Utils.h"
 
 using SettingsProto = bool(pm::Settings::*)(const std::string&);
@@ -114,6 +113,463 @@ pm::Settings::Settings()
 
 pm::Settings::~Settings()
 {
+}
+
+bool pm::Settings::AddOptions(OptionController& controller)
+{
+    const char valSep = pm::Option::ValuesSeparator;
+    const char grpSep = pm::Option::ValueGroupsSeparator;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CamIndex", "--cam-index", "-c" },
+            { "index" },
+            { "<camera default>" },
+            "Index of camera to be used for acquisition.",
+            static_cast<uint32_t>(OptionId::CamIndex),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCamIndex),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-PortIndex", "--port-index" },
+            { "index" },
+            { "<camera default>" },
+            "Port index (first is 0).",
+            PARAM_READOUT_PORT,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandlePortIndex),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-SpeedIndex", "--speed-index" },
+            { "index" },
+            { "<camera default>" },
+            "Speed index (first is 0).",
+            PARAM_SPDTAB_INDEX,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleSpeedIndex),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-GainIndex", "--gain-index" },
+            { "index" },
+            { "<camera default>" },
+            "Gain index (first is 1).",
+            PARAM_GAIN_INDEX,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleGainIndex),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-EMGain", "--em-gain" },
+            { "gain" },
+            { "<camera default>" },
+            "Gain multiplication factor for EM CCD cameras (lowest value is 1).",
+            PARAM_GAIN_MULT_FACTOR,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleEmGain),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-ClearCycles", "--clear-cycles" },
+            { "count" },
+            { "<camera default>" },
+            "Number of clear cycles.",
+            PARAM_CLEAR_CYCLES,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleClrCycles),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-ClearMode", "--clear-mode" },
+            { "mode" },
+            { "<camera default>" },
+            "Clear mode used for sensor clearing during acquisition.\n"
+            "Supported values are : 'never', 'pre-exp', 'pre-seq', 'post-seq',\n"
+            "'pre-post-seq' and 'pre-exp-post-seq'.",
+            PARAM_CLEAR_MODE,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleClrMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-PMode", "--p-mode" },
+            { "mode" },
+            { "<camera default>" },
+            "Parallel clocking mode used for sensor.\n"
+            "Supported values are : 'normal', 'ft', 'mpp', 'ft-mpp', 'alt-normal',\n"
+            "'alt-ft', 'alt-mpp' and 'alt-ft-mpp'.\n"
+            "Modes with 'ft' in name are supported on frame-transfer capable cameras only.\n"
+            "Modes with 'mpp' in name are supported on on MPP sensors only.\n"
+            "Although the default value is 'normal', on frame-transfer cameras it should \n"
+            "be 'ft' by default. Let's hope it won't cause problems.",
+            PARAM_PMODE,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandlePMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrigMode", "--trig-mode" },
+            { "mode" },
+            { "<camera default>" },
+            "Trigger (or exposure) mode used for exposure triggering.\n"
+            "It is related to expose out mode, see details in PVCAM manual.\n"
+            "Supported values are : Classics modes 'timed', 'strobed', 'bulb',\n"
+            "'trigger-first', 'flash', 'variable-timed', 'int-strobe'\n"
+            "and extended modes 'ext-internal', 'ext-trig-first' and 'ext-edge-raising'.\n"
+            "WARNING:\n"
+            "  'variable-timed' mode works in time-lapse acquisition modes only!",
+            PARAM_EXPOSURE_MODE,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrigMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-ExpOutMode", "--exp-out-mode" },
+            { "mode" },
+            { "<camera default>" },
+            "Expose mode used for exposure triggering.\n"
+            "It is related to exposure mode, see details in PVCAM manual.\n"
+            "Supported values are : 'first-row', 'all-rows', 'any-row' and 'rolling-shutter'.",
+            PARAM_EXPOSE_OUT_MODE,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleExpOutMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-UseMetadata", "--use-metadata" },
+            { "" },
+            { "<camera default>" },
+            "If camera supports frame metadata use it even if not needed.\n"
+            "Application may silently override this value when metadata is needed,\n"
+            "for instance multiple regions or centroids.",
+            PARAM_METADATA_ENABLED,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleMetadataEnabled),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrigtabSignal", "--trigtab-signal" },
+            { "signal" },
+            { "<camera default>" },
+            "The output signal with embedded multiplexer forwarding chosen signal\n"
+            "to multiple output wires (set via --last-muxed-signal).\n"
+            "Supported values are : 'expose-out'.",
+            PARAM_TRIGTAB_SIGNAL,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrigTabSignal),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-LastMuxedSignal", "--last-muxed-signal" },
+            { "number" },
+            { "<camera default>" },
+            "Number of multiplexed output wires for chosen signal (set via --trigtab-signal).",
+            PARAM_LAST_MUXED_SIGNAL,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleLastMuxedSignal),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-AcqFrames", "--acq-frames", "-f" },
+            { "count" },
+            { "1" },
+            "Total number of frames to be captured in acquisition.\n"
+            "In snap sequence mode (set via --acq-mode) the total number of frames\n"
+            "is limited to value 65535.",
+            static_cast<uint32_t>(OptionId::AcqFrameCount),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleAcqFrameCount),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-BufferFrames", "--buffer-frames" },
+            { "count" },
+            { "10" },
+            "Number of frames in PVCAM circular buffer.",
+            static_cast<uint32_t>(OptionId::BufferFrameCount),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleBufferFrameCount),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-BinningSerial", "--binning-serial", "--sbin" },
+            { "factor" },
+            { "<camera default> or 1" },
+            "Serial binning factor.",
+            PARAM_BINNING_SER,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleBinningSerial),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-BinningParallel", "--binning-parallel", "--pbin" },
+            { "factor" },
+            { "<camera default> or 1" },
+            "Parallel binning factor.",
+            PARAM_BINNING_PAR,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleBinningParallel),
+                    this, std::placeholders::_1))))
+        return false;
+
+    const std::string roiArgsDescs = std::string()
+        + "sA1" + valSep + "sA2" + valSep + "pA1" + valSep + "pA2" + grpSep
+        + "sB1" + valSep + "sB2" + valSep + "pB1" + valSep + "pB2" + grpSep
+        + "...";
+    if (!controller.AddOption(pm::Option(
+            { "--region", "--regions", "--rois", "--roi", "-r" },
+            { roiArgsDescs },
+            { "" },
+            "Region of interest for serial (width) and parallel (height) dimension.\n"
+            "'sA1' is the first pixel, 'sA2' is the last pixel of the first region\n"
+            "included on row. The same applies to columns. Multiple regions are\n"
+            "separated by semicolon.\n"
+            "Example of two diagonal regions 10x10: '--rois=0,9,0,9;10,19,10,19'.\n"
+            "Binning factors are configured separately (via --sbin and --pbin).\n"
+            "The empty value causes the camera's full-frame will be used internally.",
+            static_cast<uint32_t>(OptionId::Regions),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleRegions),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-Exposure", "--exposure", "-e" },
+            { "units" },
+            { "10" },
+            "Exposure time for each frame in millisecond units by default.\n"
+            "Use us, ms or s suffix to change exposure resolution, e.g. 100us or 10ms.",
+            static_cast<uint32_t>(OptionId::Exposure),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleExposure),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-VTMExposures", "--vtm-exposures" },
+            { "units" },
+            { "10,20,30" },
+            "A set of exposure times used with variable timed trigger mode.\n"
+            "It should be a list of comma-separated values in range from 1 to 65535.\n"
+            "The exposure resolution is the same as set by --exposure option.\n"
+            "WARNING:\n"
+            "  VTM works in time-lapse acquisition modes only!",
+            static_cast<uint32_t>(OptionId::VtmExposures),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleVtmExposures),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-AcqMode", "--acq-mode" },
+            { "mode" },
+            { "snap-seq" },
+            "Specifies acquisition mode used for collecting images.\n"
+            "Supported values are : 'snap-seq', 'snap-circ-buffer', 'snap-time-lapse',\n"
+            "'live-circ-buffer' and 'live-time-lapse'.\n"
+            "'snap-seq' mode:\n"
+            "  Frames are captured in one sequence instead of continuous\n"
+            "  acquisition with circular buffer.\n"
+            "  Number of frames in buffer (set using --buffer-frames) has to\n"
+            "  be equal or greater than number of frames in sequence\n"
+            "  (set using --acq-frames).\n"
+            "'snap-circ-buffer' mode:\n"
+            "  Uses circular buffer to snap given number of frames in continuous\n"
+            "  acquisition.\n"
+            "  If the frame rate is high enough, it happens that number of\n"
+            "  acquired frames is higher that requested, because new frames\n"
+            "  can come between stop request and actual acq. interruption.\n"
+            "'snap-time-lapse' mode:\n"
+            "  Required number of frames is collected using multiple sequence\n"
+            "  acquisitions where only one frame is captured at a time.\n"
+            "  Delay between single frames can be set using --time-lapse-delay\n"
+            "  option."
+            "'live-circ-buffer' mode:\n"
+            "  Uses circular buffer to snap frames in infinite continuous\n"
+            "  acquisition.\n"
+            "'live-time-lapse' mode:\n"
+            "  The same as 'snap-time-lapse' but runs in infinite loop.",
+            static_cast<uint32_t>(OptionId::AcqMode),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleAcqMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TimeLapseDelay", "--time-lapse-delay" },
+            { "milliseconds" },
+            { "0" },
+            "A delay between single frames in time lapse mode.",
+            static_cast<uint32_t>(OptionId::TimeLapseDelay),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTimeLapseDelay),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-SaveAs", "--save-as" },
+            { "format" },
+            { "none" },
+            "Stores captured frames on disk in chosen format.\n"
+            "Supported values are: 'none', 'prd' and 'tiff'.",
+            static_cast<uint32_t>(OptionId::StorageType),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleStorageType),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-SaveDir", "--save-dir" },
+            { "folder" },
+            { "" },
+            "Stores captured frames on disk in given directory.\n"
+            "If empty string is given (the default) current working directory is used.",
+            static_cast<uint32_t>(OptionId::SaveDir),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleSaveDir),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-SaveFirst", "--save-first" },
+            { "count" },
+            { "0" },
+            "Saves only first <count> frames.\n"
+            "If both --save-first and --save-last are zero, all frames are stored unless\n"
+            "an option --save-as is 'none'.",
+            static_cast<uint32_t>(OptionId::SaveFirst),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleSaveFirst),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-SaveLast", "--save-last" },
+            { "count" },
+            { "0" },
+            "Saves only last <count> frames.\n"
+            "If both --save-first and --save-last are zero, all frames are stored unless\n"
+            "an option --save-as is 'none'.",
+            static_cast<uint32_t>(OptionId::SaveLast),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleSaveLast),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-MaxStackSize", "--max-stack-size" },
+            { "size" },
+            { "0" },
+            "Stores multiple frames in one file up to given size.\n"
+            "Another stack file with new index is created for more frames.\n"
+            "Use k, M or G suffix to enter nicer values. (1k = 1024)\n"
+            "Default value is 0 which means each frame is stored to its own file.\n"
+            "WARNING:\n"
+            "  Storing too many small frames into one TIFF file (using --max-stack-size)\n"
+            "  might be significantly slower compared to PRD format!",
+            static_cast<uint32_t>(OptionId::MaxStackSize),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleMaxStackSize),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-UseCentroids", "--use-centroids" },
+            { "" },
+            { "<camera default>" },
+            "Turns on the centroids feature.\n"
+            "This feature can be used with up to one region only.",
+            PARAM_CENTROIDS_ENABLED,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsEnabled),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CentroidsCount", "--centroids-count" },
+            { "count" },
+            { "<camera default>" },
+            "Requests camera to find given number of centroids.\n"
+            "Application may override this value if it is greater than max. number of\n"
+            "supported centroids.",
+            PARAM_CENTROIDS_COUNT,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsCount),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CentroidsRadius", "--centroids-radius" },
+            { "radius" },
+            { "<camera default>" },
+            "Specifies the radius of all centroids.",
+            PARAM_CENTROIDS_RADIUS,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsRadius),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CentroidsMode", "--centroids-mode" },
+            { "mode" },
+            { "<camera default>" },
+            "Small objects can be either located only or tracked across frames.\n"
+            "Supported values are : 'locate' and 'track'.",
+            PARAM_CENTROIDS_MODE,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsMode),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CentroidsBgCount", "--centroids-bg-count" },
+            { "frames" },
+            { "<camera default>" },
+            "Sets number of frames used for dynamic background removal.",
+            PARAM_CENTROIDS_BG_COUNT,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsBackgroundCount),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-CentroidsThreshold", "--centroids-threshold" },
+            { "multiplier" },
+            { "<camera default>" },
+            "Sets a threshold multiplier. It is a fixed-point real number in format Q8.4.\n"
+            "E.g. the value 1234 (0x4D2) means 77.2 (0x4D hex = 77 dec).",
+            PARAM_CENTROIDS_THRESHOLD,
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleCentroidsThreshold),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrackLinkFrames", "--track-link-frames" },
+            { "count" },
+            { "10" },
+            "Tracks particles for given number of frames.",
+            static_cast<uint32_t>(OptionId::TrackLinkFrames),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrackLinkFrames),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrackMaxDist", "--track-max-dist" },
+            { "pixels" },
+            { "25" },
+            "Searches for same particles not further than given distance.",
+            static_cast<uint32_t>(OptionId::TrackMaxDistance),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrackMaxDistance),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrackCpuOnly", "--track-cpu-only" },
+            { "" },
+            { "false" },
+            "Enforces linking on CPU, does not use CUDA on GPU even if available.",
+            static_cast<uint32_t>(OptionId::TrackCpuOnly),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrackCpuOnly),
+                    this, std::placeholders::_1))))
+        return false;
+
+    if (!controller.AddOption(pm::Option(
+            { "-TrackTrajectory", "--track-trajectory" },
+            { "frames" },
+            { "10" },
+            "Draws a trajectory lines for each particle for given number of frames.\n"
+            "Zero value means the trajectories won't be displayed.",
+            static_cast<uint32_t>(OptionId::TrackTrajectoryDuration),
+            std::bind(static_cast<SettingsProto>(&pm::Settings::HandleTrackTrajectory),
+                    this, std::placeholders::_1))))
+        return false;
+
+    return true;
 }
 
 pm::Settings::ReadOnlyWriter& pm::Settings::GetReadOnlyWriter()

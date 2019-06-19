@@ -11,6 +11,7 @@
 #include <pvcam.h>
 
 /* Local */
+#include "OptionController.h"
 #include "PrdFileFormat.h"
 #include "SettingsReader.h"
 
@@ -56,6 +57,10 @@ public:
     virtual ~Settings();
 
 public:
+    // Add all supported CLI options to given controller except Help option.
+    // If you want to support Help option, add it separately.
+    bool AddOptions(OptionController& controller);
+
     ReadOnlyWriter& GetReadOnlyWriter();
 
 public: // To be called by anyone
@@ -106,7 +111,7 @@ public: // To be called by anyone
     bool SetTrackCpuOnly(bool value);
     bool SetTrackTrajectoryDuration(uns16 value);
 
-private:
+private: // To be called indirectly by OptionController only (CLI options parsing)
     bool HandleCamIndex(const std::string& value);
 
     bool HandlePortIndex(const std::string& value);
