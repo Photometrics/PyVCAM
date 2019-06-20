@@ -14,7 +14,6 @@
 
 /* Local */
 #include "Frame.h"
-#include "OptionController.h"
 #include "Settings.h"
 
 // Function used as an interface between the queue and the callback
@@ -88,8 +87,7 @@ public:
     // but are e.g. not supported by this camera. The correction occurs in case
     // user overrided values by custom ones. Otherwise camera-default values are
     // used.
-    virtual bool ReviseSettings(Settings& settings,
-            const OptionController& optionController, bool fixUserInput);
+    virtual bool ReviseSettings(Settings& settings);
 
     // Return settings set via SetupExp
     const SettingsReader& GetSettings() const

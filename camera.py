@@ -384,7 +384,7 @@ class Camera:
             pvc.uninit_pvcam()
             self.__stream_saver.attach_camera(self.name)
 
-        self.__stream_saver.apply_settings(num_frames, self.exp_time, 0,
+        self.__stream_saver.setup_acquisition(num_frames, self.exp_time, 0,
                                             x_start, x_end - 1, self.bin_x,
                                             y_start, y_end - 1, self.bin_y, outdir,)
 
@@ -392,9 +392,27 @@ class Camera:
         self.__stream_saver.start_acquisition()
         return
 
+    def start_live_acquisition(self):
+        x_start, x_end, y_start, y_end = self.__roi
+
+        # Setup acquisition
+        if self.__stream_saver is None:
+            self.__stream_saver = pvc.StreamSaver()
+            # pvc gets reinitialized when camera is attached
+            pvc.uninit_pvcam()
+            self.__stream_saver.attach_camera(self.name)
+
+        self.__stream_saver.setup_live(self.exp_time, 0,
+                                        x_start, x_end - 1, self.bin_x,
+                                        y_start, y_end - 1, self.bin_y, )
+
+        # Run acquisition
+        self.__stream_saver.start_acquisition()
+
+
     def get_acquisition_frame(self):
         self.__stream_saver.input_tick()
-        return self.__stream_saver.get_acquisition_frame()
+        return self.__stream_saver.acquisition_frame()
 
     def get_acquisition_stats(self):
         stat_tup = self.__stream_saver.acquisition_stats()

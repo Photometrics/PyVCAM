@@ -955,7 +955,67 @@ static void StreamSaver_dealloc(StreamSaver *self)
     Py_TYPE(self)->tp_free(self);
 }
 
-static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
+static PyObject *StreamSaver_attach_camera(StreamSaver *self, PyObject *args)
+{
+    // Parse input
+	const char *camName; /* Camera name */
+	if (!PyArg_ParseTuple(args, "s", &camName)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Attaching camera!");
+    std::string camNameStr(camName);
+    if (!(self->helpPtr)->AttachCamera(camNameStr))
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not setup acquisition!!!");
+		return NULL;
+	}
+
+	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_setup_live(StreamSaver *self, PyObject *args)
+{
+	// Parse input
+	uns32 expTime;    /* Exposure time. */
+	int16 expMode;    /* Exposure mode. */
+	uns16 s1;      /* First pixel in serial register. */
+	uns16 s2;      /* Last pixel in serial register. */
+	uns16 sbin;    /* Serial binning. */
+	uns16 p1;      /* First pixel in parallel register. */
+	uns16 p2;      /* Last pixel in serial register. */
+	uns16 pbin;    /* Parallel binning. */
+
+	if (!PyArg_ParseTuple(args, "IhHHHHHH", &expTime, &expMode,
+		&s1, &s2, &sbin, &p1, &p2, &pbin)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+	// Pack ROI's
+	std::vector<rgn_type> regions;
+	rgn_type rgn;
+	rgn.sbin = sbin;
+	rgn.pbin = pbin;
+	rgn.s1 = s1;
+	rgn.s2 = s2;
+	rgn.p1 = p1;
+	rgn.p2 = p2;
+	regions.push_back(rgn);
+
+    // Apply settings
+	(self->helpPtr)->SetRegions(regions);
+	(self->helpPtr)->SetExposure(expTime);
+	(self->helpPtr)->SetAcqMode(pm::AcqMode::LiveCircBuffer);
+	(self->helpPtr)->SetStorageType(pm::StorageType::None);
+	Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_setup_acquisition(StreamSaver *self, PyObject *args)
 {
 	// Parse input
 	uns32 expTotal;   /* Number of frames to get */
@@ -985,42 +1045,16 @@ static PyObject *StreamSaver_apply_settings(StreamSaver *self, PyObject *args)
 	rgn.p2 = p2;
 	regions.push_back(rgn);
 
-    // Start Log
-	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
-	pm::Log::LogI("Applying settings!");
-	if (!(self->helpPtr)->ApplySettings(expTotal, expTime, expMode, regions, path))
-	{
-		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Could not apply settings!!!");
-		return NULL;
-	}
+    // Apply settings
+	(self->helpPtr)->SetRegions(regions);
+	(self->helpPtr)->SetAcqFrameCount(expTotal);
+	(self->helpPtr)->SetExposure(expTime);
+	(self->helpPtr)->SetSaveDir(path);
+	(self->helpPtr)->SetAcqMode(pm::AcqMode::SnapCircBuffer);
+	(self->helpPtr)->SetStorageType(pm::StorageType::Tiff);
+	(self->helpPtr)->SetMaxStackSize(2147483647); // 0xFFFFFFFF / 2 bytes (~2.15 GB)
 
-	pm::Log::Flush();
 	Py_RETURN_NONE;
-}
-
-static PyObject *StreamSaver_attach_camera(StreamSaver *self, PyObject *args)
-{
-    // Parse input
-	const char *camName; /* Camera name */
-	if (!PyArg_ParseTuple(args, "s", &camName)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-
-    // Start Log
-	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
-	pm::Log::LogI("Attaching camera!");
-    std::string camNameStr(camName);
-    if (!(self->helpPtr)->AttachCamera(camNameStr))
-	{
-		pm::Log::Flush();
-		PyErr_SetString(PyExc_RuntimeError, "Could not setup acquisition!!!");
-		return NULL;
-	}
-
-	pm::Log::Flush();
-    Py_RETURN_NONE;
 }
 
 static PyObject *StreamSaver_start_acquisition(StreamSaver *self)
@@ -1090,7 +1124,7 @@ static PyObject *StreamSaver_input_tick(StreamSaver *self)
     Py_RETURN_NONE;
 }
 
-static PyObject *StreamSaver_get_acquisition_frame(StreamSaver *self)
+static PyObject *StreamSaver_acquisition_frame(StreamSaver *self)
 {
     void *data;
     uns32 frameBytes = 0;
@@ -1132,33 +1166,17 @@ static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
     size_t* diskFramesCached = new size_t;
 
     // Get acquisition related statistics
-    (self->helpPtr)->AcquisitionStats(*acqFps, *acqFramesValid, *acqFramesLost,
+    if (!(self->helpPtr)->AcquisitionStats(*acqFps, *acqFramesValid, *acqFramesLost,
             *acqFramesMax, *acqFramesCached, *diskFps, *diskFramesValid, *diskFramesLost,
-            *diskFramesMax, *diskFramesCached);
+            *diskFramesMax, *diskFramesCached))
+    {
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition is not active!");
+		return NULL;
+    }
 
-	PyObject *py_acqFps = PyFloat_FromDouble(*acqFps);
-    PyObject *py_acqFramesValid = PyLong_FromSize_t(*acqFramesValid);
-    PyObject *py_acqFramesLost = PyLong_FromSize_t(*acqFramesLost);
-    PyObject *py_acqFramesMax = PyLong_FromSize_t(*acqFramesMax);
-    PyObject *py_acqFramesCached = PyLong_FromSize_t(*acqFramesCached);
-
-	PyObject *py_diskFps = PyFloat_FromDouble(*diskFps);
-    PyObject *py_diskFramesValid = PyLong_FromSize_t(*diskFramesValid);
-    PyObject *py_diskFramesLost = PyLong_FromSize_t(*acqFramesLost);
-    PyObject *py_diskFramesMax = PyLong_FromSize_t(*acqFramesMax);
-    PyObject *py_diskFramesCached = PyLong_FromSize_t(*acqFramesCached);
-
-	PyObject *tup = PyTuple_New(10);
-	PyTuple_SetItem(tup, 0, py_acqFps);
-	PyTuple_SetItem(tup, 1, py_acqFramesValid);
-	PyTuple_SetItem(tup, 2, py_acqFramesLost);
-	PyTuple_SetItem(tup, 3, py_acqFramesMax);
-	PyTuple_SetItem(tup, 4, py_acqFramesCached);
-	PyTuple_SetItem(tup, 5, py_diskFps);
-	PyTuple_SetItem(tup, 6, py_diskFramesValid);
-	PyTuple_SetItem(tup, 7, py_diskFramesLost);
-	PyTuple_SetItem(tup, 8, py_diskFramesMax);
-	PyTuple_SetItem(tup, 9, py_diskFramesCached);
+	PyObject *tup = Py_BuildValue("(dlllldllll)",
+            *acqFps, *acqFramesValid, *acqFramesLost, *acqFramesMax, *acqFramesCached,
+            *diskFps, *diskFramesValid, *diskFramesLost, *diskFramesMax, *diskFramesCached);
     return tup;
 }
 
@@ -1167,14 +1185,18 @@ static PyMethodDef StreamSaver_methods[] = {
         (PyCFunction)StreamSaver_attach_camera,
         METH_VARARGS,
         "Attach a camera for the acquisition."},
-    {"apply_settings",
-        (PyCFunction)StreamSaver_apply_settings,
+    {"setup_live",
+        (PyCFunction)StreamSaver_setup_live,
         METH_VARARGS,
-        "Apply acquisition settings."},
+        "Setup a live capture sequence with a circular buffer. Runs indefinitely."},
+    {"setup_acquisition",
+        (PyCFunction)StreamSaver_setup_acquisition,
+        METH_VARARGS,
+        "Setup a capture sequence with a set length and directory to save the frames."},
     {"start_acquisition",
         (PyCFunction)StreamSaver_start_acquisition,
         METH_NOARGS,
-        "Start the acquisition. NOTE: attach_camera and apply_settings must be "
+        "Start the acquisition. NOTE: attach_camera and apply_options must be "
         "called first!"},
     {"join_acquisition",
         (PyCFunction)StreamSaver_join_acquisition,
@@ -1197,8 +1219,8 @@ static PyMethodDef StreamSaver_methods[] = {
         METH_NOARGS,
         "Input timer tick to acquisition. Signals the acquisition to cache next "
         "frame."},
-    {"get_acquisition_frame",
-        (PyCFunction)StreamSaver_get_acquisition_frame,
+    {"acquisition_frame",
+        (PyCFunction)StreamSaver_acquisition_frame,
         METH_NOARGS,
         "Get last frame from listener. Frames are only cached after "
         "input_tick has been called. Exactly one frame will be cached "

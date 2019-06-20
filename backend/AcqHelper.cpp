@@ -38,7 +38,6 @@ using HandlerProto = bool(Helper::*)(const std::string&);
 
 Helper::Helper()
 	: m_settings(),
-	m_optionController(),
 	m_camera(nullptr),
 	m_acquisition(nullptr),
 	m_fpslimiter(nullptr),
@@ -49,24 +48,6 @@ Helper::Helper()
 Helper::~Helper()
 {
 	UninitAcquisition();
-}
-
-bool Helper::ApplySettings(uns32 expTotal, uns32 expTime, int16 expMode, const std::vector<rgn_type>& regions, const char *path)
-{
-	m_settings.SetAcqFrameCount(expTotal);
-	m_settings.SetExposure(expTime);
-	m_settings.SetRegions(regions);
-	// MAKE THIS CHANGEABLE
-	m_settings.SetAcqMode(pm::AcqMode::SnapCircBuffer);
-	m_settings.SetStorageType(pm::StorageType::Tiff);
-	m_settings.SetMaxStackSize(2147483647); // 0xFFFFFFFF / 2 bytes (~2.15 GB)
-	m_settings.SetSaveDir(path);
-	return true;
-}
-
-void Helper::ShowSettings()
-{
-	std::cout << "Cam index: " << m_settings.GetCamIndex() << std::endl;
 }
 
 bool Helper::InitAcquisition()
@@ -164,13 +145,48 @@ bool Helper::AttachCamera(std::string camName)
 	return true;
 }
 
+bool Helper::SetAcqMode(pm::AcqMode value)
+{
+	return m_settings.SetAcqMode(value);
+}
+
+bool Helper::SetAcqFrameCount(uns32 value)
+{
+	return m_settings.SetAcqFrameCount(value);
+}
+
+bool Helper::SetExposure(uns32 value)
+{
+	return m_settings.SetExposure(value);
+}
+
+bool Helper::SetRegions(const std::vector<rgn_type> &value)
+{
+	return m_settings.SetRegions(value);
+}
+
+bool Helper::SetStorageType(pm::StorageType value)
+{
+	return m_settings.SetStorageType(value);
+}
+
+bool Helper::SetMaxStackSize(size_t value)
+{
+	return m_settings.SetMaxStackSize(value);
+}
+
+bool Helper::SetSaveDir(const std::string &value)
+{
+	return m_settings.SetSaveDir(value);
+}
+
 bool Helper::StartAcquisition()
 {
 	if (!acq_ready || acq_active)
 		return false;
 
 	// Apply settings
-	if (!m_camera->ReviseSettings(m_settings, m_optionController, false))
+	if (!m_camera->ReviseSettings(m_settings))
 		return false;
 
 	// With no region specified use full sensor size
@@ -229,15 +245,17 @@ bool Helper::AcquisitionStatus()
 	return acq_active;
 }
 
-void Helper::AcquisitionStats(double& acqFps, size_t& acqFramesValid,
+bool Helper::AcquisitionStats(double& acqFps, size_t& acqFramesValid,
         size_t& acqFramesLost, size_t& acqFramesMax, size_t& acqFramesCached,
 		double& diskFps, size_t& diskFramesValid,
         size_t& diskFramesLost, size_t& diskFramesMax, size_t& diskFramesCached)
 {
+	if (!acq_active) return false;
 	m_acquisition->GetAcqStats(acqFps, acqFramesValid,
         acqFramesLost, acqFramesMax, acqFramesCached);
 	m_acquisition->GetDiskStats(diskFps, diskFramesValid,
         diskFramesLost, diskFramesMax, diskFramesCached);
+	return true;
 }
 
 void Helper::AbortAcquisition()

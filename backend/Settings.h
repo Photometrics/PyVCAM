@@ -11,7 +11,6 @@
 #include <pvcam.h>
 
 /* Local */
-#include "OptionController.h"
 #include "PrdFileFormat.h"
 #include "SettingsReader.h"
 
@@ -57,10 +56,6 @@ public:
     virtual ~Settings();
 
 public:
-    // Add all supported CLI options to given controller except Help option.
-    // If you want to support Help option, add it separately.
-    bool AddOptions(OptionController& controller);
-
     ReadOnlyWriter& GetReadOnlyWriter();
 
 public: // To be called by anyone
@@ -110,69 +105,6 @@ public: // To be called by anyone
     bool SetTrackMaxDistance(uns16 value);
     bool SetTrackCpuOnly(bool value);
     bool SetTrackTrajectoryDuration(uns16 value);
-
-private: // To be called indirectly by OptionController only (CLI options parsing)
-    bool HandleCamIndex(const std::string& value);
-
-    bool HandlePortIndex(const std::string& value);
-    bool HandleSpeedIndex(const std::string& value);
-    bool HandleGainIndex(const std::string& value);
-
-    //bool HandleEmGainCapable(const std::string& value); // Not settable from CLI
-    bool HandleEmGain(const std::string& value);
-    //bool HandleEmGainMax(const std::string& value); // Not settable from CLI
-    //bool HandleBitDepth(const std::string& value); // Not settable from CLI
-
-    //bool HandleWidth(const std::string& value); // Not settable from CLI
-    //bool HandleHeight(const std::string& value); // Not settable from CLI
-    bool HandleClrCycles(const std::string& value);
-    bool HandleClrMode(const std::string& value);
-    bool HandlePMode(const std::string& value);
-    bool HandleTrigMode(const std::string& value);
-    bool HandleExpOutMode(const std::string& value);
-    //bool HandleCircBufferCapable(const std::string& value); // Not settable from CLI
-    //bool HandleMetadataCapable(const std::string& value); // Not settable from CLI
-    bool HandleMetadataEnabled(const std::string& value);
-    //bool HandleColorMask(const std::string& value); // Not settable from CLI
-    bool HandleTrigTabSignal(const std::string& value);
-    bool HandleLastMuxedSignal(const std::string& value);
-
-    bool HandleAcqFrameCount(const std::string& value);
-    bool HandleBufferFrameCount(const std::string& value);
-
-    bool HandleBinningSerial(const std::string& value);
-    bool HandleBinningParallel(const std::string& value);
-    bool HandleRegions(const std::string& value);
-    //bool HandleRegionsCountMax(const std::string& value); // Not settable from CLI
-
-    bool HandleExposure(const std::string& value);
-    bool HandleVtmExposures(const std::string& value);
-    bool HandleAcqMode(const std::string& value);
-    bool HandleTimeLapseDelay(const std::string& value);
-
-    bool HandleStorageType(const std::string& value);
-    bool HandleSaveDir(const std::string& value);
-    bool HandleSaveFirst(const std::string& value);
-    bool HandleSaveLast(const std::string& value);
-    bool HandleMaxStackSize(const std::string& value);
-
-    //bool HandleCentroidsCapable(const std::string& value); // Not settable from CLI
-    bool HandleCentroidsEnabled(const std::string& value);
-    bool HandleCentroidsCount(const std::string& value);
-    //bool HandleCentroidsCountMax(const std::string& value); // Not settable from CLI
-    bool HandleCentroidsRadius(const std::string& value);
-    //bool HandleCentroidsRadiusMax(const std::string& value); // Not settable from CLI
-    //bool HandleCentroidsModeCapable(const std::string& value); // Not settable from CLI
-    bool HandleCentroidsMode(const std::string& value);
-    //bool HandleCentroidsBgCountCapable(const std::string& value); // Not settable from CLI
-    bool HandleCentroidsBackgroundCount(const std::string& value);
-    //bool HandleCentroidsThresholdCapable(const std::string& value); // Not settable from CLI
-    bool HandleCentroidsThreshold(const std::string& value);
-
-    bool HandleTrackLinkFrames(const std::string& value);
-    bool HandleTrackMaxDistance(const std::string& value);
-    bool HandleTrackCpuOnly(const std::string& value);
-    bool HandleTrackTrajectory(const std::string& value);
 
 protected:
     ReadOnlyWriter m_readOnlyWriter;

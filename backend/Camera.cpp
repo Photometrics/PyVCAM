@@ -27,27 +27,10 @@ pm::Camera::~Camera()
 {
 }
 
-bool pm::Camera::ReviseSettings(Settings& settings,
-        const OptionController& optionController, bool fixUserInput)
+bool pm::Camera::ReviseSettings(Settings& settings)
 {
     if (!m_isOpen)
         return false;
-
-    // Prepare lookup map for CLI options overriden by user
-    std::map<uint32_t, const Option*> optionMap; // Key is Option::id
-    for (const Option& option : optionController.GetAllProcessedOptions())
-    {
-        optionMap[option.GetId()] = &option;
-    }
-
-    auto IsOverriden = [&optionMap](uint32_t id) {
-        return (optionMap.count(id) > 0);
-    };
-
-    auto ShouldFix = [&optionMap, fixUserInput](uint32_t id) {
-        const bool isOverriden = (optionMap.count(id) > 0);
-        return fixUserInput || !isOverriden;
-    };
 
     std::vector<EnumItem> items;
 
@@ -65,38 +48,17 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     };
 
     // Set port, speed and gain index first
-
-    if (ShouldFix(PARAM_READOUT_PORT))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_READOUT_PORT))
+        int32 defVal;
+        if (!GetParam(PARAM_READOUT_PORT, ATTR_DEFAULT, &defVal))
         {
-            for (const Speed& speed : m_speeds)
-            {
-                if (speed.port.value == settings.GetPortIndex())
-                {
-                    found = true;
-                    break;
-                }
-            }
+            Log::LogE("Failure getting default port index (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_READOUT_PORT, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default port index (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_READOUT_PORT))
-            {
-                Log::LogW("Fixing port index from %d to default %d",
-                        settings.GetPortIndex(), defVal);
-            }
-            settings.SetPortIndex(defVal);
-        }
+        settings.SetPortIndex(defVal);
     }
+
     int32 portIndex = settings.GetPortIndex();
     if (!SetParam(PARAM_READOUT_PORT, &portIndex))
     {
@@ -105,38 +67,17 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         return false;
     }
 
-    if (ShouldFix(PARAM_SPDTAB_INDEX))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_SPDTAB_INDEX))
+        int16 defVal;
+        if (!GetParam(PARAM_SPDTAB_INDEX, ATTR_DEFAULT, &defVal))
         {
-            for (const Speed& speed : m_speeds)
-            {
-                if (speed.port.value == settings.GetPortIndex()
-                        && speed.speedIndex == settings.GetSpeedIndex())
-                {
-                    found = true;
-                    break;
-                }
-            }
+            Log::LogE("Failure getting default speed index (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int16 defVal;
-            if (!GetParam(PARAM_SPDTAB_INDEX, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default speed index (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_SPDTAB_INDEX))
-            {
-                Log::LogW("Fixing speed index for port index %d from %d to default %d",
-                        settings.GetPortIndex(), settings.GetSpeedIndex(), defVal);
-            }
-            settings.SetSpeedIndex(defVal);
-        }
+        settings.SetSpeedIndex(defVal);
     }
+
     int16 speedIndex = settings.GetSpeedIndex();
     if (!SetParam(PARAM_SPDTAB_INDEX, &speedIndex))
     {
@@ -145,44 +86,17 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         return false;
     }
 
-    if (ShouldFix(PARAM_GAIN_INDEX))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_GAIN_INDEX))
+        int16 defVal;
+        if (!GetParam(PARAM_GAIN_INDEX, ATTR_DEFAULT, &defVal))
         {
-            for (const Speed& speed : m_speeds)
-            {
-                if (speed.port.value == settings.GetPortIndex()
-                        && speed.speedIndex == settings.GetSpeedIndex())
-                {
-                    for (const EnumItem& gain : speed.gains)
-                    {
-                        if (gain.value == settings.GetGainIndex())
-                        {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-            }
+            Log::LogE("Failure getting default gain index (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int16 defVal;
-            if (!GetParam(PARAM_GAIN_INDEX, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default gain index (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_GAIN_INDEX))
-            {
-                Log::LogW("Fixing gain index from %d to default %d",
-                        settings.GetGainIndex(), defVal);
-            }
-            settings.SetGainIndex(defVal);
-        }
+        settings.SetGainIndex(defVal);
     }
+
     int16 gainIndex = settings.GetGainIndex();
     if (!SetParam(PARAM_GAIN_INDEX, &gainIndex))
     {
@@ -213,22 +127,14 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         }
         settings.GetReadOnlyWriter().SetEmGainMax(maxVal);
 
-        if (ShouldFix(PARAM_GAIN_MULT_FACTOR))
+        uns16 defVal;
+        if (!GetParam(PARAM_GAIN_MULT_FACTOR, ATTR_DEFAULT, &defVal))
         {
-            uns16 defVal;
-            if (!GetParam(PARAM_GAIN_MULT_FACTOR, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default EM gain (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_GAIN_MULT_FACTOR))
-            {
-                Log::LogW("Fixing EM gain from %u to default %u",
-                        settings.GetEmGain(), defVal);
-            }
-            settings.SetEmGain(defVal);
+            Log::LogE("Failure getting default EM gain (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
+        settings.SetEmGain(defVal);
     }
 
     uns16 bitDepth;
@@ -257,137 +163,49 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     }
     settings.GetReadOnlyWriter().SetHeight(height);
 
-    if (ShouldFix(PARAM_CLEAR_CYCLES))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_CLEAR_CYCLES))
+        uns16 defVal;
+        if (!GetParam(PARAM_CLEAR_CYCLES, ATTR_DEFAULT, &defVal))
         {
-            uns16 minVal;
-            if (!GetParam(PARAM_CLEAR_CYCLES, ATTR_MIN, &minVal))
-            {
-                Log::LogE("Failure getting min. clearing cycles (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            uns16 maxVal;
-            if (!GetParam(PARAM_CLEAR_CYCLES, ATTR_MAX, &maxVal))
-            {
-                Log::LogE("Failure getting max. clearing cycles (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = settings.GetClrCycles() >= minVal
-                && settings.GetClrCycles() <= maxVal;
+            Log::LogE("Failure getting default clearing cycles (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            uns16 defVal;
-            if (!GetParam(PARAM_CLEAR_CYCLES, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default clearing cycles (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_CLEAR_CYCLES))
-            {
-                Log::LogW("Fixing clearing cycles from %u to default %u",
-                        settings.GetClrCycles(), defVal);
-            }
-            settings.SetClrCycles(defVal);
-        }
+        settings.SetClrCycles(defVal);
     }
 
-    if (ShouldFix(PARAM_CLEAR_MODE))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_CLEAR_MODE))
+        int32 defVal;
+        if (!GetParam(PARAM_CLEAR_MODE, ATTR_DEFAULT, &defVal))
         {
-            if (!GetEnumParam(PARAM_CLEAR_MODE, items))
-            {
-                Log::LogE("Failure getting clearing modes (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = HasEnumItem(items, settings.GetClrMode());
+            Log::LogE("Failure getting default clearing mode (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_CLEAR_MODE, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default clearing mode (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_CLEAR_MODE))
-            {
-                Log::LogW("Fixing clearing mode from %d to default %d",
-                        settings.GetClrMode(), defVal);
-            }
-            settings.SetClrMode(defVal);
-        }
+        settings.SetClrMode(defVal);
     }
 
-    if (ShouldFix(PARAM_PMODE))
     {
-        bool found = false;
-        if (IsOverriden(PARAM_PMODE))
+        int32 defVal;
+        if (!GetParam(PARAM_PMODE, ATTR_DEFAULT, &defVal))
         {
-            if (!GetEnumParam(PARAM_PMODE, items))
-            {
-                Log::LogE("Failure getting parallel clocking modes (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = HasEnumItem(items, settings.GetPMode());
+            Log::LogE("Failure getting default parallel clocking mode (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_PMODE, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default parallel clocking mode (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_PMODE))
-            {
-                Log::LogW("Fixing parallel clocking mode from %d to default %d",
-                        settings.GetPMode(), defVal);
-            }
-            settings.SetPMode(defVal);
-        }
+        settings.SetPMode(defVal);
     }
 
     // A bit different handling, due to legacy and new modes a fix is forced
     {
-        bool found = false;
-        if (IsOverriden(PARAM_EXPOSURE_MODE))
+        int32 defVal;
+        if (!GetParam(PARAM_EXPOSURE_MODE, ATTR_DEFAULT, &defVal))
         {
-            if (!GetEnumParam(PARAM_EXPOSURE_MODE, items))
-            {
-                Log::LogE("Failure getting triggering modes (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = HasEnumItem(items, settings.GetTrigMode());
+            Log::LogE("Failure getting default triggering mode (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_EXPOSURE_MODE, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default triggering mode (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_EXPOSURE_MODE))
-            {
-                Log::LogW("Fixing triggering mode from %d to default %d",
-                        settings.GetTrigMode(), defVal);
-            }
-            settings.SetTrigMode(defVal);
-        }
+        settings.SetTrigMode(defVal);
     }
 
     rs_bool hasExpOutModes;
@@ -398,35 +216,16 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         return false;
     }
 
-    if (hasExpOutModes && ShouldFix(PARAM_EXPOSE_OUT_MODE))
+    if (hasExpOutModes)
     {
-        bool found = false;
-        if (IsOverriden(PARAM_EXPOSE_OUT_MODE))
+        int32 defVal;
+        if (!GetParam(PARAM_EXPOSE_OUT_MODE, ATTR_DEFAULT, &defVal))
         {
-            if (!GetEnumParam(PARAM_EXPOSE_OUT_MODE, items))
-            {
-                Log::LogE("Failure getting expose out modes (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = HasEnumItem(items, settings.GetExpOutMode());
+            Log::LogE("Failure getting default expose out mode (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_EXPOSE_OUT_MODE, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default expose out mode (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_EXPOSE_OUT_MODE))
-            {
-                Log::LogW("Fixing expose out mode from %d to default %d",
-                        settings.GetExpOutMode(), defVal);
-            }
-            settings.SetExpOutMode(defVal);
-        }
+        settings.SetExpOutMode(defVal);
     }
 
     rs_bool hasCircBuf;
@@ -447,32 +246,11 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     }
     settings.GetReadOnlyWriter().SetMetadataCapable(hasMetadata == TRUE);
 
-    if (ShouldFix(PARAM_METADATA_ENABLED))
+    if (!settings.GetMetadataCapable())
     {
-        if (!settings.GetMetadataCapable())
+        if (settings.GetMetadataEnabled())
         {
-            if (settings.GetMetadataEnabled())
-            {
-                if (IsOverriden(PARAM_METADATA_ENABLED))
-                {
-                    Log::LogW("Fixing metadata enabled state from true to false");
-                }
-                settings.SetMetadataEnabled(false);
-            }
-        }
-        else
-        {
-            if (!IsOverriden(PARAM_METADATA_ENABLED))
-            {
-                rs_bool defVal;
-                if (!GetParam(PARAM_METADATA_ENABLED, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default metadata enabled state (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                settings.SetMetadataEnabled(defVal == TRUE);
-            }
+            settings.SetMetadataEnabled(false);
         }
     }
 
@@ -505,35 +283,16 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     }
     // TODO: settings.GetReadOnlyWriter().SetTrigTabSignalCapable(hasTrigTabSignal);
 
-    if (hasTrigTabSignal && ShouldFix(PARAM_TRIGTAB_SIGNAL))
+    if (hasTrigTabSignal)
     {
-        bool found = false;
-        if (IsOverriden(PARAM_TRIGTAB_SIGNAL))
+        int32 defVal;
+        if (!GetParam(PARAM_TRIGTAB_SIGNAL, ATTR_DEFAULT, &defVal))
         {
-            if (!GetEnumParam(PARAM_TRIGTAB_SIGNAL, items))
-            {
-                Log::LogE("Failure getting trigger table signals (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = HasEnumItem(items, settings.GetTrigTabSignal());
+            Log::LogE("Failure getting default trigger table signal (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            int32 defVal;
-            if (!GetParam(PARAM_TRIGTAB_SIGNAL, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default trigger table signal (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_TRIGTAB_SIGNAL))
-            {
-                Log::LogW("Fixing trigger table signal from %d to default %d",
-                        settings.GetTrigTabSignal(), defVal);
-            }
-            settings.SetTrigTabSignal(defVal);
-        }
+        settings.SetTrigTabSignal(defVal);
     }
 
     rs_bool hasLastMuxedSignal;
@@ -545,44 +304,16 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     }
     // TODO: settings.GetReadOnlyWriter().SetLastMuxedSignalCapable(hasLastMuxedSignal);
 
-    if (hasLastMuxedSignal && ShouldFix(PARAM_LAST_MUXED_SIGNAL))
+    if (hasLastMuxedSignal)
     {
-        bool found = false;
-        if (IsOverriden(PARAM_LAST_MUXED_SIGNAL))
+        uns8 defVal;
+        if (!GetParam(PARAM_LAST_MUXED_SIGNAL, ATTR_DEFAULT, &defVal))
         {
-            uns8 minVal;
-            if (!GetParam(PARAM_LAST_MUXED_SIGNAL, ATTR_MIN, &minVal))
-            {
-                Log::LogE("Failure getting min. last multiplexed signal (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            uns8 maxVal;
-            if (!GetParam(PARAM_LAST_MUXED_SIGNAL, ATTR_MAX, &maxVal))
-            {
-                Log::LogE("Failure getting max. last multiplexed signal (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            found = settings.GetLastMuxedSignal() >= minVal
-                && settings.GetLastMuxedSignal() <= maxVal;
+            Log::LogE("Failure getting default last multiplexed signal (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
-        {
-            uns8 defVal;
-            if (!GetParam(PARAM_LAST_MUXED_SIGNAL, ATTR_DEFAULT, &defVal))
-            {
-                Log::LogE("Failure getting default last multiplexed signal (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_LAST_MUXED_SIGNAL))
-            {
-                Log::LogW("Fixing last multiplexed signal from %u to default %u",
-                        settings.GetLastMuxedSignal(), defVal);
-            }
-            settings.SetLastMuxedSignal(defVal);
-        }
+        settings.SetLastMuxedSignal(defVal);
     }
 
     rs_bool hasExpRes;
@@ -594,48 +325,21 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     }
 
     // Parameter can be overriden only together with exposure time
-    if (ShouldFix(static_cast<uint32_t>(OptionId::Exposure)))
+    if (hasExpRes)
     {
-        if (hasExpRes)
+        int32 defVal;
+        if (!GetParam(PARAM_EXP_RES, ATTR_DEFAULT, &defVal))
         {
-            bool found = false;
-            if (IsOverriden(PARAM_EXP_RES))
-            {
-                if (!GetEnumParam(PARAM_EXP_RES, items))
-                {
-                    Log::LogE("Failure getting exposure resolutions (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                found = HasEnumItem(items, settings.GetExposureResolution());
-            }
-            if (!found)
-            {
-                int32 defVal;
-                if (!GetParam(PARAM_EXP_RES, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default exposure resolution (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                if (IsOverriden(static_cast<uint32_t>(OptionId::Exposure)))
-                {
-                    Log::LogW("Fixing exposure resolution from %d to default %d",
-                            settings.GetExposureResolution(), defVal);
-                }
-                settings.SetExposureResolution(defVal);
-            }
+            Log::LogE("Failure getting default exposure resolution (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        else
-        {
-            int32 defVal = EXP_RES_ONE_MILLISEC;
-            if (IsOverriden(static_cast<uint32_t>(OptionId::Exposure)))
-            {
-                Log::LogW("Fixing exposure resolution from %d to %d",
-                        settings.GetExposureResolution(), defVal);
-            }
-            settings.SetExposureResolution(defVal);
-        }
+        settings.SetExposureResolution(defVal);
+    }
+    else
+    {
+        int32 defVal = EXP_RES_ONE_MILLISEC;
+        settings.SetExposureResolution(defVal);
     }
 
     rs_bool hasBinSer;
@@ -652,69 +356,24 @@ bool pm::Camera::ReviseSettings(Settings& settings,
                 GetErrorMessage().c_str());
         return false;
     }
-    if (hasBinSer && hasBinPar
-            && (fixUserInput
-                || (!IsOverriden(PARAM_BINNING_SER) && !IsOverriden(PARAM_BINNING_PAR))))
+    if (hasBinSer && hasBinPar)
     {
-        bool found = false;
-        if (IsOverriden(PARAM_BINNING_SER) || IsOverriden(PARAM_BINNING_PAR))
+        int32 defSerVal;
+        if (!GetParam(PARAM_BINNING_SER, ATTR_DEFAULT, &defSerVal))
         {
-            std::vector<EnumItem> binSerItems;
-            if (!GetEnumParam(PARAM_BINNING_SER, binSerItems))
-            {
-                Log::LogE("Failure getting serial binning factors (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            std::vector<EnumItem> binParItems;
-            if (!GetEnumParam(PARAM_BINNING_PAR, binParItems))
-            {
-                Log::LogE("Failure getting parallel binning factors (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (binSerItems.size() != binParItems.size())
-            {
-                Log::LogE("Number of serial and parallel binning factors does not match");
-                return false;
-            }
-            for (size_t n = 0; n < binSerItems.size(); n++)
-            {
-                const EnumItem& binSerItem = binSerItems.at(n);
-                const EnumItem& binParItem = binParItems.at(n);
-                if (binSerItem.value == settings.GetBinningSerial()
-                        && binParItem.value == settings.GetBinningParallel())
-                {
-                    found = true;
-                    break;
-                }
-            }
+            Log::LogE("Failure getting default serial binning factor (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
-        if (!found)
+        int32 defParVal;
+        if (!GetParam(PARAM_BINNING_PAR, ATTR_DEFAULT, &defParVal))
         {
-            int32 defSerVal;
-            if (!GetParam(PARAM_BINNING_SER, ATTR_DEFAULT, &defSerVal))
-            {
-                Log::LogE("Failure getting default serial binning factor (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            int32 defParVal;
-            if (!GetParam(PARAM_BINNING_PAR, ATTR_DEFAULT, &defParVal))
-            {
-                Log::LogE("Failure getting default parallel binning factor (%s)",
-                        GetErrorMessage().c_str());
-                return false;
-            }
-            if (IsOverriden(PARAM_BINNING_SER) || IsOverriden(PARAM_BINNING_PAR))
-            {
-                Log::LogW("Fixing binning from %ux%u to default %ux%u",
-                        settings.GetBinningSerial(), settings.GetBinningParallel(),
-                        (uns16)defSerVal, (uns16)defParVal);
-            }
-            settings.SetBinningSerial((uns16)defSerVal);
-            settings.SetBinningParallel((uns16)defParVal);
+            Log::LogE("Failure getting default parallel binning factor (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
+        settings.SetBinningSerial((uns16)defSerVal);
+        settings.SetBinningParallel((uns16)defParVal);
     }
 
     // Older PVCAMs don't have this parameter yet
@@ -740,23 +399,9 @@ bool pm::Camera::ReviseSettings(Settings& settings,
     std::vector<rgn_type> regions = settings.GetRegions();
     if (regions.size() > regionCountMax)
     {
-        if (ShouldFix(static_cast<uint32_t>(OptionId::Regions)))
-        {
-            if (IsOverriden(static_cast<uint32_t>(OptionId::Regions)))
-            {
-                Log::LogW("Unable to use all %llu regions, camera supports only %d",
-                        (unsigned long long)regions.size(), regionCountMax);
-            }
-            regions.erase(regions.begin() + regionCountMax, regions.end());
-            // Cannot fail, remaining regions already were in settings so are valid
-            settings.SetRegions(regions);
-        }
-        else
-        {
-            Log::LogE("Unable to use %llu regions, camera supports only %d",
-                    (unsigned long long)regions.size(), regionCountMax);
-            return false;
-        }
+        regions.erase(regions.begin() + regionCountMax, regions.end());
+        // Cannot fail, remaining regions already were in settings so are valid
+        settings.SetRegions(regions);
     }
 
     rs_bool hasCentroidsEnabled;
@@ -786,21 +431,14 @@ bool pm::Camera::ReviseSettings(Settings& settings,
 
     if (!settings.GetCentroidsCapable())
     {
-        if (ShouldFix(PARAM_CENTROIDS_ENABLED))
+        if (settings.GetCentroidsEnabled())
         {
-            if (settings.GetCentroidsEnabled())
-            {
-                if (IsOverriden(PARAM_CENTROIDS_ENABLED))
-                {
-                    Log::LogW("Fixing centroids enabled state from true to false");
-                }
-                settings.SetCentroidsEnabled(false);
-            }
+            settings.SetCentroidsEnabled(false);
         }
     }
     else
     {
-        if (!IsOverriden(PARAM_CENTROIDS_ENABLED))
+
         {
             rs_bool defVal;
             if (!GetParam(PARAM_CENTROIDS_ENABLED, ATTR_DEFAULT, &defVal))
@@ -829,31 +467,14 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         }
         settings.GetReadOnlyWriter().SetCentroidsCountMax(centroidsCountMax);
 
-        if (ShouldFix(PARAM_CENTROIDS_COUNT))
+        uns16 defVal;
+        if (!GetParam(PARAM_CENTROIDS_COUNT, ATTR_DEFAULT, &defVal))
         {
-            bool found = false;
-            if (IsOverriden(PARAM_CENTROIDS_COUNT))
-            {
-                found = settings.GetCentroidsCount() >= centroidsCountMin
-                    && settings.GetCentroidsCount() <= centroidsCountMax;
-            }
-            if (!found)
-            {
-                uns16 defVal;
-                if (!GetParam(PARAM_CENTROIDS_COUNT, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default centroids count (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                if (IsOverriden(PARAM_CENTROIDS_COUNT))
-                {
-                    Log::LogW("Fixing centroids count from %u to default %u",
-                            settings.GetCentroidsCount(), defVal);
-                }
-                settings.SetCentroidsCount(defVal);
-            }
+            Log::LogE("Failure getting default centroids count (%s)",
+                    GetErrorMessage().c_str());
+            return false;
         }
+        settings.SetCentroidsCount(defVal);
 
         uns16 centroidsRadiusMin;
         if (!GetParam(PARAM_CENTROIDS_RADIUS, ATTR_MIN, &centroidsRadiusMin))
@@ -872,30 +493,15 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         }
         settings.GetReadOnlyWriter().SetCentroidsRadiusMax(centroidsRadiusMax);
 
-        if (ShouldFix(PARAM_CENTROIDS_RADIUS))
         {
-            bool found = false;
-            if (IsOverriden(PARAM_CENTROIDS_RADIUS))
+            uns16 defVal;
+            if (!GetParam(PARAM_CENTROIDS_RADIUS, ATTR_DEFAULT, &defVal))
             {
-                found = settings.GetCentroidsRadius() >= centroidsRadiusMin
-                    && settings.GetCentroidsRadius() <= centroidsRadiusMax;
+                Log::LogE("Failure getting default centroids radius (%s)",
+                        GetErrorMessage().c_str());
+                return false;
             }
-            if (!found)
-            {
-                uns16 defVal;
-                if (!GetParam(PARAM_CENTROIDS_RADIUS, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default centroids radius (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                if (IsOverriden(PARAM_CENTROIDS_RADIUS))
-                {
-                    Log::LogW("Fixing centroids radious from %u to default %u",
-                            settings.GetCentroidsRadius(), defVal);
-                }
-                settings.SetCentroidsRadius(defVal);
-            }
+            settings.SetCentroidsRadius(defVal);
         }
 
         rs_bool hasCentroidsMode;
@@ -907,35 +513,16 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         }
         settings.GetReadOnlyWriter().SetCentroidsModeCapable(hasCentroidsMode == TRUE);
 
-        if (hasCentroidsMode && ShouldFix(PARAM_CENTROIDS_MODE))
+        if (hasCentroidsMode)
         {
-            bool found = false;
-            if (IsOverriden(PARAM_CENTROIDS_MODE))
+            int32 defVal;
+            if (!GetParam(PARAM_CENTROIDS_MODE, ATTR_DEFAULT, &defVal))
             {
-                if (!GetEnumParam(PARAM_CENTROIDS_MODE, items))
-                {
-                    Log::LogE("Failure getting centroids modes (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                found = HasEnumItem(items, settings.GetCentroidsMode());
+                Log::LogE("Failure getting default centroids mode (%s)",
+                        GetErrorMessage().c_str());
+                return false;
             }
-            if (!found)
-            {
-                int32 defVal;
-                if (!GetParam(PARAM_CENTROIDS_MODE, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default centroids mode (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                if (IsOverriden(PARAM_CENTROIDS_MODE))
-                {
-                    Log::LogW("Fixing centroids mode from %d to default %d",
-                            settings.GetCentroidsMode(), defVal);
-                }
-                settings.SetCentroidsMode(defVal);
-            }
+            settings.SetCentroidsMode(defVal);
         }
 
         rs_bool hasCentroidsBgCount;
@@ -947,35 +534,16 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         }
         settings.GetReadOnlyWriter().SetCentroidsBgCountCapable(hasCentroidsBgCount == TRUE);
 
-        if (hasCentroidsBgCount && ShouldFix(PARAM_CENTROIDS_BG_COUNT))
+        if (hasCentroidsBgCount)
         {
-            bool found = false;
-            if (IsOverriden(PARAM_CENTROIDS_BG_COUNT))
+            int32 defVal;
+            if (!GetParam(PARAM_CENTROIDS_BG_COUNT, ATTR_DEFAULT, &defVal))
             {
-                if (!GetEnumParam(PARAM_CENTROIDS_BG_COUNT, items))
-                {
-                    Log::LogE("Failure getting centroids background counts (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                found = HasEnumItem(items, settings.GetCentroidsBackgroundCount());
+                Log::LogE("Failure getting default centroids background count (%s)",
+                        GetErrorMessage().c_str());
+                return false;
             }
-            if (!found)
-            {
-                int32 defVal;
-                if (!GetParam(PARAM_CENTROIDS_BG_COUNT, ATTR_DEFAULT, &defVal))
-                {
-                    Log::LogE("Failure getting default centroids background count (%s)",
-                            GetErrorMessage().c_str());
-                    return false;
-                }
-                if (IsOverriden(PARAM_CENTROIDS_BG_COUNT))
-                {
-                    Log::LogW("Fixing centroids background count from %d to default %d",
-                            settings.GetCentroidsBackgroundCount(), defVal);
-                }
-                settings.SetCentroidsBackgroundCount(defVal);
-            }
+            settings.SetCentroidsBackgroundCount(defVal);
         }
 
         rs_bool hasCentroidsThreshold;
@@ -997,6 +565,7 @@ bool pm::Camera::ReviseSettings(Settings& settings,
                 return false;
             }
             // TODO: settings.GetReadOnlyWriter().SetCentroidsThresholdMin(centroidsThresholdMin);
+
             uns32 centroidsThresholdMax;
             if (!GetParam(PARAM_CENTROIDS_THRESHOLD, ATTR_MAX, &centroidsThresholdMax))
             {
@@ -1006,31 +575,14 @@ bool pm::Camera::ReviseSettings(Settings& settings,
             }
             // TODO: settings.GetReadOnlyWriter().SetCentroidsThresholdMax(centroidsThresholdMax);
 
-            if (ShouldFix(PARAM_CENTROIDS_THRESHOLD))
+            uns16 defVal;
+            if (!GetParam(PARAM_CENTROIDS_THRESHOLD, ATTR_DEFAULT, &defVal))
             {
-                bool found = false;
-                if (IsOverriden(PARAM_CENTROIDS_THRESHOLD))
-                {
-                    found = settings.GetCentroidsThreshold() >= centroidsThresholdMin
-                        && settings.GetCentroidsThreshold() <= centroidsThresholdMax;
-                }
-                if (!found)
-                {
-                    uns16 defVal;
-                    if (!GetParam(PARAM_CENTROIDS_THRESHOLD, ATTR_DEFAULT, &defVal))
-                    {
-                        Log::LogE("Failure getting default centroids threshold raw (%s)",
-                                GetErrorMessage().c_str());
-                        return false;
-                    }
-                    if (IsOverriden(PARAM_CENTROIDS_THRESHOLD))
-                    {
-                        Log::LogW("Fixing centroids threshold raw from %u to default %u",
-                                settings.GetCentroidsThreshold(), defVal);
-                    }
-                    settings.SetCentroidsThreshold(defVal);
-                }
+                Log::LogE("Failure getting default centroids threshold raw (%s)",
+                        GetErrorMessage().c_str());
+                return false;
             }
+            settings.SetCentroidsThreshold(defVal);
         }
     }
 
@@ -1204,44 +756,14 @@ bool pm::Camera::ReviseSettings(Settings& settings,
         Log::LogW("Color mask: UNKNOWN");
     }
 
-    // Add extra line to separate output
-#if 0 // Using PARAM_CAM_SYSTEMS_INFO with other parameters hangs new Retiga cameras
-    rs_bool hasSysInfo;
-    if (!GetParam(PARAM_CAM_SYSTEMS_INFO, ATTR_AVAIL, &hasSysInfo))
+    uns16 fwVer;
+    if (!GetParam(PARAM_CAM_FW_VERSION, ATTR_CURRENT, &fwVer))
     {
-        Log::LogE("Failure getting camera systems info availability (%s)",
+        Log::LogE("Failure getting camera firmware version (%s)",
                 GetErrorMessage().c_str());
         return false;
     }
-    // We can fallback to show FW version only
-    if (hasSysInfo)
-    {
-#ifdef MAX_CAM_SYSTEMS_INFO_LEN
-    #error "Remove local definition of MAX_CAM_SYSTEMS_INFO_LEN and use the one from pvcam.h"
-#else
-    #define MAX_CAM_SYSTEMS_INFO_LEN 1024
-#endif
-        char sysInfo[MAX_CAM_SYSTEMS_INFO_LEN];
-        if (!GetParam(PARAM_CAM_SYSTEMS_INFO, ATTR_CURRENT, &sysInfo))
-        {
-            Log::LogE("Failure getting camera systems info (%s)",
-                    GetErrorMessage().c_str());
-            return false;
-        }
-        Log::LogI("Camera systems info:\n%s\n", sysInfo);
-    }
-    else
-#endif
-    {
-        uns16 fwVer;
-        if (!GetParam(PARAM_CAM_FW_VERSION, ATTR_CURRENT, &fwVer))
-        {
-            Log::LogE("Failure getting camera firmware version (%s)",
-                    GetErrorMessage().c_str());
-            return false;
-        }
-        Log::LogI("Firmware version: %u.%u\n", (fwVer >> 8) & 0xFF, fwVer & 0xFF);
-    }
+    Log::LogI("Firmware version: %u.%u\n", (fwVer >> 8) & 0xFF, fwVer & 0xFF);
 
     return true;
 }
