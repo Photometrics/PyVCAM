@@ -41,7 +41,8 @@ Helper::Helper()
 	m_camera(nullptr),
 	m_acquisition(nullptr),
 	m_fpslimiter(nullptr),
-	m_frame(nullptr)
+	m_frame(nullptr),
+	m_frameMutex()
 {
 }
 
@@ -279,6 +280,9 @@ void Helper::InputTimerTick()
 
 bool Helper::GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16* frameW, uns16* frameH)
 {
+	// Hold frame mutex
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+
 	// Make sure frame is valid
 	if (!m_frame || !m_frame->IsValid()) {
 		std::cout << "Live frame is empty/invalid!" << std::endl << std::flush;
@@ -299,11 +303,16 @@ bool Helper::GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16
 	rgn_type rgn = m_settings.GetRegions()[0];
 	*frameW = (rgn.s2 - rgn.s1 + 1) / rgn.sbin;
     *frameH = (rgn.p2 - rgn.p1 + 1) / rgn.pbin;
+
+	m_frame->Invalidate();
 	return true;
 }
 
 void Helper::OnFpsLimiterEvent(pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
 {
+	// Hold frame mutex
+    std::lock_guard<std::mutex> lock(m_frameMutex);
+
 	m_frame = frame;
 }
 

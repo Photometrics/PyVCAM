@@ -1,5 +1,6 @@
 /* System */
 #include <string>
+#include <mutex>
 
 /* Local */
 #include "FpsLimiter.h"
@@ -56,4 +57,5 @@ private:
 	std::shared_ptr<pm::Acquisition> m_acquisition;
 	std::shared_ptr<pm::FpsLimiter> m_fpslimiter;
 	std::shared_ptr<pm::Frame> m_frame;
+	std::mutex m_frameMutex;
 };
