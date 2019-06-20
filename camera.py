@@ -51,6 +51,7 @@ class Camera:
 
         # StreamSaving object
         self.__stream_saver = None
+        self.__stream_mode = None
 
     def __repr__(self):
         return self.name
@@ -322,55 +323,45 @@ class Camera:
         self.exp_res = old_res
         return stack
 
-    def start_live(self, exp_time=None):
-        """Calls the pvc.start_live function to setup a circular buffer acquisition.
-
-        Parameter:
-            exp_time (int): The exposure time (optional).
-        Returns:
-            None
+    def start_live(self):
         """
-        x_start, x_end, y_start, y_end = self.__roi
-
-        if not isinstance(exp_time, int):
-            exp_time = self.exp_time
-
-        self.__exposure_bytes = pvc.start_live(self.__handle, x_start, x_end - 1,
-                                               self.bin_x, y_start, y_end - 1,
-                                               self.bin_x, exp_time, self.__mode)
+        Start a live acquisition if there are not currently any
+        active acquisitions. Do nothing otherwise.
+        """
+        if not self.check_acquisition():
+            self.start_live_acquisition()
 
     def stop_live(self):
-        """Calls the pvc.stop_live function that ends the acquisition.
-
-        Parameter:
-            None
-        Returns:
-            None
         """
-        return pvc.stop_live(self.__handle)
+        Stop the current acquisition if it is a live acquisition.
+        Do nothing if it is a normal acquisition.
+        """
+        if self.__stream_mode != "live":
+            return
+
+        try:
+            self.abort_acquisition()
+            self.join_acquisition()
+        except RuntimeError:
+            pass
 
     def get_live_frame(self):
-        """Calls the pvc.get_live_frame function.
-
-        Parameter:
-            None
-        Returns:
-            A 2D np.array containing the pixel data from the captured frame.
         """
-        frame, fps = pvc.get_live_frame(self.__handle, self.__exposure_bytes)
-
-        return frame.reshape(self.__shape[1], self.__shape[0]), fps
+        Gets last frame from current acquisition, and the current acquisition FPS.
+        Returns as (numpy_frame, fps)
+        """
+        frame = self.get_acquisition_frame()
+        fps = self.get_acquisition_stats()["acqFps"]
+        return frame, fps
 
     def start_acquisition(self, num_frames, outdir):
         """
         Most efficient acquisition method. Runs a capture sequence using the
         pvc StreamSaver class (adapted from pvcam StreamSaving example).
         The class runs an acquisition thread and saving thread simultaneously.
-        Parameter:
+        Args:
             num_frames (int): Number of frames to capture
             outdir (str): Path to the directory to save the images
-        Returns:
-            None
         """
         # Check inputs
         if not os.path.isdir(outdir):
@@ -383,6 +374,10 @@ class Camera:
             # pvc gets reinitialized when camera is attached
             pvc.uninit_pvcam()
             self.__stream_saver.attach_camera(self.name)
+        elif self.__stream_mode == "live":
+            self.stop_live()
+        elif self.__stream_mode is not None:
+            raise RuntimeError("There is already an active acquisition!")
 
         self.__stream_saver.setup_acquisition(num_frames, self.exp_time, 0,
                                             x_start, x_end - 1, self.bin_x,
@@ -390,9 +385,14 @@ class Camera:
 
         # Run acquisition
         self.__stream_saver.start_acquisition()
+        self.__stream_mode = "acquisition"
         return
 
     def start_live_acquisition(self):
+        """
+        Starts an unbounded capture sequence with a circular buffer using the
+        pvc StreamSaver class (adapted from pvcam StreamSaving example).
+        """
         x_start, x_end, y_start, y_end = self.__roi
 
         # Setup acquisition
@@ -408,36 +408,65 @@ class Camera:
 
         # Run acquisition
         self.__stream_saver.start_acquisition()
-
+        self.__stream_mode = "live"
 
     def get_acquisition_frame(self):
+        """
+        Get the last frame from the current acquisition. Achieves this
+        by signalling the StreamSaver to cache a frame, and then attempting
+        to pull a cached frame. Raises a RuntimeError if the frame is unavailable
+        or there is not an active acquisition.
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+        # Signal stream saver to cache frame
         self.__stream_saver.input_tick()
+        # Get last cached frame
         return self.__stream_saver.acquisition_frame()
 
     def get_acquisition_stats(self):
-        stat_tup = self.__stream_saver.acquisition_stats()
-        stat_dict = {
-            "acqFps" : stat_tup[0],
-            "acqFramesValid" : stat_tup[1],
-            "acqFramesLost" : stat_tup[2],
-            "acqFramesMax" : stat_tup[3],
-            "acqFramesCached" : stat_tup[4],
-            "diskFps" : stat_tup[5],
-            "diskFramesValid" : stat_tup[6],
-            "diskFramesLost" : stat_tup[7],
-            "diskFramesMax" : stat_tup[8],
-            "diskFramesCached" : stat_tup[9],
-        }
-        return stat_dict
+        """
+        Get a dictionary of stats representing the current state of
+        the StreamSaver acquisition. If there is not an active
+        acquisition, a RuntimeError is raised.
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+        return self.__stream_saver.acquisition_stats()
 
     def check_acquisition(self):
-        return self.__stream_saver.acquisition_status()
-
-    def join_acquisition(self):
-        self.__stream_saver.join_acquisition()
+        """
+        Check if there is currently an active acquisition.
+        Return True if active, False otherwise.
+        Once an acquisition is started, this call will
+        return true until a join_acquisition call has completed.
+        """
+        if self.__stream_mode is None:
+            return False
+        else:
+            return self.__stream_saver.acquisition_status()
 
     def abort_acquisition(self):
+        """
+        Set abort flag to True in the C++ acquisition.
+        Causes the acquisition to cleanly exit as soon as
+        possible.
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
         self.__stream_saver.abort_acquisition()
+        return
+
+    def join_acquisition(self):
+        """
+        Wait for the C++ acquisition to complete. Blocks until
+        completion. It is best to NOT call this in the main thread!
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+        self.__stream_saver.join_acquisition()
+        self.__stream_mode = None
+        return
 
     ### Getters/Setters below ###
     @property

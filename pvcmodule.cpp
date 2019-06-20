@@ -1143,7 +1143,7 @@ static PyObject *StreamSaver_acquisition_frame(StreamSaver *self)
 	import_array();
 	int type = NPY_UINT16;
 	int ndims = 2;
-	npy_intp dims[2] = {frameW, frameH};
+	npy_intp dims[2] = {frameH, frameW};
 	PyArrayObject *numpy_frame = (PyArrayObject *)
 		PyArray_SimpleNewFromData(ndims, dims, type, data);
 	// Tell numpy to free the memory when the array is destroyed
@@ -1174,10 +1174,12 @@ static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
 		return NULL;
     }
 
-	PyObject *tup = Py_BuildValue("(dlllldllll)",
-            *acqFps, *acqFramesValid, *acqFramesLost, *acqFramesMax, *acqFramesCached,
-            *diskFps, *diskFramesValid, *diskFramesLost, *diskFramesMax, *diskFramesCached);
-    return tup;
+	PyObject *dict = Py_BuildValue("{s:d,s:l,s:l,s:l,s:l,s:d,s:l,s:l,s:l,s:l}",
+            "acqFps", *acqFps, "acqFramesValid", *acqFramesValid, "acqFramesLost", *acqFramesLost,
+            "acqFramesMax", *acqFramesMax, "acqFramesCached", *acqFramesCached,
+            "diskFps", *diskFps, "diskFramesValid", *diskFramesValid, "diskFramesLost", *diskFramesLost,
+            "diskFramesMax", *diskFramesMax, "diskFramesCached", *diskFramesCached);
+    return dict;
 }
 
 static PyMethodDef StreamSaver_methods[] = {
@@ -1209,7 +1211,7 @@ static PyMethodDef StreamSaver_methods[] = {
     {"acquisition_status",
         (PyCFunction)StreamSaver_acquisition_status,
         METH_NOARGS,
-        "Check status of current acquisition."},
+        "Check status of current acquisition. Returns a dictionary of statistics."},
     {"acquisition_stats",
         (PyCFunction)StreamSaver_acquisition_stats,
         METH_NOARGS,
