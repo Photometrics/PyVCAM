@@ -340,7 +340,7 @@ class Camera:
             return
 
         try:
-            self.abort_acquisition()
+            self.abort_acquisition(force=True)
             self.join_acquisition()
         except RuntimeError:
             pass
@@ -446,15 +446,20 @@ class Camera:
         else:
             return self.__stream_saver.acquisition_status()
 
-    def abort_acquisition(self):
+    def abort_acquisition(self, force=False):
         """
         Set abort flag to True in the C++ acquisition.
         Causes the acquisition to cleanly exit as soon as
         possible.
+
+        Args:
+            force (bool) : If True, abort without waiting for cached
+                frames to be processed. Otherwise, allow cached frames
+                to process before exiting.
         """
         if self.__stream_mode is None:
             raise RuntimeError("There are no active acquisitions!")
-        self.__stream_saver.abort_acquisition()
+        self.__stream_saver.abort_acquisition(force)
         return
 
     def join_acquisition(self):

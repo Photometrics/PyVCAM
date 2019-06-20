@@ -259,12 +259,15 @@ bool Helper::AcquisitionStats(double& acqFps, size_t& acqFramesValid,
 	return true;
 }
 
-void Helper::AbortAcquisition()
+void Helper::AbortAcquisition(bool force)
 {
 	if (m_acquisition)
 	{
 		// On first abort it gives a chance to finish processing.
 		// On second abort it forces full stop.
+
+		// Force bypasses first abort
+		if (force) m_userAbortFlag = true;
 		m_acquisition->RequestAbort(m_userAbortFlag);
 		pm::Log::LogI((!m_userAbortFlag)
 			? "\n>>> Acquisition stop requested\n"

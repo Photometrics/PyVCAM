@@ -955,9 +955,15 @@ static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
     Py_RETURN_NONE;
 }
 
-static PyObject *StreamSaver_abort_acquisition(StreamSaver *self)
+static PyObject *StreamSaver_abort_acquisition(StreamSaver *self, PyObject *args)
 {
-    (self->helpPtr)->AbortAcquisition();
+    bool force;
+	if (!PyArg_ParseTuple(args, "p", &force)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters. Takes one boolean argument (force).");
+		return NULL;
+	}
+
+    (self->helpPtr)->AbortAcquisition(force);
     Py_RETURN_NONE;
 }
 
@@ -1055,7 +1061,7 @@ static PyMethodDef StreamSaver_methods[] = {
         "Join the acquisition (wait for completion)."},
     {"abort_acquisition",
         (PyCFunction)StreamSaver_abort_acquisition,
-        METH_NOARGS,
+        METH_VARARGS,
         "Signal the acquisition to abort."},
     {"acquisition_status",
         (PyCFunction)StreamSaver_acquisition_status,
