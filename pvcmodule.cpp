@@ -15,41 +15,12 @@
 Global variables
 */
 char g_msg[ERROR_MSG_LEN]; // Error Message Variable.
-uns16 *g_frameAddress;	/*Address of the frame*/
 uns16 *g_singleFrameAddress;	/*Address of the frame*/
-auto g_prevTime = std::chrono::high_resolution_clock::now();
-auto g_curTime = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double> g_timeDelta;
-int g_frameCnt = 0;
-double g_FPS = 0;
-int g_live = 0; // flag [1 for active, 0 for inactive]
 
 /** Sets the global error message. */
-void set_g_msg(void) { pl_error_message(pl_error_code(), g_msg); }
-
-typedef struct SampleContext
+void set_g_msg(void)
 {
-   int myData1;
-   int myData2;
-}
-SampleContext;
-
-void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
-{
-    g_frameCnt++;
-    g_curTime = std::chrono::high_resolution_clock::now();
-    g_timeDelta = std::chrono::duration_cast<std::chrono::duration<double>>(g_curTime - g_prevTime);
-
-    if (g_timeDelta.count() >= 0.25){
-        g_FPS = g_frameCnt/g_timeDelta.count();
-        //printf("framecnt: %d\nfps: %lf\ntime: %lf", g_frameCnt,g_FPS,g_timeDelta);
-        g_frameCnt = 0;
-        g_prevTime = g_curTime;
-    }
-
-    if (PV_OK != pl_exp_get_latest_frame(pFrameInfo->hCam, (void **)&g_frameAddress)) {
-        PyErr_SetString(PyExc_ValueError, "Failed to get latest frame");
-  	}
+    pl_error_message(pl_error_code(), g_msg);
 }
 
 /** Returns true if the specified attribute is available. */
@@ -652,128 +623,6 @@ pvc_get_sequence(PyObject *self, PyObject *args)
 	PyArray_Return(numpy_frame);
 }
 
-
-static PyObject *
-pvc_start_live(PyObject *self, PyObject *args)
-{
-    SampleContext dataContext;
-    //dataContext.myData1 = 0;
-    //dataContext.myData2 = 100;
-
-    int16 hcam;    /* Camera handle. */
-    uns16 s1;      /* First pixel in serial register. */
-    uns16 s2;      /* Last pixel in serial register. */
-    uns16 sbin;    /* Serial binning. */
-    uns16 p1;      /* First pixel in parallel register. */
-    uns16 p2;      /* Last pixel in serial register. */
-    uns16 pbin;    /* Parallel binning. */
-    uns32 expTime; /* Exposure time. */
-    int16 expMode; /* Exposure mode. */
-    const int16 bufferMode = CIRC_OVERWRITE;
-    const uns16 circBufferFrames = 16;
-
-    if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
-                                                    &pbin, &expTime, &expMode)) {
-        PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-        return NULL;
-    }
-    if (g_live) {
-        PyErr_SetString(PyExc_RuntimeError, "Live sequence already running!");
-        return NULL;
-    }
-
-    if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
-            (void *)NewFrameHandler, (void *)&dataContext))
-        {
-            PyErr_SetString(PyExc_RuntimeError, "Failed to register frame callback EX3.");
-            return NULL;
-        }
-        /* Struct that contains the frame size and binning information. */
-        rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-        uns32 exposureBytes;
-        g_prevTime = std::chrono::high_resolution_clock::now();
-        /* Setup the acquisition. */
-        uns16 rgn_total = 1;
-        if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
-            expTime, &exposureBytes, bufferMode)) {
-            set_g_msg();
-            PyErr_SetString(PyExc_RuntimeError, g_msg);
-            return NULL;
-        }
-        uns16 *circBufferInMemory =
-            new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
-        if (circBufferInMemory == NULL) {
-            PyErr_SetString(PyExc_MemoryError,
-                "Unable to properly allocate memory for frame.");
-            return NULL;
-        }
-        if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
-            set_g_msg();
-            PyErr_SetString(PyExc_RuntimeError, g_msg);
-            return NULL;
-        }
-        g_live = 1;
-    return PyLong_FromLong(exposureBytes);
-}
-
-static PyObject *
-pvc_get_live_frame(PyObject *self, PyObject *args)
-{
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
-	*/
-	int16 hcam;			 /* Camera handle. */
-	uns32 exposureBytes; /* Bytes Exposed */
-
-	const int16 bufferMode = CIRC_OVERWRITE;
-	const uns16 circBufferFrames = 20;
-
-	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-
-    if (!g_live) {
-		PyErr_SetString(PyExc_RuntimeError, "Camera live feed is not active!");
-        return NULL;
-    }
-
-	import_array();  /* Initialize PyArrayObject. */
-	int dimensions = 1;
-	npy_intp dimension_lengths = exposureBytes / sizeof(uns16);
-	int type = NPY_UINT16;
-	PyObject *numpy_frame = (PyObject *)
-		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
-		(void *)g_frameAddress);
-
-	PyObject *fps = PyFloat_FromDouble(g_FPS);
-	PyObject *tup = PyTuple_New(2);
-	PyTuple_SetItem(tup, 0, numpy_frame);
-	PyTuple_SetItem(tup, 1, fps);
-	return tup;
-}
-
-static PyObject *
-pvc_stop_live(PyObject *self, PyObject *args)
-{
-	int16 hcam;    /* Camera handle. */
-
-	if (!PyArg_ParseTuple(args, "h", &hcam)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-    if (!g_live) {
-        PyErr_SetString(PyExc_RuntimeError, "Live sequence is not running!");
-        return NULL;
-    }
-	if (PV_OK != pl_exp_stop_cont(hcam, CCS_CLEAR)) {	//stop the circular buffer aquisition
-		PyErr_SetString(PyExc_ValueError, "Buffer failed to stop");
-		return NULL;
-	}
-    g_live = 0;
-	Py_RETURN_NONE;
-}
-
 /** set_exp_out_mode
  *
  * Used to set the exposure out mode of a camera.
@@ -1346,18 +1195,6 @@ static PyMethodDef PvcMethods[] = {
 		pvc_get_sequence,
 		METH_VARARGS,
 		get_sequence_docstring },
-	{"start_live",
-		pvc_start_live,
-		METH_VARARGS,
-		start_live_docstring},
-	{ "get_live_frame",
-		pvc_get_live_frame,
-		METH_VARARGS,
-		get_live_frame_docstring },
-	{ "stop_live",
-		pvc_stop_live,
-		METH_VARARGS,
-		stop_live_docstring },
 	{"set_exp_modes",
 		pvc_set_exp_modes,
 		METH_VARARGS,
