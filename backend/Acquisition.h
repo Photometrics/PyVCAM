@@ -31,7 +31,6 @@ typedef struct _TAG_FRAME_INFO FRAME_INFO;
 namespace pm {
 
 class Camera;
-class ParticleLinker;
 
 class Acquisition
 {
@@ -74,8 +73,6 @@ private:
     bool HandleEofCallback();
     // Called from AcqThreadLoop to handle new frame
     bool HandleNewFrame(std::unique_ptr<Frame> frame);
-    // Tracks particles and updates trajectories points
-    bool TrackNewFrame(Frame& frame);
 
     // Updates max. allowed number of frames in queue to be saved
     void UpdateToBeSavedFramesMax();
@@ -131,13 +128,6 @@ private:
 
     uint32_t m_lastFrameNumber;
 
-    // Cached value so we don't check settings with every frame
-    bool m_trackEnabled;
-    PH_TRACK_CONTEXT m_trackContext;
-    uns32 m_trackMaxParticles;
-    ph_track_particle* m_trackParticles;
-    ParticleLinker* m_trackLinker;
-
     std::atomic<size_t> m_outOfOrderFrameCount;
 
     // Mutex that guards all non-atomic m_updateThread* variables
@@ -157,7 +147,6 @@ private:
           - done checks for lost frames
           - frame moved to m_toBeSavedFrames queue
        3. In disk thread is:
-          - tracked frame trajetory
           - frame stored to disk in chosen format
           - frame moved back to m_unusedFrames queue
     */

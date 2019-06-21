@@ -13,11 +13,9 @@
 #include "Camera.h"
 #include "FakeCamera.h"
 #include "Log.h"
-#include "ParticleLinker.h"
 #include "PrdFileSave.h"
 #include "PrdFileUtils.h"
 #include "TiffFileSave.h"
-#include "TrackRuntimeLoader.h"
 #include "Utils.h"
 
 void pm::Acquisition::EofCallback(FRAME_INFO* frameInfo, void* Acquisition_pointer)
@@ -51,11 +49,6 @@ pm::Acquisition::Acquisition(std::shared_ptr<Camera> camera)
     m_diskTimer(),
     m_diskTime(0.0),
     m_lastFrameNumber(0),
-    m_trackEnabled(false),
-    m_trackContext(PH_TRACK_CONTEXT_INVALID),
-    m_trackMaxParticles(0),
-    m_trackParticles(nullptr),
-    m_trackLinker(nullptr),
     m_outOfOrderFrameCount(0),
     m_updateThreadMutex(),
     m_updateThreadCond(),
@@ -126,54 +119,6 @@ bool pm::Acquisition::Start(std::shared_ptr<FpsLimiter> fpsLimiter)
 
     if (!PreallocateUnusedFrames())
         return false;
-
-    const bool centroidsCapable = m_camera->GetSettings().GetCentroidsCapable();
-    const bool centroidsEnabled =
-        centroidsCapable && m_camera->GetSettings().GetCentroidsEnabled();
-    const bool centroidsModeCapable =
-        m_camera->GetSettings().GetCentroidsModeCapable();
-    // Cache the tracking functionality status
-    m_trackEnabled = PH_TRACK && centroidsEnabled && centroidsModeCapable
-        && m_camera->GetSettings().GetCentroidsMode() == PL_CENTROIDS_MODE_TRACK;
-
-    if (m_trackEnabled)
-    {
-        const uint16_t maxFramesToLink = m_camera->GetSettings().GetTrackLinkFrames();
-        const uint16_t maxDistPerFrame = m_camera->GetSettings().GetTrackMaxDistance();
-        const uint16_t maxParticles = m_camera->GetSettings().GetCentroidsCount();
-        const bool useCpuOnly = m_camera->GetSettings().GetTrackCpuOnly();
-        const int32_t trackErr =
-            PH_TRACK->init(&m_trackContext, maxFramesToLink, maxDistPerFrame,
-                    useCpuOnly, maxParticles, &m_trackMaxParticles);
-        if (trackErr != PH_TRACK_ERROR_NONE)
-        {
-            char msg[PH_TRACK_MAX_ERROR_LEN] = "Unknown error";
-            uint32_t size = PH_TRACK_MAX_ERROR_LEN;
-            PH_TRACK->get_last_error_message(msg, &size);
-            Log::LogE("Failed to initialize tracking context (%s)", msg);
-            return false;
-        }
-
-        m_trackParticles = new(std::nothrow) ph_track_particle[m_trackMaxParticles];
-        if (!m_trackParticles)
-        {
-            PH_TRACK->uninit(&m_trackContext);
-            m_trackContext = nullptr;
-            return false;
-        }
-
-        const uint32_t historyDepth =
-            (uint32_t)m_camera->GetSettings().GetTrackTrajectoryDuration();
-        m_trackLinker = new(std::nothrow) ParticleLinker(maxParticles, historyDepth);
-        if (!m_trackLinker)
-        {
-            delete [] m_trackParticles;
-            m_trackParticles = nullptr;
-            PH_TRACK->uninit(&m_trackContext);
-            m_trackContext = nullptr;
-            return false;
-        }
-    }
 
     m_fpsLimiter = fpsLimiter;
 
@@ -267,16 +212,6 @@ bool pm::Acquisition::WaitForStop(bool printStats)
         delete m_updateThread;
         m_updateThread = nullptr;
     }
-
-    if (m_trackContext != PH_TRACK_CONTEXT_INVALID)
-    {
-        PH_TRACK->uninit(&m_trackContext);
-        m_trackContext = PH_TRACK_CONTEXT_INVALID;
-    }
-    delete [] m_trackParticles;
-    m_trackParticles = nullptr;
-    delete m_trackLinker;
-    m_trackLinker = nullptr;
 
     if (printStats)
     {
@@ -446,14 +381,14 @@ bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
 
     m_toBeProcessedFramesValid++;
 
-    // If we don't need to track particles, send frame to GUI here so displaying
-    // is not slowed down by saving images.
-    if (!m_trackEnabled && m_fpsLimiter)
+    // Send frame to GUI here so display is not slowed down by saving images.
+    if (m_fpsLimiter)
     {
         // Pass frame copy to FPS limiter for later processing in GUI
         m_fpsLimiter->InputNewFrame(frame->Clone());
     }
 
+    // Context for saveLock to be held
     {
         std::unique_lock<std::mutex> saveLock(m_toBeSavedFramesMutex);
 
@@ -484,201 +419,6 @@ bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
     }
     // Notify all waiters about new queued frame
     m_toBeSavedFramesCond.notify_all();
-
-    return true;
-}
-
-bool pm::Acquisition::TrackNewFrame(Frame& frame)
-{
-    const uint32_t frameNr = frame.GetInfo().GetFrameNr();
-
-    // If all ROIs have particle ID set (non-zero) by camera,
-    // linking is not needed.
-    bool isLinkingNeeded = false;
-
-    // 1. Decode
-    if (!frame.DecodeMetadata())
-        return false;
-    auto frameMeta = frame.GetMetadata();
-    // Format is: map<roiNr, md_ext_item_collection>
-    auto frameExtMeta = frame.GetExtMetadata();
-
-    // 2. Verify extended metadata before using it
-    for (uint16_t n = 0; n < frameMeta->roiCount; ++n)
-    {
-        const md_frame_roi& mdRoi = frameMeta->roiArray[n];
-
-        // Do not work with background image ROI
-        if (!(mdRoi.header->flags & PL_MD_ROI_FLAG_HEADER_ONLY))
-            continue;
-
-        const uint16_t roiNr = mdRoi.header->roiNr;
-        md_ext_item_collection* collection = &frameExtMeta[roiNr];
-
-        // Extract particle ID from extended metadata
-        const md_ext_item* item_id = collection->map[PL_MD_EXT_TAG_PARTICLE_ID];
-        if (!item_id)
-        {
-            // Particle ID is usually missing, we get it after linking
-            isLinkingNeeded = true;
-        }
-        else
-        {
-            if (!item_id->value || !item_id->tagInfo
-                || item_id->tagInfo->type != TYPE_UNS32
-                || item_id->tagInfo->size != 4)
-            {
-                Log::LogE("Invalid particle ID in ext. metadata, frameNr %u, roiNr=%u",
-                        frameNr, roiNr);
-                return false;
-            }
-
-            if (*((uint32_t*)item_id->value) == 0)
-            {
-                // Particle ID sent by camera is invalid, we get it after linking
-                isLinkingNeeded = true;
-            }
-        }
-        // Extract M0 from extended metadata
-        const md_ext_item* item_m0 = collection->map[PL_MD_EXT_TAG_PARTICLE_M0];
-        if (!item_m0 || !item_m0->value || !item_m0->tagInfo
-                || item_m0->tagInfo->type != TYPE_UNS32
-                || item_m0->tagInfo->size != 4)
-        {
-            Log::LogE("Missing M0 moment in ext. metadata, frameNr %u, roiNr=%u",
-                    frameNr, roiNr);
-            return false;
-        }
-        // Extract M2 from extended metadata
-        const md_ext_item* item_m2 = collection->map[PL_MD_EXT_TAG_PARTICLE_M2];
-        if (!item_m2 || !item_m2->value || !item_m2->tagInfo
-                || item_m2->tagInfo->type != TYPE_UNS32
-                || item_m2->tagInfo->size != 4)
-        {
-            Log::LogE("Missing M2 moment in ext. metadata, frameNr %u, roiNr=%u",
-                    frameNr, roiNr);
-            return false;
-        }
-    }
-
-    // 3. Link particles
-    std::vector<ph_track_particle_event> events;
-    // Copy to separate variable that get overwritten after linking
-    uint32_t particlesCount = m_trackMaxParticles;
-
-    if (!isLinkingNeeded)
-    {
-        // Camera sent valid ID yet, linking not needed
-
-        // Just convert data to the same format as goes from track library
-        for (uint16_t n = 0; n < frameMeta->roiCount; ++n)
-        {
-            const md_frame_roi& mdRoi = frameMeta->roiArray[n];
-
-            // Do not work with background image ROI
-            if (!(mdRoi.header->flags & PL_MD_ROI_FLAG_HEADER_ONLY))
-                continue;
-
-            const uint16_t roiNr = mdRoi.header->roiNr;
-
-            // Extract particle ID from extended metadata
-            const md_ext_item* item_id =
-                frameExtMeta[roiNr].map[PL_MD_EXT_TAG_PARTICLE_ID];
-            const uint32_t id = *((uint32_t*)item_id->value);
-
-            ph_track_particle particle;
-            particle.event = events[n - 1];
-            particle.id = id;
-            particle.lifetime = 10;
-            particle.state = PH_TRACK_PARTICLE_STATE_CONTINUATION;
-            m_trackParticles[n - 1] = particle;
-        }
-
-        // Update count the same way as ph_track_link_particles does
-        particlesCount = frameMeta->roiCount - 1;
-    }
-    else
-    {
-        // Linking is needed
-
-        // 3a. Prepare input data for linking
-        const uint16_t radius = m_camera->GetSettings().GetCentroidsRadius();
-
-        for (uint16_t n = 0; n < frameMeta->roiCount; ++n)
-        {
-            const md_frame_roi& mdRoi = frameMeta->roiArray[n];
-
-            // Do not work with background image ROI
-            if (!(mdRoi.header->flags & PL_MD_ROI_FLAG_HEADER_ONLY))
-                continue;
-
-            const uint16_t roiNr = mdRoi.header->roiNr;
-
-            const rgn_type& rgn = mdRoi.header->roi;
-            const uint16_t roiX = rgn.s1 / rgn.sbin;
-            const uint16_t roiY = rgn.p1 / rgn.pbin;
-
-            const uint16_t x = roiX + radius;
-            const uint16_t y = roiY + radius;
-
-            // Extract M0 from extended metadata
-            const md_ext_item* item_m0 =
-                frameExtMeta[roiNr].map[PL_MD_EXT_TAG_PARTICLE_M0];
-            const uint32_t m0 = *((uint32_t*)item_m0->value);
-
-            // Extract M2 from extended metadata
-            const md_ext_item* item_m2 =
-                frameExtMeta[roiNr].map[PL_MD_EXT_TAG_PARTICLE_M2];
-            const uint32_t m2 = *((uint32_t*)item_m2->value);
-
-            ph_track_particle_event event;
-            event.roiNr = mdRoi.header->roiNr;
-            event.center = ph_track_particle_coord{(double)x, (double)y};
-            // Unsigned fixed-point real number in format Q22.0
-            event.m0 = FixedPointToReal<double, uint32_t>(22, 0, m0);
-            // Unsigned fixed-point real number in format Q3.19
-            event.m2 = FixedPointToReal<double, uint32_t>(3, 19, m2);
-
-            events.push_back(event);
-        }
-
-        // 3b. Link particles
-        const int32_t trackErr =
-            PH_TRACK->link_particles(m_trackContext,
-                    events.data(), (uint32_t)events.size(),
-                    m_trackParticles, &particlesCount);
-        if (trackErr != PH_TRACK_ERROR_NONE)
-        {
-            char msg[PH_TRACK_MAX_ERROR_LEN] = "Unknown error";
-            uint32_t size = PH_TRACK_MAX_ERROR_LEN;
-            PH_TRACK->get_last_error_message(msg, &size);
-            Log::LogE("Failed to link particles for frame nr. %u (%s)",
-                    frameNr, msg);
-            return false;
-        }
-    }
-
-    // 4. "Convert" particles to trajectories
-    m_trackLinker->AddParticles(m_trackParticles, particlesCount);
-
-    // 5. Store them in frame
-    frame.SetTrajectories(m_trackLinker->GetTrajectories());
-
-    // 6. Update trajectories in camera's circular buffer
-    size_t index;
-    if (m_camera->GetFrameIndex(frame, index))
-    {
-        auto camFrame = m_camera->GetFrameAt(index);
-        if (camFrame)
-        {
-            camFrame->SetTrajectories(m_trackLinker->GetTrajectories());
-        }
-    }
-    if (m_fpsLimiter)
-    {
-        // Pass frame copy to FPS limiter for later processing in GUI
-        m_fpsLimiter->InputNewFrame(frame.Clone());
-    }
 
     return true;
 }
@@ -940,39 +680,6 @@ void pm::Acquisition::DiskThreadLoop()
         DiskThreadLoop_Single();
 
     m_diskTime = m_diskTimer.Seconds();
-
-    if (m_trackEnabled && m_diskThreadAbortFlag)
-    {
-        // Moved unsaved frames to unused frames queue while invalidating
-        // trajectories in camera's circular buffer.
-        // No locking needed here.
-        while (!m_toBeSavedFrames.empty())
-        {
-            std::unique_ptr<Frame> frame = std::move(m_toBeSavedFrames.front());
-            m_toBeSavedFrames.pop();
-
-            size_t index;
-            if (m_camera->GetFrameIndex(*frame, index))
-            {
-                auto camFrame = m_camera->GetFrameAt(index);
-                if (camFrame)
-                {
-                    camFrame->SetTrajectories(Frame::Trajectories());
-
-                    if (m_toBeSavedFrames.empty() && m_fpsLimiter)
-                    {
-                        // Pass last frame to FPS limiter for later processing in GUI
-                        // Frame copy not needed, acquisition is already stopped
-                        m_fpsLimiter->InputNewFrame(camFrame);
-                    }
-                }
-            }
-
-            m_unusedFrames.push(std::move(frame));
-        }
-        m_toBeSavedFramesSize = 0;
-    }
-
     m_diskThreadDoneFlag = true;
 
     // Allow update thread to finish
@@ -1082,23 +789,12 @@ void pm::Acquisition::DiskThreadLoop_Single()
 
         bool keepGoing = true;
 
-        // If not tracking particles, frame is sent to GUI in acquisition thread
-        if (m_trackEnabled)
+        // Frame is sent to GUI in acquisition thread
+        if (m_acqThreadDoneFlag && m_fpsLimiter)
         {
-            if (!TrackNewFrame(*frame))
-            {
-                RequestAbort();
-                break;
-            }
-        }
-        else
-        {
-            if (m_acqThreadDoneFlag && m_fpsLimiter)
-            {
-                // Pass null frame to FPS limiter for later processing in GUI
-                // to let GUI know that disk thread is still working
-                m_fpsLimiter->InputNewFrame(nullptr);
-            }
+            // Pass null frame to FPS limiter for later processing in GUI
+            // to let GUI know that disk thread is still working
+            m_fpsLimiter->InputNewFrame(nullptr);
         }
         m_toBeSavedFramesValid++;
 
@@ -1253,23 +949,12 @@ void pm::Acquisition::DiskThreadLoop_Stack()
 
         bool keepGoing = true;
 
-        // If not tracking particles, frame is sent to GUI in acquisition thread
-        if (m_trackEnabled)
+        // Frame is sent to GUI in acquisition thread
+        if (m_acqThreadDoneFlag && m_fpsLimiter)
         {
-            if (!TrackNewFrame(*frame))
-            {
-                RequestAbort();
-                break;
-            }
-        }
-        else
-        {
-            if (m_acqThreadDoneFlag && m_fpsLimiter)
-            {
-                // Pass null frame to FPS limiter for later processing in GUI
-                // to let GUI know that disk thread is still working
-                m_fpsLimiter->InputNewFrame(nullptr);
-            }
+            // Pass null frame to FPS limiter for later processing in GUI
+            // to let GUI know that disk thread is still working
+            m_fpsLimiter->InputNewFrame(nullptr);
         }
         m_toBeSavedFramesValid++;
 

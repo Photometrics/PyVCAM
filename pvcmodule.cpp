@@ -989,7 +989,6 @@ static PyObject *StreamSaver_acquisition_frame(StreamSaver *self)
 
     if (!(self->helpPtr)->GetFrameData(&data, &frameBytes, &frameNum, &frameW, &frameH))
     {
-	    pm::Log::Flush();
 		PyErr_SetString(PyExc_RuntimeError, "Frame is empty/invalid!");
 		return NULL;
     }

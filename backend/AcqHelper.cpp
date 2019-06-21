@@ -26,7 +26,6 @@
 #include "PrdFileFormat.h"
 #include "RealCamera.h"
 #include "Settings.h"
-#include "TrackRuntimeLoader.h"
 #include "Utils.h"
 #include "AcqHelper.h"
 
@@ -292,18 +291,14 @@ bool Helper::GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16
     std::lock_guard<std::mutex> lock(m_frameMutex);
 
 	// Make sure frame is valid
-	if (!m_frame || !m_frame->IsValid()) {
-		std::cout << "Live frame is empty/invalid!" << std::endl << std::flush;
+	if (!m_frame || !m_frame->IsValid())
 		return false;
-	}
 
 	// Allocate mem and copy frame data
 	*frameBytes = (uns32)m_frame->GetAcqCfg().GetFrameBytes();
 	*data = (void*)new uint8_t[*frameBytes];
-	if (!*data) {
-		std::cout << "Failed to allocate live frame memory!" << std::endl << std::flush;
+	if (!*data)
 		return false;
-	}
 	memcpy(*data, m_frame->GetData(), *frameBytes);
 
 	// Get frame stats
