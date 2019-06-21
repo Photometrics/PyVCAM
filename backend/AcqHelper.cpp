@@ -126,6 +126,7 @@ void Helper::UninitAcquisition()
 	m_acquisition = nullptr;
 	m_fpslimiter = nullptr;
 	m_camera = nullptr;
+	m_frame = nullptr;
 	acq_ready = false;
 	acq_active = false;
 }
@@ -213,6 +214,10 @@ bool Helper::StartAcquisition()
 			"and ensure they are supported by this camera");
 		return false;
 	}
+
+	// Insert null frame to clear live cache
+	m_frame = nullptr;
+	m_fpslimiter->InputNewFrame(m_frame);
 
 	// Run acquisition
 	g_userAbortFlag = false;
