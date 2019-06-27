@@ -469,8 +469,11 @@ class Camera:
         """
         if self.__stream_mode is None:
             raise RuntimeError("There are no active acquisitions!")
-        self.__stream_saver.join_acquisition()
-        self.__stream_mode = None
+
+        try:
+            self.__stream_saver.join_acquisition()
+        finally:
+            self.__stream_mode = None
         return
 
     ### Getters/Setters below ###
