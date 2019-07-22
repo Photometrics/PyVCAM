@@ -295,8 +295,9 @@ class Camera:
         # Checking to see if all timings are valid (max val is uint16 max)
         for t in time_list:
             if t not in range(2**16):
-                raise ValueError("Invalid value: {} - {} only supports vtm times "
-                                    "between {} and {}".format(t, self, 0, 2**16))
+                raise ValueError(
+                    f"Invalid value: {t} - {self} only supports vtm times between {0} and {2**16}"
+                )
 
         x_start, x_end, y_start, y_end = self.__roi
 
@@ -496,9 +497,11 @@ class Camera:
         # integer where the first 8 bits are the major version, bits 9-12 are
         # the minor version, and bits 13-16 are the build number. Uses of masks
         # and bit shifts are required to extract the full version number.
-        return '{}.{}.{}'.format(dd_ver & 0xff00 >> 8,
-                                 dd_ver & 0x00f0 >> 4,
-                                 dd_ver & 0x000f)
+        return (
+            f"{dd_ver & 0xff00 >> 8}."
+            f"{dd_ver & 0x00f0 >> 4}."
+            f"{dd_ver & 0x000f}"
+        )
 
     @property
     def cam_fw(self):
@@ -519,8 +522,8 @@ class Camera:
         try:
             serial_no = self.get_param(const.PARAM_HEAD_SER_NUM_ALPHA)
             return serial_no
-        except:
-            return 'N/A'
+        except Exception:
+            return "N/A"
 
     @property
     def bit_depth(self):
@@ -543,8 +546,7 @@ class Camera:
         num_ports = self.get_param(const.PARAM_READOUT_PORT, const.ATTR_COUNT)
 
         if value >= num_ports:
-            raise ValueError('{} only supports '
-                             '{} readout ports.'.format(self, num_ports))
+            raise ValueError(f"{self} only supports {num_ports} readout ports.")
         self.set_param(const.PARAM_READOUT_PORT, value)
 
     @property
@@ -556,8 +558,7 @@ class Camera:
         num_entries = self.get_param(const.PARAM_SPDTAB_INDEX,
                                      const.ATTR_COUNT)
         if value >= num_entries:
-            raise ValueError('{} only supports '
-                             '{} speed entries'.format(self, num_entries))
+            raise ValueError(f"{self} only supports {num_entries} speed entries.")
         self.set_param(const.PARAM_SPDTAB_INDEX, value)
 
     @property
@@ -599,9 +600,9 @@ class Camera:
         pp_table = {}
 
         if not self.check_param(const.PARAM_PP_INDEX):
-            raise AttributeError("{} does not have any post-processing features "
-                                 "available.".format(self))
-            return
+            raise AttributeError(
+                f"{self} does not have any post-processing features available."
+            )
 
 
         orig = (self.get_param(const.PARAM_PP_INDEX),
@@ -620,11 +621,11 @@ class Camera:
                 self.set_param(const.PARAM_PP_PARAM_INDEX, j)
                 aName = self.get_param(const.PARAM_PP_PARAM_NAME)
 
-                min = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
-                max = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
+                min_ = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
+                max_ = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
                 val = self.get_param(const.PARAM_PP_PARAM)
 
-                pp_table[pName][aName] = (val, min, max)
+                pp_table[pName][aName] = (val, min_, max_)
 
         self.set_param(const.PARAM_PP_INDEX, orig[0])
         self.set_param(const.PARAM_PP_PARAM_INDEX, orig[1])
@@ -709,8 +710,10 @@ class Camera:
     @gain.setter
     def gain(self, value):
         if value > self.max_gain or value < 1:
-            raise ValueError("Invalid value: {} - {} only supports gain "
-                             "indicies from 1 - {}.".format(value, self, self.max_gain))
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports gain "
+                f"indicies from 1 - {self.max_gain}."
+            )
         self.set_param(const.PARAM_GAIN_INDEX, value)
 
     @property
@@ -728,8 +731,9 @@ class Camera:
             self.calculate_reshape()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def bin_x(self):
@@ -743,8 +747,9 @@ class Camera:
             self.calculate_reshape()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def bin_y(self):
@@ -758,8 +763,9 @@ class Camera:
             self.calculate_reshape()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def roi(self):
@@ -781,9 +787,9 @@ class Camera:
                 return
 
             else:
-                raise ValueError('Invalid ROI paramaters for {}'.format(self))
+                raise ValueError(f"Invalid ROI paramaters for {self}")
 
-        raise ValueError('{} ROI expects a tuple of 4 integers'.format(self))
+        raise ValueError(f"{self} ROI expects a tuple of 4 integers")
 
     @property
     def shape(self):
@@ -806,9 +812,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_resolutions:
                 keys = [key for key in const.exp_resolutions]
-                raise ValueError("Invalid mode: {0} - {1} only supports "
-                                 "resolutions from the following list: {2}".format(
-                                                            value, self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports "
+                    f"resolutions from the following list: {keys}"
+                )
             self.set_param(const.PARAM_EXP_RES, const.exp_resolutions[value])
 
         # Handle the case where resolution is passed in by value. Check if
@@ -819,9 +826,10 @@ class Camera:
         else:
             if value not in const.exp_resolutions.values():
                 vals = const.exp_resolutions.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports "
-                                 "resolutions from {2} - {3}".format(value, self,
-                                                            min(vals), max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports "
+                    f"resolutions from {min(vals)} - {max(vals)}"
+                )
             self.set_param(const.PARAM_EXP_RES, value)
 
     @property
@@ -839,10 +847,10 @@ class Camera:
         max_exp_time = self.get_param(const.PARAM_EXPOSURE_TIME, const.ATTR_MAX)
 
         if not value in range(min_exp_time, max_exp_time + 1):
-            raise ValueError("Invalid value: {} - {} only supports exposure "
-                             "times between {} and {}".format(value, self,
-                                                              min_exp_time,
-                                                              max_exp_time))
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports exposure "
+                f"times between {min_exp_time} and {max_exp_time}"
+            )
         self.__exp_time = value
 
     @property
@@ -858,9 +866,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_modes:
                 keys = [key for key in const.exp_modes]
-                raise ValueError("Invalid mode: {} - {} only supports exposure "
-                                 "modes from the following list: {}".format(value,
-                                                                        self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports exposure "
+                    f"modes from the following list: {keys}"
+                )
 
             self.__exp_mode = const.exp_modes[value]
             self.update_mode()
@@ -873,10 +882,10 @@ class Camera:
         else:
             if value not in const.exp_modes.values():
                 vals = const.exp_modes.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports"
-                                 "exposure modes from {2} - {3}".format(value,
-                                                                    self, min(vals),
-                                                                    max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports"
+                    f"exposure modes from {min(vals)} - {max(vals)}"
+                )
 
             self.__exp_mode = value
             self.update_mode()
@@ -894,9 +903,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_out_modes:
                 keys = [key for key in const.exp_out_modes]
-                raise ValueError("Invalid mode: {0} - {1} only supports exposure "
-                                 "out modes from the following list: {2}".format(
-                                 value, self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports exposure "
+                    f"out modes from the following list: {keys}"
+                )
 
             self.__exp_out_mode = const.exp_out_modes[value]
             self.update_mode()
@@ -908,9 +918,10 @@ class Camera:
         else:
             if value not in const.exp_out_modes.values():
                 vals = const.exp_out_modes.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports "
-                                 "exposure out modes from {2} - {3}".format(value,
-                                 self, min(vals), max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports "
+                    f"exposure out modes from {min(vals)} - {max(vals)}"
+                )
 
             self.__exp_out_mode = value
             self.update_mode()
@@ -922,8 +933,10 @@ class Camera:
     @vtm_exp_time.setter
     def vtm_exp_time(self, value):
         if not value in range(2**16):
-            raise ValueError("Invalid value: {} - {} only supports exposure "
-                             "times between {} and {}".format(value, self, 0, 2**16))
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports exposure "
+                f"times between 0 and {2**16}"
+            )
         self.set_param(const.PARAM_EXP_TIME, value)
 
     @property
@@ -951,11 +964,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.clear_modes:
                 keys = [key for key in const.clear_modes]
-                raise ValueError("Invalid mode: {0} - {1} "
-                                 "only supports clear modes "
-                                 "from the following list: {2}".format(value,
-                                                                       self,
-                                                                       keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports clear modes "
+                    f"from the following list: {keys}"
+                )
             self.set_param(const.PARAM_CLEAR_MODE, const.clear_modes[value])
         # Handle the case where clear mode is passed in by value. Check if
         # the value passed in is a valid value inside the clear_modes
@@ -965,12 +977,10 @@ class Camera:
         else:
             if value not in const.clear_modes.values():
                 vals = const.clear_modes.values()
-                raise ValueError("Invalid mode value: {0} "
-                                 "- {1} only supports clear "
-                                 "modes from the {2} - {3}".format(value,
-                                                                   self,
-                                                                   min(vals),
-                                                                   max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports clear "
+                    f"modes from the {min(vals)} - {max(vals)}"
+                )
             self.set_param(const.PARAM_CLEAR_MODE, value)
 
     @property
@@ -994,8 +1004,9 @@ class Camera:
         except RuntimeError:
             min_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MIN)
             max_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MAX)
-            raise ValueError("Invalid temp {} : Valid temps are in the range {} "
-                             "- {}.".format(value, min_temp, max_temp))
+            raise ValueError(
+                f"Invalid temp {value} : Valid temps are in the range {min_temp} - {max_temp}."
+            )
 
     @property
     def readout_time(self):
