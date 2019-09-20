@@ -49,8 +49,12 @@ def by_hand_writer():
                '"Ext Trig Trig First": EXT_TRIG_TRIG_FIRST, "Ext Trig Edge Rising": EXT_TRIG_EDGE_RISING}',
                'exp_mode_name = {key: val for key, val in exp_modes.items()}',
                'exp_out_modes = {"First Row": 0, "All Rows": 1, "Any Rows": 2, "Max": 3}',
-               'exp_out_mode_name = {val: key for key, val in exp_out_modes.items()}']
-
+               'exp_out_mode_name = {val: key for key, val in exp_out_modes.items()}',
+               'centroids_modes = {"Locate": PL_CENTROIDS_MODE_LOCATE, "Track": PL_CENTROIDS_MODE_TRACK, "Blob": PL_CENTROIDS_MODE_BLOB}',
+               'centroids_modes_name = {key: val for key, val in centroids_modes.items()}',
+               'prog_scan_modes = {"Auto": PL_SCAN_MODE_AUTO, "Line Delay": PL_SCAN_MODE_PROGRAMMABLE_LINE_DELAY,' +
+               '"Scan Width": PL_SCAN_MODE_PROGRAMMABLE_SCAN_WIDTH}',
+               'prog_scan_modes_name = {key: val for key, val in prog_scan_modes.items()}']
 
     comment = "### ADDED BY HAND. LAST UPDATED: {} ###\n".format(date.today())
     return comment + "\n".join(include) + "\n"
