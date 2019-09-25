@@ -893,3 +893,97 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         return self.get_param(const.PARAM_POST_TRIGGER_DELAY)
+		
+    @property
+    def centroids_mode(self):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        # Find the current int32 value corresponding to the centroids mode
+        # of the camera, then reverse the key value pairs of the centroids_modes
+        # dictionary inside constants.py since it maps the string name of
+        # the centroids mode to its PVCAM value. This will allow for "reverse"
+        # lookup, meaning that it will return the string name given its
+        # integer value.
+        return self.get_param(const.PARAM_CENTROIDS_MODE)
+        # curr_mode_val = self.get_param(const.PARAM_CENTROIDS_MODE)
+        # return {v: k for k, v in const.centroids_modes.items()}[curr_mode_val]
+
+    @centroids_mode.setter
+    def centroids_mode(self, value):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        # Handle the case where centroids mode is passed in by name. Simply check
+        # if it is a key in the centroids_modes dictionary in constants.py, and if
+        # it is, call set_param with its associated value. Otherwise, raise
+        # a ValueError informing the user which settings are valid.
+        if isinstance(value, str):
+            if value not in const.centroids_modes:
+                keys = [key for key in const.centroids_modes]
+                raise ValueError("Invalid mode: {0} - {1} "
+                                 "only supports centroids modes "
+                                 "from the following list: {2}".format(value,
+                                                                       self,
+                                                                       keys))
+            self.set_param(const.PARAM_CENTROIDS_MODE, const.centroids_modes[value])
+        # Handle the case where centroids mode is passed in by value. Check if
+        # the value passed in is a valid value inside the centroids_modes
+        # dictionary in constants.py. If it is, call set_param with the
+        # value. Otherwise, raise a ValueError informing which values
+        # can be used.
+        else:
+            if value not in const.centroids_modes.values():
+                vals = const.centroids_modes.values()
+                raise ValueError("Invalid mode value: {0} "
+                                 "- {1} only supports centroids "
+                                 "modes from the {2} - {3}".format(value,
+                                                                   self,
+                                                                   min(vals),
+                                                                   max(vals)))
+            self.set_param(const.PARAM_CENTROIDS_MODE, value)
+			
+    @property
+    def prog_scan_mode(self):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        # Find the current int32 value corresponding to the PSM
+        # of the camera, then reverse the key value pairs of the prog_scan_modes
+        # dictionary inside constants.py since it maps the string name of
+        # the PSM to its PVCAM value. This will allow for "reverse"
+        # lookup, meaning that it will return the string name given its
+        # integer value.
+        return self.get_param(const.PARAM_SCAN_MODE)
+        # curr_mode_val = self.get_param(const.PARAM_SCAN_MODE)
+        # return {v: k for k, v in const.prog_scan_modes.items()}[curr_mode_val]
+
+    @prog_scan_mode.setter
+    def prog_scan_mode(self, value):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        # Handle the case where PSM is passed in by name. Simply check
+        # if it is a key in the prog_scan_modes dictionary in constants.py, and if
+        # it is, call set_param with its associated value. Otherwise, raise
+        # a ValueError informing the user which settings are valid.
+        if isinstance(value, str):
+            if value not in const.prog_scan_modes:
+                keys = [key for key in const.prog_scan_modes]
+                raise ValueError("Invalid mode: {0} - {1} "
+                                 "only supports programmable scan modes "
+                                 "from the following list: {2}".format(value,
+                                                                       self,
+                                                                       keys))
+            self.set_param(const.PARAM_SCAN_MODE, const.prog_scan_modes[value])
+        # Handle the case where PSM is passed in by value. Check if
+        # the value passed in is a valid value inside the prog_scan_modes
+        # dictionary in constants.py. If it is, call set_param with the
+        # value. Otherwise, raise a ValueError informing which values
+        # can be used.
+        else:
+            if value not in const.prog_scan_modes.values():
+                vals = const.prog_scan_modes.values()
+                raise ValueError("Invalid mode value: {0} "
+                                 "- {1} only supports programmable scan modes "
+                                 "from the {2} - {3}".format(value,
+                                                                   self,
+                                                                   min(vals),
+                                                                   max(vals)))
+            self.set_param(const.PARAM_SCAN_MODE, value)
