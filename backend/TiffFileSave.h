@@ -9,9 +9,7 @@
 struct md_frame;
 typedef struct md_frame md_frame;
 
-// Forward declaration for TIFF that satisfies compiler (taken from tiffio.h)
-struct tiff;
-typedef struct tiff TIFF;
+struct TinyTIFFFile;
 
 namespace pm {
 
@@ -42,10 +40,11 @@ public:
             const void* prdMeta, const md_frame* pvcamMeta);
 
 private:
-    TIFF* m_file;
+    TinyTIFFFile* m_file;
     md_frame* m_frameMeta;
     void* m_frameRecomposed;
     const size_t m_frameRecomposedBytes;
+    std::string m_tiffDesc;
 };
 
 } // namespace pm

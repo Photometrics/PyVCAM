@@ -6,10 +6,8 @@
 #include <map>
 #include <sstream>
 
-/* libtiff */
-extern "C" {
-#include "tiffio.h"
-}
+/* tinyTiff */
+#include "tinytiffwriter.h"
 
 /* PVCAM */
 #include <master.h>
@@ -50,7 +48,8 @@ bool pm::TiffFileSave::Open()
     }
 #endif
 
-    m_file = TIFFOpen(m_fileName.c_str(), "w");
+    // Open TIFF file with proper size and bit depth
+    m_file = TinyTIFFWriter_open(m_fileName.c_str(), 16, (uint32_t)m_width, (uint32_t)m_height);
     if (!m_file)
         return false;
 
@@ -79,8 +78,8 @@ void pm::TiffFileSave::Close()
         //m_file.seekp(0, std::ios_base::end);
     }
 
-    TIFFFlush(m_file);
-    TIFFClose(m_file);
+    // Close TIFF file, writing metadata before closing
+    TinyTIFFWriter_close(m_file);
     m_file = nullptr;
 
     FileSave::Close();
@@ -91,23 +90,6 @@ bool pm::TiffFileSave::WriteFrame(const void* metaData,
 {
     if (!FileSave::WriteFrame(metaData, extDynMetaData, rawData))
         return false;
-
-    TIFFSetField(m_file, TIFFTAG_IMAGEWIDTH, m_width);
-    TIFFSetField(m_file, TIFFTAG_IMAGELENGTH, m_height);
-    TIFFSetField(m_file, TIFFTAG_BITSPERSAMPLE, 16);
-    TIFFSetField(m_file, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
-    TIFFSetField(m_file, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-    TIFFSetField(m_file, TIFFTAG_SAMPLESPERPIXEL, 1);
-    TIFFSetField(m_file, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
-    TIFFSetField(m_file, TIFFTAG_MAXSAMPLEVALUE, (1 << m_header.bitDepth) - 1);
-
-    if (m_header.frameCount > 1)
-    {
-        // We are writing single page of the multipage file
-        TIFFSetField(m_file, TIFFTAG_SUBFILETYPE, FILETYPE_PAGE);
-        // Set the page number
-        TIFFSetField(m_file, TIFFTAG_PAGENUMBER, m_frameIndex, m_header.frameCount);
-    }
 
     // Recompose the black-filled frame with metadata if any
     void* tiffData;
@@ -156,22 +138,10 @@ bool pm::TiffFileSave::WriteFrame(const void* metaData,
     }
 
     // Build up the metadata description
-    const std::string imageDesc = GetImageDesc(m_header, metaData, m_frameMeta);
-    // Put the PVCAM metadata into the image description
-    TIFFSetField(m_file, TIFFTAG_IMAGEDESCRIPTION, imageDesc.c_str());
+    m_tiffDesc = GetImageDesc(m_header, metaData, m_frameMeta);
 
     // Skip the metadata at the beginning of the file
-    if ((size_t)TIFFWriteRawStrip(m_file, 0, tiffData, tiffDataBytes) == tiffDataBytes)
-    {
-        if (m_header.frameCount > 1)
-        {
-            TIFFWriteDirectory(m_file);
-        }
-    }
-    else
-    {
-        return false;
-    }
+    TinyTIFFWriter_writeImage(m_file, tiffData);
 
     m_frameIndex++;
     return true;
