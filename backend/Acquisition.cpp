@@ -13,7 +13,6 @@
 #include "Camera.h"
 #include "FakeCamera.h"
 #include "Log.h"
-#include "PrdFileSave.h"
 #include "PrdFileUtils.h"
 #include "TiffFileSave.h"
 #include "Utils.h"
@@ -694,9 +693,6 @@ void pm::Acquisition::DiskThreadLoop()
         ss << m_toBeProcessedFramesValid << " queued frames processed and ";
         switch (storageType)
         {
-        case StorageType::Prd:
-            ss << m_toBeSavedFramesSaved << " of them saved to PRD file(s)";
-            break;
         case StorageType::Tiff:
             ss << m_toBeSavedFramesSaved << " of them saved to TIFF file(s)";
             break;
@@ -815,10 +811,6 @@ void pm::Acquisition::DiskThreadLoop_Single()
 
             switch (storageType)
             {
-            case StorageType::Prd:
-                fileName += ".prd";
-                file = new(std::nothrow) PrdFileSave(fileName, prdHeader);
-                break;
             case StorageType::Tiff:
                 fileName += ".tiff";
                 file = new(std::nothrow) TiffFileSave(fileName, prdHeader);
@@ -1036,10 +1028,6 @@ void pm::Acquisition::DiskThreadLoop_Stack()
                 // Add proper file extension and create its instance
                 switch (storageType)
                 {
-                case StorageType::Prd:
-                    fileName += ".prd";
-                    file = new(std::nothrow) PrdFileSave(fileName, prdHeader);
-                    break;
                 case StorageType::Tiff:
                     fileName += ".tiff";
                     file = new(std::nothrow) TiffFileSave(fileName, prdHeader);

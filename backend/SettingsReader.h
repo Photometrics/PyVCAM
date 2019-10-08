@@ -52,7 +52,6 @@ enum class AcqMode : int32_t
 enum class StorageType : int32_t
 {
     None,
-    Prd,
     Tiff,
 };
 
