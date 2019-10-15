@@ -901,7 +901,7 @@ static PyObject *StreamSaver_setup_acquisition(StreamSaver *self, PyObject *args
 	(self->helpPtr)->SetSaveDir(path);
 	(self->helpPtr)->SetAcqMode(pm::AcqMode::SnapCircBuffer);
 	(self->helpPtr)->SetStorageType(pm::StorageType::Tiff);
-	(self->helpPtr)->SetMaxStackSize(2147483647); // (~2.15 GB)
+	(self->helpPtr)->SetMaxStackSize(2000000000); // (2 GB)
 
 	Py_RETURN_NONE;
 }
