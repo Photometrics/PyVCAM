@@ -48,6 +48,8 @@ class Camera:
         self.__binning = (1, 1)
         self.__roi = None
         self.__shape = None
+        self.__frame_time = None
+        self.__fps = None
 
         # StreamSaving object
         self.__stream_saver = None
@@ -97,7 +99,8 @@ class Camera:
             self.set_param(const.PARAM_PMODE, const.PMODE_NORMAL)
 
         # Set ROI to full frame
-        self.roi = (0, self.sensor_size[0], 0, self.sensor_size[1])
+        self.__roi = (0, self.sensor_size[0], 0, self.sensor_size[1])
+        self.calculate_reshape()
 
         # Setup correct mode
         self.__exp_mode = self.get_param(const.PARAM_EXPOSURE_MODE)
@@ -107,6 +110,7 @@ class Camera:
             self.__exp_out_mode = 0
 
         self.__mode = self.__exp_mode | self.__exp_out_mode
+
 
     def close(self):
         """Closes the camera.
@@ -215,6 +219,19 @@ class Camera:
         height = self.__roi[3] - self.__roi[2]
         self.__shape = (int(width/ self.bin_x), int(height/self.bin_y))
 
+    def update_frame_time(self):
+        """
+        Takes a test frame with the current camera settings. Updates the approximate
+        time in seconds for the camera to snap the frame and the corresponding FPS.
+        """
+        _ = self.get_frame()
+        trig = self.trigger_table_sec
+        pre_max = max(trig["Exposure Time"], trig["Readout Time"], trig["Pre-trigger Delay"])
+        post_max = trig["Post-trigger Delay"]
+
+        self.__frame_time = pre_max + post_max
+        self.__fps = 1 / self.__frame_time
+
     def update_mode(self):
         """Updates the mode of the camera, which is the bit-wise or between
            exposure mode and expose out mode. It then sets up a small sequence
@@ -232,6 +249,7 @@ class Camera:
         """
         self.__mode = self.__exp_mode | self.__exp_out_mode
         pvc.set_exp_modes(self.__handle, self.__mode)
+        self.update_frame_time()
 
     def get_frame(self, exp_time=None):
         """Calls the pvc.get_frame function with the current camera settings.
@@ -729,6 +747,7 @@ class Camera:
         elif value in self.read_enum(const.PARAM_BINNING_SER).values():
             self.__binning = (value, value)
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
         raise ValueError(
@@ -745,6 +764,7 @@ class Camera:
         if value in self.read_enum(const.PARAM_BINNING_SER).values():
             self.__binning = (value, self.__binning[1])
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
         raise ValueError(
@@ -761,6 +781,7 @@ class Camera:
         if value in self.read_enum(const.PARAM_BINNING_PAR).values():
             self.__binning = (self.__binning[0], value)
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
         raise ValueError(
@@ -784,12 +805,25 @@ class Camera:
                 value[3] in range(0, self.sensor_size[1] + 1)):
                 self.__roi = value
                 self.calculate_reshape()
+                self.update_frame_time()
                 return
 
             else:
                 raise ValueError(f"Invalid ROI paramaters for {self}")
 
         raise ValueError(f"{self} ROI expects a tuple of 4 integers")
+
+    @property
+    def frame_time(self):
+        if self.__frame_time is None:
+            self.update_frame_time()
+        return self.__frame_time
+
+    @property
+    def fps(self):
+        if self.__fps is None:
+            self.update_frame_time()
+        return self.__fps
 
     @property
     def shape(self):
@@ -852,6 +886,7 @@ class Camera:
                 f"times between {min_exp_time} and {max_exp_time}"
             )
         self.__exp_time = value
+        self.update_frame_time()
 
     @property
     def exp_mode(self):
