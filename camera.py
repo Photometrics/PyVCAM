@@ -378,7 +378,8 @@ class Camera:
         Most efficient acquisition method. Runs a capture sequence using the
         pvc StreamSaver class (adapted from pvcam StreamSaving example).
         The class runs an acquisition thread and saving thread simultaneously.
-        Args:
+        Parameters
+    ----------
             num_frames (int): Number of frames to capture
             outdir (str): Path to the directory to save the images
         """
@@ -471,7 +472,8 @@ class Camera:
         Causes the acquisition to cleanly exit as soon as
         possible.
 
-        Args:
+        Parameters
+    ----------
             force (bool) : If True, abort without waiting for cached
                 frames to be processed. Otherwise, allow cached frames
                 to process before exiting.
