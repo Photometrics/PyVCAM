@@ -379,7 +379,7 @@ class Camera:
         pvc StreamSaver class (adapted from pvcam StreamSaving example).
         The class runs an acquisition thread and saving thread simultaneously.
         Parameters
-    ----------
+        ----------
             num_frames (int): Number of frames to capture
             outdir (str): Path to the directory to save the images
         """
@@ -473,7 +473,7 @@ class Camera:
         possible.
 
         Parameters
-    ----------
+        ----------
             force (bool) : If True, abort without waiting for cached
                 frames to be processed. Otherwise, allow cached frames
                 to process before exiting.
@@ -672,7 +672,7 @@ class Camera:
             clear = str(self.clear_time) + ' ns'
             pre = str(self.pre_trigger_delay) + ' ns'
             post = str(self.post_trigger_delay) + ' ns'
-        except:
+        except Exception:
             clear = 'N/A'
             pre = 'N/A'
             post = 'N/A'
@@ -702,7 +702,7 @@ class Camera:
             clear = self.clear_time / 1000000000
             pre = self.pre_trigger_delay / 1000000000
             post = self.post_trigger_delay / 1000000000
-        except:
+        except Exception:
             clear = -1
             pre = -1
             post = -1
