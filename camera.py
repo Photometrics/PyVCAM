@@ -478,10 +478,8 @@ class Camera:
                 frames to be processed. Otherwise, allow cached frames
                 to process before exiting.
         """
-        if self.__stream_mode is None:
-            raise RuntimeError("There are no active acquisitions!")
-        self.__stream_saver.abort_acquisition(force)
-        return
+        if self.__stream_mode is not None:
+            self.__stream_saver.abort_acquisition(force)
 
     def join_acquisition(self):
         """
