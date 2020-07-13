@@ -10,8 +10,8 @@ import os
 import time
 import numpy as np
 
-from sgctrl.pyvcam import pvc
-from sgctrl.pyvcam import constants as const
+from pyvcam import pvc
+from pyvcam import constants as const
 
 class Camera:
     """Models a class currently connected to the system.
