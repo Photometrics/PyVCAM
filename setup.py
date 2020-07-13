@@ -8,7 +8,7 @@ from setuptools.extension import Extension
 
 
 NAME = "pyvcam"
-VERSION = "1.1"
+VERSION = "1.2.0"
 DESCRIPTION = "Python wrapper for PVCAM functionality."
 URL = "https://github.com/spatial-genomics/PyVCAM"
 PACKAGES = find_packages()
