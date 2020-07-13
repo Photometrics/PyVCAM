@@ -1,9 +1,17 @@
-from pyvcam import pvc
-from pyvcam import constants as const
+# -*- coding: utf-8 -*-
+"""
+Modified version of the pyvcam camera module.
+Various improvements have been made to the wrapper,
+particularly the acquisition methods.
 
+@author: jthom
+"""
+import os
 import time
 import numpy as np
 
+from sgctrl.pyvcam import pvc
+from sgctrl.pyvcam import constants as const
 
 class Camera:
     """Models a class currently connected to the system.
@@ -40,6 +48,12 @@ class Camera:
         self.__binning = (1, 1)
         self.__roi = None
         self.__shape = None
+        self.__frame_time = None
+        self.__fps = None
+
+        # StreamSaving object
+        self.__stream_saver = None
+        self.__stream_mode = None
 
     def __repr__(self):
         return self.name
@@ -51,12 +65,10 @@ class Camera:
         Returns:
             A Camera object.
         """
-        cam_count = 0
         total = pvc.get_cam_total()
-        while cam_count < total:
+        for cam_idx in range(total):
             try:
-                yield Camera(pvc.get_cam_name(cam_count))
-                cam_count += 1
+                yield Camera(pvc.get_cam_name(cam_idx))
             except RuntimeError:
                 raise RuntimeError('Failed to create a detected camera.')
 
@@ -87,7 +99,8 @@ class Camera:
             self.set_param(const.PARAM_PMODE, const.PMODE_NORMAL)
 
         # Set ROI to full frame
-        self.roi = (0, self.sensor_size[0], 0, self.sensor_size[1])
+        self.__roi = (0, self.sensor_size[0], 0, self.sensor_size[1])
+        self.calculate_reshape()
 
         # Setup correct mode
         self.__exp_mode = self.get_param(const.PARAM_EXPOSURE_MODE)
@@ -97,6 +110,7 @@ class Camera:
             self.__exp_out_mode = 0
 
         self.__mode = self.__exp_mode | self.__exp_out_mode
+
 
     def close(self):
         """Closes the camera.
@@ -112,6 +126,7 @@ class Camera:
             pvc.close_camera(self.__handle)
             self.__handle = -1
             self.__is_open = False
+            self.__stream_saver = None
         except:
             raise RuntimeError('Failed to close camera.')
 
@@ -200,8 +215,22 @@ class Camera:
         Returns:
             None
         """
-        area = (self.__roi[1] - self.__roi[0], self.__roi[3] - self.__roi[2])
-        self.__shape = (int(area[0]/ self.bin_x), int(area[1]/self.bin_y))
+        width = self.__roi[1] - self.__roi[0]
+        height = self.__roi[3] - self.__roi[2]
+        self.__shape = (int(width/ self.bin_x), int(height/self.bin_y))
+
+    def update_frame_time(self):
+        """
+        Takes a test frame with the current camera settings. Updates the approximate
+        time in seconds for the camera to snap the frame and the corresponding FPS.
+        """
+        _ = self.get_frame()
+        trig = self.trigger_table_sec
+        pre_max = max(trig["Exposure Time"], trig["Readout Time"], trig["Pre-trigger Delay"])
+        post_max = trig["Post-trigger Delay"]
+
+        self.__frame_time = pre_max + post_max
+        self.__fps = 1 / self.__frame_time
 
     def update_mode(self):
         """Updates the mode of the camera, which is the bit-wise or between
@@ -220,6 +249,7 @@ class Camera:
         """
         self.__mode = self.__exp_mode | self.__exp_out_mode
         pvc.set_exp_modes(self.__handle, self.__mode)
+        self.update_frame_time()
 
     def get_frame(self, exp_time=None):
         """Calls the pvc.get_frame function with the current camera settings.
@@ -241,9 +271,11 @@ class Camera:
                                     self.__mode).reshape(self.__shape[1], self.__shape[0])
         return np.copy(tmpFrame)
 
-    def get_sequence(self, num_frames, exp_time=None, interval=None):
-        """Calls the pvc.get_frame function with the current camera settings in
-            rapid-succession for the specified number of frames
+    def get_sequence(self, num_frames, exp_time=None):
+        """
+        Calls pvc.get_sequence function which captures the sequence and stores
+        in a frame buffer in memory. Frame buffer is then wrapped in a numpy
+        array, reshaped, and returned.
 
         Parameter:
             num_frames (int): Number of frames to capture in the sequence
@@ -257,16 +289,12 @@ class Camera:
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
 
-        stack = np.empty((num_frames, self.__shape[1], self.__shape[0]), dtype=np.uint16)
+        buffer_array = pvc.get_sequence( self.__handle, num_frames,
+                                         x_start, x_end - 1, self.bin_x,
+                                         y_start, y_end - 1, self.bin_y,
+                                         exp_time, self.__mode )
 
-        for i in range(num_frames):
-            stack[i] = pvc.get_frame(self.__handle, x_start, x_end - 1, self.bin_x,
-                                    y_start, y_end - 1, self.bin_y, exp_time,
-                                    self.__mode).reshape(self.__shape[1],
-                                    self.__shape[0])
-
-            if isinstance(interval, int):
-                time.sleep(interval/1000)
+        stack = np.reshape(buffer_array, (num_frames, self.__shape[1], self.__shape[0]))
 
         return stack
 
@@ -285,8 +313,9 @@ class Camera:
         # Checking to see if all timings are valid (max val is uint16 max)
         for t in time_list:
             if t not in range(2**16):
-                raise ValueError("Invalid value: {} - {} only supports vtm times "
-                                    "between {} and {}".format(t, self, 0, 2**16))
+                raise ValueError(
+                    f"Invalid value: {t} - {self} only supports vtm times between {0} and {2**16}"
+                )
 
         x_start, x_end, y_start, y_end = self.__roi
 
@@ -313,74 +342,158 @@ class Camera:
         self.exp_res = old_res
         return stack
 
-    def start_live(self, exp_time=None):
-        """Calls the pvc.start_live function to setup a circular buffer acquisition.
-
-        Parameter:
-            exp_time (int): The exposure time (optional).
-        Returns:
-            None
+    def start_live(self):
         """
-        x_start, x_end, y_start, y_end = self.__roi
-
-        if not isinstance(exp_time, int):
-            exp_time = self.exp_time
-
-        self.__exposure_bytes = pvc.start_live(self.__handle, x_start, x_end - 1,
-                                               self.bin_x, y_start, y_end - 1,
-                                               self.bin_x, exp_time, self.__mode)
+        Start a live acquisition if there are not currently any
+        active acquisitions. Do nothing otherwise.
+        """
+        if not self.check_acquisition():
+            self.start_live_acquisition()
 
     def stop_live(self):
-        """Calls the pvc.stop_live function that ends the acquisition.
-
-        Parameter:
-            None
-        Returns:
-            None
         """
-        return pvc.stop_live(self.__handle)
+        Stop the current acquisition if it is a live acquisition.
+        Do nothing if it is a normal acquisition.
+        """
+        if self.__stream_mode != "live":
+            return
+
+        try:
+            self.abort_acquisition(force=True)
+            self.join_acquisition()
+        except RuntimeError:
+            pass
 
     def get_live_frame(self):
-        """Calls the pvc.get_live_frame function with the current camera settings.
-
-        Parameter:
-            None
-        Returns:
-            A 2D np.array containing the pixel data from the captured frame.
         """
-        return pvc.get_live_frame(self.__handle, self.__exposure_bytes).reshape(
-                                                 self.__shape[1], self.__shape[0])
+        Gets last frame from current acquisition, and the current acquisition FPS.
+        Returns as (numpy_frame, fps)
+        """
+        frame = self.get_acquisition_frame()
+        fps = self.get_acquisition_stats()["acqFps"]
+        return frame, fps
 
-    def start_live_cb(self, exp_time=None):
-        """Calls the pvc.start_live_cb function to setup a circular buffer acquisition with callbacks.
+    def start_acquisition(self, num_frames, outdir):
+        """
+        Most efficient acquisition method. Runs a capture sequence using the
+        pvc StreamSaver class (adapted from pvcam StreamSaving example).
+        The class runs an acquisition thread and saving thread simultaneously.
+        Parameters
+        ----------
+            num_frames (int): Number of frames to capture
+            outdir (str): Path to the directory to save the images
+        """
+        # Check inputs
+        if not os.path.isdir(outdir):
+            os.mkdir(outdir)
+        x_start, x_end, y_start, y_end = self.__roi
 
-        Parameter:
-            exp_time (int): The exposure time (optional).
-        Returns:
-            None
+        # Setup acquisition
+        if self.__stream_saver is None:
+            self.__stream_saver = pvc.StreamSaver()
+            # pvc gets reinitialized when camera is attached
+            pvc.uninit_pvcam()
+            self.__stream_saver.attach_camera(self.name)
+        elif self.__stream_mode == "live":
+            self.stop_live()
+        elif self.__stream_mode is not None:
+            raise RuntimeError("There is already an active acquisition!")
+
+        self.__stream_saver.setup_acquisition(num_frames, self.exp_time, 0,
+                                            x_start, x_end - 1, self.bin_x,
+                                            y_start, y_end - 1, self.bin_y, outdir,)
+
+        # Run acquisition
+        self.__stream_saver.start_acquisition()
+        self.__stream_mode = "acquisition"
+        return
+
+    def start_live_acquisition(self):
+        """
+        Starts an unbounded capture sequence with a circular buffer using the
+        pvc StreamSaver class (adapted from pvcam StreamSaving example).
         """
         x_start, x_end, y_start, y_end = self.__roi
 
-        if not isinstance(exp_time, int):
-            exp_time = self.exp_time
+        # Setup acquisition
+        if self.__stream_saver is None:
+            self.__stream_saver = pvc.StreamSaver()
+            # pvc gets reinitialized when camera is attached
+            pvc.uninit_pvcam()
+            self.__stream_saver.attach_camera(self.name)
 
-        self.__exposure_bytes = pvc.start_live_cb(self.__handle, x_start, x_end - 1,
-                                                  self.bin_x, y_start, y_end - 1,
-                                                  self.bin_x, exp_time, self.__mode)
-        return self.__exposure_bytes
+        self.__stream_saver.setup_live(self.exp_time, 0,
+                                        x_start, x_end - 1, self.bin_x,
+                                        y_start, y_end - 1, self.bin_y, )
 
-    def get_live_frame_cb(self):
-        """Calls the pvc.get_live_frame_cb function.
+        # Run acquisition
+        self.__stream_saver.start_acquisition()
+        self.__stream_mode = "live"
 
-        Parameter:
-            None
-        Returns:
-            A 2D np.array containing the pixel data from the captured frame.
+    def get_acquisition_frame(self):
         """
-        frame, fps = pvc.get_live_frame_cb(self.__handle, self.__exposure_bytes)
+        Get the last frame from the current acquisition. Achieves this
+        by signalling the StreamSaver to cache a frame, and then attempting
+        to pull a cached frame. Raises a RuntimeError if the frame is unavailable
+        or there is not an active acquisition.
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+        # Signal stream saver to cache frame
+        self.__stream_saver.input_tick()
+        # Get last cached frame
+        return self.__stream_saver.acquisition_frame()
 
-        return frame.reshape(self.__shape[1], self.__shape[0]), fps
+    def get_acquisition_stats(self):
+        """
+        Get a dictionary of stats representing the current state of
+        the StreamSaver acquisition. If there is not an active
+        acquisition, a RuntimeError is raised.
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+        return self.__stream_saver.acquisition_stats()
 
+    def check_acquisition(self):
+        """
+        Check if there is currently an active acquisition.
+        Return True if active, False otherwise.
+        Once an acquisition is started, this call will
+        return true until a join_acquisition call has completed.
+        """
+        if self.__stream_mode is None:
+            return False
+        else:
+            return self.__stream_saver.acquisition_status()
+
+    def abort_acquisition(self, force=False):
+        """
+        Set abort flag to True in the C++ acquisition.
+        Causes the acquisition to cleanly exit as soon as
+        possible.
+
+        Parameters
+        ----------
+            force (bool) : If True, abort without waiting for cached
+                frames to be processed. Otherwise, allow cached frames
+                to process before exiting.
+        """
+        if self.__stream_mode is not None:
+            self.__stream_saver.abort_acquisition(force)
+
+    def join_acquisition(self):
+        """
+        Wait for the C++ acquisition to complete. Blocks until
+        completion. It is best to NOT call this in the main thread!
+        """
+        if self.__stream_mode is None:
+            raise RuntimeError("There are no active acquisitions!")
+
+        try:
+            self.__stream_saver.join_acquisition()
+        finally:
+            self.__stream_mode = None
+        return
 
     ### Getters/Setters below ###
     @property
@@ -402,9 +515,11 @@ class Camera:
         # integer where the first 8 bits are the major version, bits 9-12 are
         # the minor version, and bits 13-16 are the build number. Uses of masks
         # and bit shifts are required to extract the full version number.
-        return '{}.{}.{}'.format(dd_ver & 0xff00 >> 8,
-                                 dd_ver & 0x00f0 >> 4,
-                                 dd_ver & 0x000f)
+        return (
+            f"{dd_ver & 0xff00 >> 8}."
+            f"{dd_ver & 0x00f0 >> 4}."
+            f"{dd_ver & 0x000f}"
+        )
 
     @property
     def cam_fw(self):
@@ -425,8 +540,8 @@ class Camera:
         try:
             serial_no = self.get_param(const.PARAM_HEAD_SER_NUM_ALPHA)
             return serial_no
-        except:
-            return 'N/A'
+        except Exception:
+            return "N/A"
 
     @property
     def bit_depth(self):
@@ -449,8 +564,7 @@ class Camera:
         num_ports = self.get_param(const.PARAM_READOUT_PORT, const.ATTR_COUNT)
 
         if value >= num_ports:
-            raise ValueError('{} only supports '
-                             '{} readout ports.'.format(self, num_ports))
+            raise ValueError(f"{self} only supports {num_ports} readout ports.")
         self.set_param(const.PARAM_READOUT_PORT, value)
 
     @property
@@ -462,8 +576,7 @@ class Camera:
         num_entries = self.get_param(const.PARAM_SPDTAB_INDEX,
                                      const.ATTR_COUNT)
         if value >= num_entries:
-            raise ValueError('{} only supports '
-                             '{} speed entries'.format(self, num_entries))
+            raise ValueError(f"{self} only supports {num_entries} speed entries.")
         self.set_param(const.PARAM_SPDTAB_INDEX, value)
 
     @property
@@ -505,9 +618,9 @@ class Camera:
         pp_table = {}
 
         if not self.check_param(const.PARAM_PP_INDEX):
-            raise AttributeError("{} does not have any post-processing features "
-                                 "available.".format(self))
-            return
+            raise AttributeError(
+                f"{self} does not have any post-processing features available."
+            )
 
 
         orig = (self.get_param(const.PARAM_PP_INDEX),
@@ -526,11 +639,11 @@ class Camera:
                 self.set_param(const.PARAM_PP_PARAM_INDEX, j)
                 aName = self.get_param(const.PARAM_PP_PARAM_NAME)
 
-                min = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
-                max = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
+                min_ = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
+                max_ = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
                 val = self.get_param(const.PARAM_PP_PARAM)
 
-                pp_table[pName][aName] = (val, min, max)
+                pp_table[pName][aName] = (val, min_, max_)
 
         self.set_param(const.PARAM_PP_INDEX, orig[0])
         self.set_param(const.PARAM_PP_PARAM_INDEX, orig[1])
@@ -557,10 +670,40 @@ class Camera:
             clear = str(self.clear_time) + ' ns'
             pre = str(self.pre_trigger_delay) + ' ns'
             post = str(self.post_trigger_delay) + ' ns'
-        except:
+        except Exception:
             clear = 'N/A'
             pre = 'N/A'
             post = 'N/A'
+
+        return {'Exposure Time': exp,
+                'Readout Time': read,
+                'Clear Time': clear,
+                'Pre-trigger Delay': pre,
+                'Post-trigger Delay': post}
+
+    @property
+    def trigger_table_sec(self):
+        # Returns a dictionary containing all trigger parameters in 1/seconds.
+
+        if self.exp_res == 1:
+            exp = self.last_exp_time / 1000000
+        else:
+            exp = self.last_exp_time / 1000
+
+        try:
+            read = self.readout_time / 1000000
+        except AttributeError:
+            read = -1
+
+        # If the camera has clear time, then it has pre and post trigger delays
+        try:
+            clear = self.clear_time / 1000000000
+            pre = self.pre_trigger_delay / 1000000000
+            post = self.post_trigger_delay / 1000000000
+        except Exception:
+            clear = -1
+            pre = -1
+            post = -1
 
         return {'Exposure Time': exp,
                 'Readout Time': read,
@@ -575,15 +718,20 @@ class Camera:
         return self.get_param(const.PARAM_ADC_OFFSET)
 
     @property
+    def max_gain(self):
+        return self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MAX)
+
+    @property
     def gain(self):
         return self.get_param(const.PARAM_GAIN_INDEX)
 
     @gain.setter
     def gain(self, value):
-        max_gain = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MAX)
-        if value > max_gain or value < 1:
-            raise ValueError("Invalid value: {} - {} only supports gain "
-                             "indicies from 1 - {}.".format(value, self, max_gain))
+        if value > self.max_gain or value < 1:
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports gain "
+                f"indicies from 1 - {self.max_gain}."
+            )
         self.set_param(const.PARAM_GAIN_INDEX, value)
 
     @property
@@ -599,10 +747,12 @@ class Camera:
         elif value in self.read_enum(const.PARAM_BINNING_SER).values():
             self.__binning = (value, value)
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def bin_x(self):
@@ -614,10 +764,12 @@ class Camera:
         if value in self.read_enum(const.PARAM_BINNING_SER).values():
             self.__binning = (value, self.__binning[1])
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def bin_y(self):
@@ -629,10 +781,12 @@ class Camera:
         if value in self.read_enum(const.PARAM_BINNING_PAR).values():
             self.__binning = (self.__binning[0], value)
             self.calculate_reshape()
+            self.update_frame_time()
             return
 
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        raise ValueError(
+            f"{self} only supports {self.read_enum(const.PARAM_BINNING_SER).items()} binnings"
+        )
 
     @property
     def roi(self):
@@ -646,17 +800,30 @@ class Camera:
                 and len(value) == 4):
 
             if (value[0] in range(0, self.sensor_size[0] + 1) and
-                    value[1] in range(0, self.sensor_size[0] + 1) and
-                    value[2] in range(0, self.sensor_size[1] + 1) and
-                    value[3] in range(0, self.sensor_size[1] + 1)):
+                value[1] in range(0, self.sensor_size[0] + 1) and
+                value[2] in range(0, self.sensor_size[1] + 1) and
+                value[3] in range(0, self.sensor_size[1] + 1)):
                 self.__roi = value
                 self.calculate_reshape()
+                self.update_frame_time()
                 return
 
             else:
-                raise ValueError('Invalid ROI paramaters for {}'.format(self))
+                raise ValueError(f"Invalid ROI paramaters for {self}")
 
-        raise ValueError('{} ROI expects a tuple of 4 integers'.format(self))
+        raise ValueError(f"{self} ROI expects a tuple of 4 integers")
+
+    @property
+    def frame_time(self):
+        if self.__frame_time is None:
+            self.update_frame_time()
+        return self.__frame_time
+
+    @property
+    def fps(self):
+        if self.__fps is None:
+            self.update_frame_time()
+        return self.__fps
 
     @property
     def shape(self):
@@ -679,9 +846,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_resolutions:
                 keys = [key for key in const.exp_resolutions]
-                raise ValueError("Invalid mode: {0} - {1} only supports "
-                                 "resolutions from the following list: {2}".format(
-                                                            value, self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports "
+                    f"resolutions from the following list: {keys}"
+                )
             self.set_param(const.PARAM_EXP_RES, const.exp_resolutions[value])
 
         # Handle the case where resolution is passed in by value. Check if
@@ -692,9 +860,10 @@ class Camera:
         else:
             if value not in const.exp_resolutions.values():
                 vals = const.exp_resolutions.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports "
-                                 "resolutions from {2} - {3}".format(value, self,
-                                                            min(vals), max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports "
+                    f"resolutions from {min(vals)} - {max(vals)}"
+                )
             self.set_param(const.PARAM_EXP_RES, value)
 
     @property
@@ -712,11 +881,12 @@ class Camera:
         max_exp_time = self.get_param(const.PARAM_EXPOSURE_TIME, const.ATTR_MAX)
 
         if not value in range(min_exp_time, max_exp_time + 1):
-            raise ValueError("Invalid value: {} - {} only supports exposure "
-                             "times between {} and {}".format(value, self,
-                                                              min_exp_time,
-                                                              max_exp_time))
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports exposure "
+                f"times between {min_exp_time} and {max_exp_time}"
+            )
         self.__exp_time = value
+        self.update_frame_time()
 
     @property
     def exp_mode(self):
@@ -731,9 +901,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_modes:
                 keys = [key for key in const.exp_modes]
-                raise ValueError("Invalid mode: {} - {} only supports exposure "
-                                 "modes from the following list: {}".format(value,
-                                                                        self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports exposure "
+                    f"modes from the following list: {keys}"
+                )
 
             self.__exp_mode = const.exp_modes[value]
             self.update_mode()
@@ -746,10 +917,10 @@ class Camera:
         else:
             if value not in const.exp_modes.values():
                 vals = const.exp_modes.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports"
-                                 "exposure modes from {2} - {3}".format(value,
-                                                                    self, min(vals),
-                                                                    max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports"
+                    f"exposure modes from {min(vals)} - {max(vals)}"
+                )
 
             self.__exp_mode = value
             self.update_mode()
@@ -767,9 +938,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.exp_out_modes:
                 keys = [key for key in const.exp_out_modes]
-                raise ValueError("Invalid mode: {0} - {1} only supports exposure "
-                                 "out modes from the following list: {2}".format(
-                                 value, self, keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports exposure "
+                    f"out modes from the following list: {keys}"
+                )
 
             self.__exp_out_mode = const.exp_out_modes[value]
             self.update_mode()
@@ -781,9 +953,10 @@ class Camera:
         else:
             if value not in const.exp_out_modes.values():
                 vals = const.exp_out_modes.values()
-                raise ValueError("Invalid mode value: {0} - {1} only supports "
-                                 "exposure out modes from {2} - {3}".format(value,
-                                 self, min(vals), max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports "
+                    f"exposure out modes from {min(vals)} - {max(vals)}"
+                )
 
             self.__exp_out_mode = value
             self.update_mode()
@@ -795,8 +968,10 @@ class Camera:
     @vtm_exp_time.setter
     def vtm_exp_time(self, value):
         if not value in range(2**16):
-            raise ValueError("Invalid value: {} - {} only supports exposure "
-                             "times between {} and {}".format(value, self, 0, 2**16))
+            raise ValueError(
+                f"Invalid value: {value} - {self} only supports exposure "
+                f"times between 0 and {2**16}"
+            )
         self.set_param(const.PARAM_EXP_TIME, value)
 
     @property
@@ -824,11 +999,10 @@ class Camera:
         if isinstance(value, str):
             if value not in const.clear_modes:
                 keys = [key for key in const.clear_modes]
-                raise ValueError("Invalid mode: {0} - {1} "
-                                 "only supports clear modes "
-                                 "from the following list: {2}".format(value,
-                                                                       self,
-                                                                       keys))
+                raise ValueError(
+                    f"Invalid mode: {value} - {self} only supports clear modes "
+                    f"from the following list: {keys}"
+                )
             self.set_param(const.PARAM_CLEAR_MODE, const.clear_modes[value])
         # Handle the case where clear mode is passed in by value. Check if
         # the value passed in is a valid value inside the clear_modes
@@ -838,25 +1012,23 @@ class Camera:
         else:
             if value not in const.clear_modes.values():
                 vals = const.clear_modes.values()
-                raise ValueError("Invalid mode value: {0} "
-                                 "- {1} only supports clear "
-                                 "modes from the {2} - {3}".format(value,
-                                                                   self,
-                                                                   min(vals),
-                                                                   max(vals)))
+                raise ValueError(
+                    f"Invalid mode value: {value} - {self} only supports clear "
+                    f"modes from the {min(vals)} - {max(vals)}"
+                )
             self.set_param(const.PARAM_CLEAR_MODE, value)
 
     @property
     def temp(self):
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
-        return self.get_param(const.PARAM_TEMP)/100.0
+        return self.get_param(const.PARAM_TEMP)
 
     @property
     def temp_setpoint(self):
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
-        return self.get_param(const.PARAM_TEMP_SETPOINT)/100.0
+        return self.get_param(const.PARAM_TEMP_SETPOINT)
 
     @temp_setpoint.setter
     def temp_setpoint(self, value):
@@ -867,8 +1039,9 @@ class Camera:
         except RuntimeError:
             min_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MIN)
             max_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MAX)
-            raise ValueError("Invalid temp {} : Valid temps are in the range {} "
-                             "- {}.".format(value, min_temp, max_temp))
+            raise ValueError(
+                f"Invalid temp {value} : Valid temps are in the range {min_temp} - {max_temp}."
+            )
 
     @property
     def readout_time(self):
@@ -893,97 +1066,3 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         return self.get_param(const.PARAM_POST_TRIGGER_DELAY)
-		
-    @property
-    def centroids_mode(self):
-        # Camera specific setting: will raise AttributeError if called with a
-        # camera that does not support this setting.
-        # Find the current int32 value corresponding to the centroids mode
-        # of the camera, then reverse the key value pairs of the centroids_modes
-        # dictionary inside constants.py since it maps the string name of
-        # the centroids mode to its PVCAM value. This will allow for "reverse"
-        # lookup, meaning that it will return the string name given its
-        # integer value.
-        return self.get_param(const.PARAM_CENTROIDS_MODE)
-        # curr_mode_val = self.get_param(const.PARAM_CENTROIDS_MODE)
-        # return {v: k for k, v in const.centroids_modes.items()}[curr_mode_val]
-
-    @centroids_mode.setter
-    def centroids_mode(self, value):
-        # Camera specific setting: will raise AttributeError if called with a
-        # camera that does not support this setting.
-        # Handle the case where centroids mode is passed in by name. Simply check
-        # if it is a key in the centroids_modes dictionary in constants.py, and if
-        # it is, call set_param with its associated value. Otherwise, raise
-        # a ValueError informing the user which settings are valid.
-        if isinstance(value, str):
-            if value not in const.centroids_modes:
-                keys = [key for key in const.centroids_modes]
-                raise ValueError("Invalid mode: {0} - {1} "
-                                 "only supports centroids modes "
-                                 "from the following list: {2}".format(value,
-                                                                       self,
-                                                                       keys))
-            self.set_param(const.PARAM_CENTROIDS_MODE, const.centroids_modes[value])
-        # Handle the case where centroids mode is passed in by value. Check if
-        # the value passed in is a valid value inside the centroids_modes
-        # dictionary in constants.py. If it is, call set_param with the
-        # value. Otherwise, raise a ValueError informing which values
-        # can be used.
-        else:
-            if value not in const.centroids_modes.values():
-                vals = const.centroids_modes.values()
-                raise ValueError("Invalid mode value: {0} "
-                                 "- {1} only supports centroids "
-                                 "modes from the {2} - {3}".format(value,
-                                                                   self,
-                                                                   min(vals),
-                                                                   max(vals)))
-            self.set_param(const.PARAM_CENTROIDS_MODE, value)
-			
-    @property
-    def prog_scan_mode(self):
-        # Camera specific setting: will raise AttributeError if called with a
-        # camera that does not support this setting.
-        # Find the current int32 value corresponding to the PSM
-        # of the camera, then reverse the key value pairs of the prog_scan_modes
-        # dictionary inside constants.py since it maps the string name of
-        # the PSM to its PVCAM value. This will allow for "reverse"
-        # lookup, meaning that it will return the string name given its
-        # integer value.
-        return self.get_param(const.PARAM_SCAN_MODE)
-        # curr_mode_val = self.get_param(const.PARAM_SCAN_MODE)
-        # return {v: k for k, v in const.prog_scan_modes.items()}[curr_mode_val]
-
-    @prog_scan_mode.setter
-    def prog_scan_mode(self, value):
-        # Camera specific setting: will raise AttributeError if called with a
-        # camera that does not support this setting.
-        # Handle the case where PSM is passed in by name. Simply check
-        # if it is a key in the prog_scan_modes dictionary in constants.py, and if
-        # it is, call set_param with its associated value. Otherwise, raise
-        # a ValueError informing the user which settings are valid.
-        if isinstance(value, str):
-            if value not in const.prog_scan_modes:
-                keys = [key for key in const.prog_scan_modes]
-                raise ValueError("Invalid mode: {0} - {1} "
-                                 "only supports programmable scan modes "
-                                 "from the following list: {2}".format(value,
-                                                                       self,
-                                                                       keys))
-            self.set_param(const.PARAM_SCAN_MODE, const.prog_scan_modes[value])
-        # Handle the case where PSM is passed in by value. Check if
-        # the value passed in is a valid value inside the prog_scan_modes
-        # dictionary in constants.py. If it is, call set_param with the
-        # value. Otherwise, raise a ValueError informing which values
-        # can be used.
-        else:
-            if value not in const.prog_scan_modes.values():
-                vals = const.prog_scan_modes.values()
-                raise ValueError("Invalid mode value: {0} "
-                                 "- {1} only supports programmable scan modes "
-                                 "from the {2} - {3}".format(value,
-                                                                   self,
-                                                                   min(vals),
-                                                                   max(vals)))
-            self.set_param(const.PARAM_SCAN_MODE, value)

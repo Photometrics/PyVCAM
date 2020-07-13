@@ -1,46 +1,26 @@
-#include <numpy/arrayobject.h>
+// Local
+#include "pvcmodule.h"
+#include "backend/AcqHelper.h"
+#include "backend/ConsoleLogger.h"
+#include "backend/Log.h"
+#include "backend/Frame.h"
+
+// System
 #include <new>
+#include <iostream>
 #include <chrono>
 #include <thread>
-#include "pvcmodule.h"
 
-#define NPY_NO_DEPRECATED_API
-
-static PyObject *my_callback = NULL;
-uns16 *g_frameAddress;	/*Address of the frame*/
+/*
+Global variables
+*/
+char g_msg[ERROR_MSG_LEN]; // Error Message Variable.
 uns16 *g_singleFrameAddress;	/*Address of the frame*/
-auto g_prevTime = std::chrono::high_resolution_clock::now();
-auto g_curTime = std::chrono::high_resolution_clock::now();
-std::chrono::duration<double> g_timeDelta;
-int g_frameCnt = 0;
-double g_FPS = 0;
 
 /** Sets the global error message. */
-void set_g_msg(void) { pl_error_message(pl_error_code(), g_msg); }
-
-typedef struct SampleContext
+void set_g_msg(void)
 {
-   int myData1;
-   int myData2;
-}
-SampleContext;
-
-void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
-{
-    g_frameCnt++;
-    g_curTime = std::chrono::high_resolution_clock::now();
-    g_timeDelta = std::chrono::duration_cast<std::chrono::duration<double>>(g_curTime - g_prevTime);
-
-    if (g_timeDelta.count() >= 0.25){
-      g_FPS = g_frameCnt/g_timeDelta.count();
-      //printf("framecnt: %d\nfps: %lf\ntime: %lf", g_frameCnt,g_FPS,g_timeDelta);
-      g_frameCnt = 0;
-      g_prevTime = g_curTime;
-    }
-
-    if (PV_OK != pl_exp_get_latest_frame(pFrameInfo->hCam, (void **)&g_frameAddress)) {
-      PyErr_SetString(PyExc_ValueError, "Failed to get latest frame");
-  	}
+    pl_error_message(pl_error_code(), g_msg);
 }
 
 /** Returns true if the specified attribute is available. */
@@ -556,13 +536,15 @@ pvc_get_frame(PyObject *self, PyObject *args)
     PyArray_Return(numpy_frame);
 }
 
+
+/**
+* Collects a sequence of images and returns it as a numpy array.
+*/
 static PyObject *
-pvc_start_live(PyObject *self, PyObject *args)
+pvc_get_sequence(PyObject *self, PyObject *args)
 {
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
-	*/
 	int16 hcam;    /* Camera handle. */
+	uns16 exp_total;  /* Number of frames to get */
 	uns16 s1;      /* First pixel in serial register. */
 	uns16 s2;      /* Last pixel in serial register. */
 	uns16 sbin;    /* Serial binning. */
@@ -571,11 +553,9 @@ pvc_start_live(PyObject *self, PyObject *args)
 	uns16 pbin;    /* Parallel binning. */
 	uns32 expTime; /* Exposure time. */
 	int16 expMode; /* Exposure mode. */
-	const int16 bufferMode = CIRC_OVERWRITE;
-	const uns16 circBufferFrames = 16;
-
-	if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
-                                                &pbin, &expTime, &expMode)) {
+	if (!PyArg_ParseTuple(args, "hhhhhhhhih", &hcam, &exp_total, &s1, &s2, &sbin,
+		&p1, &p2, &pbin,
+		&expTime, &expMode)) {
 		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
 		return NULL;
 	}
@@ -585,179 +565,62 @@ pvc_start_live(PyObject *self, PyObject *args)
 
 	/* Setup the acquisition. */
 	uns16 rgn_total = 1;
-	if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
-		expTime, &exposureBytes, bufferMode)) {
-		set_g_msg();
-		PyErr_SetString(PyExc_RuntimeError, g_msg);
-		return NULL;
-	}
-	uns16 *circBufferInMemory =
-		new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
-	if (circBufferInMemory == NULL) {
-		PyErr_SetString(PyExc_MemoryError,
-			"Unable to properly allocate memory for frame.");
-		return NULL;
-	}
-	if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
+	if (!pl_exp_setup_seq(hcam, exp_total, rgn_total, &frame, expMode,
+		expTime, &exposureBytes)) {
 		set_g_msg();
 		PyErr_SetString(PyExc_RuntimeError, g_msg);
 		return NULL;
 	}
 
-	return PyLong_FromLong(exposureBytes);
-}
-
-static PyObject *
-pvc_get_live_frame(PyObject *self, PyObject *args)
-{
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
+	/* Allocate buffer for all frames in sequence */
+	/*  ONLY IF THE SEQUENCE BUFFER IS GLOBAL?
+	if (sequenceBuffer != NULL) {
+		free(sequenceBuffer)
+	}
 	*/
-	int16 hcam;				/* Camera handle. */
-	uns32 exposureBytes;	 /* Bytes Exposed */
-
-	uns16 *frameAddress;	/*Address of the frame*/
-	int16 status;			/*Operation status*/
-	uns32 byte_cnt;			/*Byte count*/
-	uns32 buffer_cnt;		/*Buffer Count*/
-
-	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+	uns16 *sequenceBuffer =
+		new (std::nothrow) uns16[exposureBytes / sizeof(uns16)];
+	if (sequenceBuffer == NULL) {
+		PyErr_SetString(PyExc_MemoryError,
+			"Unable to properly allocate memory for acquisition.");
 		return NULL;
 	}
-	while (pl_exp_check_cont_status(hcam, &status, &byte_cnt, &buffer_cnt)
-		&& status != FRAME_AVAILABLE) {
-		// Waiting for frame exposure and readout
-		std::this_thread::sleep_for(std::chrono::milliseconds(1));
-	}
 
+	/* Start sequence capture */
+	if (!pl_exp_start_seq(hcam, sequenceBuffer)) {
+		set_g_msg();
+		PyErr_SetString(PyExc_RuntimeError, g_msg);
+		return NULL;
+	}
+	int16 status;
+	uns32 byte_cnt;
+
+	// Keep checking the camera readout status.
+	// Function returns FALSE if status is READOUT_FAILED
+	while (pl_exp_check_status(hcam, &status, &byte_cnt)
+		&& status != READOUT_COMPLETE  && status != READOUT_NOT_ACTIVE) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(20));
+	}
 	if (status == READOUT_FAILED) {
-		PyErr_SetString(PyExc_ValueError, "Frame readout failed\n");
+		PyErr_SetString(PyExc_RuntimeError, "get_sequence() readout failed.");
 		return NULL;
 	}
-	if (PV_OK != pl_exp_get_latest_frame(hcam, (void **)&frameAddress)) {
-		PyErr_SetString(PyExc_ValueError, "Failed to get last frame\n");
-		return NULL;
-	}
-	import_array();  /* Initialize PyArrayObject. */
+
+	/* Finish sequence capture (does pl_exp_stop_seq need to be called here?????) */
+
+	/* Wrap the frame buffer into a 1D numpy array to be read and reshaped in python.
+	   Does not allocate any additional memory */
+	import_array();
+	int type = NPY_UINT16;
 	int dimensions = 1;
 	npy_intp dimension_lengths = exposureBytes / sizeof(uns16);
-	int type = NPY_UINT16;
 	PyArrayObject *numpy_frame = (PyArrayObject *)
 		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
-		(void *)frameAddress);
+		(void *)sequenceBuffer);
+	/* Tell numpy to free the memory when the array is destroyed */
+	PyArray_ENABLEFLAGS((PyArrayObject*)numpy_frame, NPY_ARRAY_OWNDATA);
 
 	PyArray_Return(numpy_frame);
-}
-
-static PyObject *
-pvc_start_live_cb(PyObject *self, PyObject *args)
-{
-  SampleContext dataContext;
-  //dataContext.myData1 = 0;
-  //dataContext.myData2 = 100;
-
-  int16 hcam;    /* Camera handle. */
-  uns16 s1;      /* First pixel in serial register. */
-  uns16 s2;      /* Last pixel in serial register. */
-  uns16 sbin;    /* Serial binning. */
-  uns16 p1;      /* First pixel in parallel register. */
-  uns16 p2;      /* Last pixel in serial register. */
-  uns16 pbin;    /* Parallel binning. */
-  uns32 expTime; /* Exposure time. */
-  int16 expMode; /* Exposure mode. */
-  const int16 bufferMode = CIRC_OVERWRITE;
-  const uns16 circBufferFrames = 16;
-
-  if (!PyArg_ParseTuple(args, "hhhhhhhih", &hcam, &s1, &s2, &sbin, &p1, &p2,
-                                                &pbin, &expTime, &expMode)) {
-    PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-    return NULL;
-  }
-  if (PV_OK != pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF,
-            (void *)NewFrameHandler, (void *)&dataContext))
-    {
-        PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-        printf("couldn't regiester callback");
-    }
-    /* Struct that contains the frame size and binning information. */
-  	rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-  	uns32 exposureBytes;
-    g_prevTime = std::chrono::high_resolution_clock::now();
-  	/* Setup the acquisition. */
-  	uns16 rgn_total = 1;
-  	if (!pl_exp_setup_cont(hcam, rgn_total, &frame, expMode,
-  		expTime, &exposureBytes, bufferMode)) {
-  		set_g_msg();
-  		PyErr_SetString(PyExc_RuntimeError, g_msg);
-  		return NULL;
-  	}
-  	uns16 *circBufferInMemory =
-  		new (std::nothrow) uns16[circBufferFrames * exposureBytes / sizeof(uns16)];
-  	if (circBufferInMemory == NULL) {
-  		PyErr_SetString(PyExc_MemoryError,
-  			"Unable to properly allocate memory for frame.");
-  		return NULL;
-  	}
-  	if (!pl_exp_start_cont(hcam, circBufferInMemory, circBufferFrames * exposureBytes / sizeof(uns16))) {
-  		set_g_msg();
-  		PyErr_SetString(PyExc_RuntimeError, g_msg);
-  		return NULL;
-  	}
-  return PyLong_FromLong(exposureBytes);
-}
-static PyObject *
-pvc_get_live_frame_cb(PyObject *self, PyObject *args)
-{
-	/* TODO: Make setting acquisition apart of this function. Do not make them
-	pass into the function call as arguments.
-	*/
-	int16 hcam;				/* Camera handle. */
-	uns32 exposureBytes;	 /* Bytes Exposed */
-
-	uns16 *frameAddress;	/*Address of the frame*/
-	int16 status;			/*Operation status*/
-	uns32 byte_cnt;			/*Byte count*/
-	uns32 buffer_cnt;		/*Buffer Count*/
-
-	const int16 bufferMode = CIRC_OVERWRITE;
-	const uns16 circBufferFrames = 20;
-
-	if (!PyArg_ParseTuple(args, "hi", &hcam, &exposureBytes)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-
-	import_array();  /* Initialize PyArrayObject. */
-	int dimensions = 1;
-	npy_intp dimension_lengths = exposureBytes / sizeof(uns16);
-	int type = NPY_UINT16;
-	PyObject *numpy_frame = (PyObject *)
-		PyArray_SimpleNewFromData(dimensions, &dimension_lengths, type,
-		(void *)g_frameAddress);
-
-  PyObject *fps = PyFloat_FromDouble(g_FPS);
-  PyObject *tup = PyTuple_New(2);
-  PyTuple_SetItem(tup, 0, numpy_frame);
-  PyTuple_SetItem(tup, 1, fps);
-	return tup;
-}
-
-
-static PyObject *
-pvc_stop_live(PyObject *self, PyObject *args)
-{
-	int16 hcam;    /* Camera handle. */
-
-	if (!PyArg_ParseTuple(args, "h", &hcam)) {
-		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-		return NULL;
-	}
-	if (PV_OK != pl_exp_stop_cont(hcam, CCS_CLEAR)) {	//stop the circular buffer aquisition
-		PyErr_SetString(PyExc_ValueError, "Buffer failed to stop");
-		return NULL;
-	}
-	Py_RETURN_NONE;
 }
 
 /** set_exp_out_mode
@@ -916,26 +779,350 @@ pvc_reset_pp(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static PyObject *
-pvc_my_set_callback(PyObject *self, PyObject *args)
-{
-    PyObject *result = NULL;
-    PyObject *temp;
+/*
+--------------------------- STREAMSAVER ACQUISITION CLASS -------------------------------
+ Class to run an acquisition completely within C++. Most efficient image acquisition method.
+*/
 
-    if (PyArg_ParseTuple(args, "O:set_callback", &temp)) {
-        if (!PyCallable_Check(temp)) {
-            PyErr_SetString(PyExc_TypeError, "parameter must be callable");
-            return NULL;
-        }
-        Py_XINCREF(temp);         /* Add a reference to new callback */
-        Py_XDECREF(my_callback);  /* Dispose of previous callback */
-        my_callback = temp;       /* Remember new callback */
-        /* Boilerplate to return "None" */
-        Py_INCREF(Py_None);
-        result = Py_None;
-    }
-    return result;
+// Define StreamSaver object
+typedef struct {
+    PyObject_HEAD
+    Helper *helpPtr;
+} StreamSaver;
+
+// Initialize StreamSaver object
+static int StreamSaver_init(StreamSaver *self, PyObject *args, PyObject *kwargs)
+{
+    self->helpPtr = new Helper();
+    return 0;
 }
+
+// Destruct StreamSaver object
+static void StreamSaver_dealloc(StreamSaver *self)
+{
+    delete self->helpPtr;
+    Py_TYPE(self)->tp_free(self);
+}
+
+static PyObject *StreamSaver_attach_camera(StreamSaver *self, PyObject *args)
+{
+    // Parse input
+	const char *camName; /* Camera name */
+	if (!PyArg_ParseTuple(args, "s", &camName)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Attaching camera!");
+    std::string camNameStr(camName);
+    if (!(self->helpPtr)->AttachCamera(camNameStr))
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not setup acquisition!!!");
+		return NULL;
+	}
+
+	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_setup_live(StreamSaver *self, PyObject *args)
+{
+	// Parse input
+	uns32 expTime;    /* Exposure time. */
+	int16 expMode;    /* Exposure mode. */
+	uns16 s1;      /* First pixel in serial register. */
+	uns16 s2;      /* Last pixel in serial register. */
+	uns16 sbin;    /* Serial binning. */
+	uns16 p1;      /* First pixel in parallel register. */
+	uns16 p2;      /* Last pixel in serial register. */
+	uns16 pbin;    /* Parallel binning. */
+
+	if (!PyArg_ParseTuple(args, "IhHHHHHH", &expTime, &expMode,
+		&s1, &s2, &sbin, &p1, &p2, &pbin)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+	// Pack ROI's
+	std::vector<rgn_type> regions;
+	rgn_type rgn;
+	rgn.sbin = sbin;
+	rgn.pbin = pbin;
+	rgn.s1 = s1;
+	rgn.s2 = s2;
+	rgn.p1 = p1;
+	rgn.p2 = p2;
+	regions.push_back(rgn);
+
+    // Apply settings
+	(self->helpPtr)->SetRegions(regions);
+	(self->helpPtr)->SetExposure(expTime);
+	(self->helpPtr)->SetAcqMode(pm::AcqMode::LiveCircBuffer);
+	(self->helpPtr)->SetStorageType(pm::StorageType::None);
+	Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_setup_acquisition(StreamSaver *self, PyObject *args)
+{
+	// Parse input
+	uns32 expTotal;   /* Number of frames to get */
+	uns32 expTime;    /* Exposure time. */
+	int16 expMode;    /* Exposure mode. */
+	uns16 s1;      /* First pixel in serial register. */
+	uns16 s2;      /* Last pixel in serial register. */
+	uns16 sbin;    /* Serial binning. */
+	uns16 p1;      /* First pixel in parallel register. */
+	uns16 p2;      /* Last pixel in serial register. */
+	uns16 pbin;    /* Parallel binning. */
+	const char *path; /* Output TIFF */
+
+	if (!PyArg_ParseTuple(args, "IIhHHHHHHs", &expTotal, &expTime, &expMode,
+		&s1, &s2, &sbin, &p1, &p2, &pbin, &path)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
+		return NULL;
+	}
+	// Pack ROI's
+	std::vector<rgn_type> regions;
+	rgn_type rgn;
+	rgn.sbin = sbin;
+	rgn.pbin = pbin;
+	rgn.s1 = s1;
+	rgn.s2 = s2;
+	rgn.p1 = p1;
+	rgn.p2 = p2;
+	regions.push_back(rgn);
+
+    // Apply settings
+	(self->helpPtr)->SetRegions(regions);
+	(self->helpPtr)->SetAcqFrameCount(expTotal);
+	(self->helpPtr)->SetExposure(expTime);
+	(self->helpPtr)->SetSaveDir(path);
+	(self->helpPtr)->SetAcqMode(pm::AcqMode::SnapCircBuffer);
+	(self->helpPtr)->SetStorageType(pm::StorageType::Tiff);
+	(self->helpPtr)->SetMaxStackSize(2000000000); // (2 GB)
+
+	Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_start_acquisition(StreamSaver *self)
+{
+    // Start Log
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+	pm::Log::LogI("Starting Acquisition!");
+	pm::Log::LogI("====================\n");
+
+	if (!(self->helpPtr)->InstallTerminationHandlers())
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Could not install termination handlers!!!");
+		return NULL;
+	}
+
+	if (!(self->helpPtr)->StartAcquisition())
+	{
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition start failed!");
+		return NULL;
+	}
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_join_acquisition(StreamSaver *self)
+{
+	auto consoleLogger = std::make_shared<pm::ConsoleLogger>();
+
+    Py_BEGIN_ALLOW_THREADS
+    if (!(self->helpPtr)->JoinAcquisition())
+    {
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition join failed!");
+		return NULL;
+    }
+    Py_END_ALLOW_THREADS
+
+    if ((self->helpPtr)->m_userAbortFlag)
+    {
+		pm::Log::Flush();
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted!");
+		return NULL;
+    }
+
+	pm::Log::LogI("Acquisition exited!");
+	pm::Log::Flush();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_abort_acquisition(StreamSaver *self, PyObject *args)
+{
+    bool force;
+	if (!PyArg_ParseTuple(args, "p", &force)) {
+		PyErr_SetString(PyExc_ValueError, "Invalid parameters. Takes one boolean argument (force).");
+		return NULL;
+	}
+
+    (self->helpPtr)->AbortAcquisition(force);
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_acquisition_status(StreamSaver *self)
+{
+    if ((self->helpPtr)->AcquisitionStatus()) Py_RETURN_TRUE;
+    else Py_RETURN_FALSE;
+}
+
+static PyObject *StreamSaver_input_tick(StreamSaver *self)
+{
+    (self->helpPtr)->InputTimerTick();
+    Py_RETURN_NONE;
+}
+
+static PyObject *StreamSaver_acquisition_frame(StreamSaver *self)
+{
+    void *data;
+    uns32 frameBytes = 0;
+    uns32 frameNum = 0;
+    uns16 frameW = 0;
+    uns16 frameH = 0;
+
+    if (!(self->helpPtr)->GetFrameData(&data, &frameBytes, &frameNum, &frameW, &frameH))
+    {
+		PyErr_SetString(PyExc_RuntimeError, "Frame is empty/invalid!");
+		return NULL;
+    }
+
+    // Wrap frame in numpy array
+	import_array();
+	int type = NPY_UINT16;
+	int ndims = 2;
+	npy_intp dims[2] = {frameH, frameW};
+	PyArrayObject *numpy_frame = (PyArrayObject *)
+		PyArray_SimpleNewFromData(ndims, dims, type, data);
+	// Tell numpy to free the memory when the array is destroyed
+	PyArray_ENABLEFLAGS((PyArrayObject*)numpy_frame, NPY_ARRAY_OWNDATA);
+	PyArray_Return(numpy_frame);
+}
+
+static PyObject *StreamSaver_acquisition_stats(StreamSaver *self)
+{
+    double* acqFps = new double;
+    size_t* acqFramesValid = new size_t;
+    size_t* acqFramesLost = new size_t;
+    size_t* acqFramesMax = new size_t;
+    size_t* acqFramesCached = new size_t;
+
+    double* diskFps = new double;
+    size_t* diskFramesValid = new size_t;
+    size_t* diskFramesLost = new size_t;
+    size_t* diskFramesMax = new size_t;
+    size_t* diskFramesCached = new size_t;
+
+    // Get acquisition related statistics
+    if (!(self->helpPtr)->AcquisitionStats(*acqFps, *acqFramesValid, *acqFramesLost,
+            *acqFramesMax, *acqFramesCached, *diskFps, *diskFramesValid, *diskFramesLost,
+            *diskFramesMax, *diskFramesCached))
+    {
+		PyErr_SetString(PyExc_RuntimeError, "Acquisition is not active!");
+		return NULL;
+    }
+
+	PyObject *dict = Py_BuildValue("{s:d,s:l,s:l,s:l,s:l,s:d,s:l,s:l,s:l,s:l}",
+            "acqFps", *acqFps, "acqFramesValid", *acqFramesValid, "acqFramesLost", *acqFramesLost,
+            "acqFramesMax", *acqFramesMax, "acqFramesCached", *acqFramesCached,
+            "diskFps", *diskFps, "diskFramesValid", *diskFramesValid, "diskFramesLost", *diskFramesLost,
+            "diskFramesMax", *diskFramesMax, "diskFramesCached", *diskFramesCached);
+    return dict;
+}
+
+static PyMethodDef StreamSaver_methods[] = {
+    {"attach_camera",
+        (PyCFunction)StreamSaver_attach_camera,
+        METH_VARARGS,
+        "Attach a camera for the acquisition."},
+    {"setup_live",
+        (PyCFunction)StreamSaver_setup_live,
+        METH_VARARGS,
+        "Setup a live capture sequence with a circular buffer. Runs indefinitely."},
+    {"setup_acquisition",
+        (PyCFunction)StreamSaver_setup_acquisition,
+        METH_VARARGS,
+        "Setup a capture sequence with a set length and directory to save the frames."},
+    {"start_acquisition",
+        (PyCFunction)StreamSaver_start_acquisition,
+        METH_NOARGS,
+        "Start the acquisition. NOTE: attach_camera and apply_options must be "
+        "called first!"},
+    {"join_acquisition",
+        (PyCFunction)StreamSaver_join_acquisition,
+        METH_NOARGS,
+        "Join the acquisition (wait for completion)."},
+    {"abort_acquisition",
+        (PyCFunction)StreamSaver_abort_acquisition,
+        METH_VARARGS,
+        "Signal the acquisition to abort."},
+    {"acquisition_status",
+        (PyCFunction)StreamSaver_acquisition_status,
+        METH_NOARGS,
+        "Check status of current acquisition. Returns a dictionary of statistics."},
+    {"acquisition_stats",
+        (PyCFunction)StreamSaver_acquisition_stats,
+        METH_NOARGS,
+        "Get acquisition and disk thread stats for current acquisition."},
+    {"input_tick",
+        (PyCFunction)StreamSaver_input_tick,
+        METH_NOARGS,
+        "Input timer tick to acquisition. Signals the acquisition to cache next "
+        "frame."},
+    {"acquisition_frame",
+        (PyCFunction)StreamSaver_acquisition_frame,
+        METH_NOARGS,
+        "Get last frame from listener. Frames are only cached after "
+        "input_tick has been called. Exactly one frame will be cached "
+        "per tick."},
+    {NULL} /* Sentinel */
+};
+
+static PyTypeObject StreamSaverType = {
+    PyVarObject_HEAD_INIT(NULL, 0) "pvc.StreamSaver",  /* tp_name */
+    sizeof(StreamSaver),                      /* tp_basicsize */
+    0,                                        /* tp_itemsize */
+    (destructor)StreamSaver_dealloc,          /* tp_dealloc */
+    0,                                        /* tp_print */
+    0,                                        /* tp_getattr */
+    0,                                        /* tp_setattr */
+    0,                                        /* tp_reserved */
+    0,                                        /* tp_repr */
+    0,                                        /* tp_as_number */
+    0,                                        /* tp_as_sequence */
+    0,                                        /* tp_as_mapping */
+    0,                                        /* tp_hash  */
+    0,                                        /* tp_call */
+    0,                                        /* tp_str */
+    0,                                        /* tp_getattro */
+    0,                                        /* tp_setattro */
+    0,                                        /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
+    "StreamSaver class adapted from PVCAM StreamSaving example.", /* tp_doc */
+    0,                                        /* tp_traverse */
+    0,                                        /* tp_clear */
+    0,                                        /* tp_richcompare */
+    0,                                        /* tp_weaklistoffset */
+    0,                                        /* tp_iter */
+    0,                                        /* tp_iternext */
+    StreamSaver_methods,                      /* tp_methods */
+    0,                                        /* tp_members */
+    0,                                        /* tp_getset */
+    0,                                        /* tp_base */
+    0,                                        /* tp_dict */
+    0,                                        /* tp_descr_get */
+    0,                                        /* tp_descr_set */
+    0,                                        /* tp_dictoffset */
+    (initproc)StreamSaver_init,               /* tp_init */
+    0,                                        /* tp_alloc */
+    PyType_GenericNew,                        /* tp_new */
+};
 
 /* When writing a new function, include it in the Method Table definitions!
  *
@@ -1001,7 +1188,7 @@ static PyMethodDef PvcMethods[] = {
 		pvc_set_param,
 		METH_VARARGS,
 		set_param_docstring},
-  {"check_param",
+    {"check_param",
 		pvc_check_param,
 		METH_VARARGS,
 		check_param_docstring},
@@ -1009,26 +1196,10 @@ static PyMethodDef PvcMethods[] = {
 		pvc_get_frame,
 		METH_VARARGS,
 		get_frame_docstring},
-	{"start_live",
-		pvc_start_live,
+	{ "get_sequence",
+		pvc_get_sequence,
 		METH_VARARGS,
-		start_live_docstring},
-  {"start_live_cb",
-  	pvc_start_live_cb,
-  	METH_VARARGS,
-  	start_live_cb_docstring},
-	{ "get_live_frame",
-		pvc_get_live_frame,
-		METH_VARARGS,
-		get_live_frame_docstring },
-  { "get_live_frame_cb",
-  	pvc_get_live_frame_cb,
-  	METH_VARARGS,
-  	get_live_frame_cb_docstring },
-	{ "stop_live",
-		pvc_stop_live,
-		METH_VARARGS,
-		stop_live_docstring },
+		get_sequence_docstring },
 	{"set_exp_modes",
 		pvc_set_exp_modes,
 		METH_VARARGS,
@@ -1037,14 +1208,10 @@ static PyMethodDef PvcMethods[] = {
 		pvc_read_enum,
 		METH_VARARGS,
 		read_enum_docstring},
-  {"reset_pp",
+	{"reset_pp",
 		pvc_reset_pp,
 		METH_VARARGS,
 		reset_pp_docstring},
-  {"my_set_callback",
-  	pvc_my_set_callback,
-  	METH_VARARGS,
-  	my_set_callback_docstring},
 
     {NULL, NULL, 0, NULL}
 };
@@ -1054,11 +1221,25 @@ static struct PyModuleDef pvcmodule = {
     "pvc",            // Name of module
     module_docstring, // Module Documentation
     -1,               // Module keeps state in global variables
-    PvcMethods        // Our list of module functions.
+    PvcMethods,        // Our list of module functions.
 };
 
 PyMODINIT_FUNC
 PyInit_pvc(void)
 {
-    return PyModule_Create(&pvcmodule);
+    Py_Initialize();
+    PyObject *m = PyModule_Create(&pvcmodule);
+
+    // Ensure GIL has been created
+    if (!PyEval_ThreadsInitialized()) {
+        PyEval_InitThreads();
+    }
+
+    // Object definitions
+    if (PyType_Ready(&StreamSaverType) < 0)
+        return NULL;
+    Py_INCREF(&StreamSaverType);
+    PyModule_AddObject(m, "StreamSaver", (PyObject *)&StreamSaverType);
+
+    return m;
 }
