@@ -1,9 +1,9 @@
-from pyvcam import pvc
-from pyvcam.camera import Camera
 import time
 import cv2
 import numpy as np
 
+from pyvcam import pvc
+from pyvcam.camera import Camera
 
 def main():
     pvc.init_pvcam()
@@ -20,13 +20,13 @@ def main():
     fps = 0
 
     while True:
-        frame = cam.get_live_frame().reshape(cam.sensor_size[::-1])
-        frame = cv2.resize(frame,dim, interpolation = cv2.INTER_AREA)
-        cv2.imshow('Live Mode', frame)
+        frame, fps, frame_count = cam.poll_frame()
+        frame['pixel_data'] = cv2.resize(frame['pixel_data'], dim, interpolation = cv2.INTER_AREA)
+        cv2.imshow('Live Mode', frame['pixel_data'])
 
-        low = np.amin(frame)
-        high = np.amax(frame)
-        average = np.average(frame)
+        low = np.amin(frame['pixel_data'])
+        high = np.amax(frame['pixel_data'])
+        average = np.average(frame['pixel_data'])
 
         if cnt == 10:
                 t1 = time.time() - t1
@@ -38,7 +38,8 @@ def main():
         print('Min:{}\tMax:{}\tAverage:{:.0f}\tFrame Rate: {:.1f}\n'.format(low, high, average, fps))
         cnt += 1
         tot += 1
-    
+
+    cam.finish()
     cam.close()
     pvc.uninit_pvcam()
 

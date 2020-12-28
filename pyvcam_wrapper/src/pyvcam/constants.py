@@ -1,7 +1,7 @@
 ###############################################################################
 # File: constants.py
 # Author: Cameron Smith
-# Date of Last Edit: 2019-09-25
+# Date of Last Edit: 2020-11-10
 #
 # Purpose: To maintain the naming conventions used with PVCAM.h for Python
 #          scripts.
@@ -109,6 +109,8 @@ PARAM_SCAN_DIRECTION_RESET = ((CLASS3<<16) + (TYPE_BOOLEAN<<24)      + 252)
 PARAM_SCAN_LINE_DELAY = ((CLASS3<<16) + (TYPE_UNS16<<24)      + 253)
 PARAM_SCAN_LINE_TIME = ((CLASS3<<16) + (TYPE_INT64<<24)      + 254)
 PARAM_SCAN_WIDTH = ((CLASS3<<16) + (TYPE_UNS16<<24)      + 255)
+PARAM_FRAME_ROTATE = ((CLASS2<<16) + (TYPE_ENUM<<24)      + 256)
+PARAM_FRAME_FLIP = ((CLASS2<<16) + (TYPE_ENUM<<24)      + 257)
 PARAM_GAIN_INDEX = ((CLASS2<<16) + (TYPE_INT16<<24)     + 512)
 PARAM_SPDTAB_INDEX = ((CLASS2<<16) + (TYPE_INT16<<24)     + 513)
 PARAM_GAIN_NAME = ((CLASS2<<16) + (TYPE_CHAR_PTR<<24)  + 514)
@@ -213,6 +215,8 @@ PL_IMAGE_FORMAT_BAYER24 = PL_IMAGE_FORMAT_MONO24 + 1
 PL_IMAGE_FORMAT_RGB24 = PL_IMAGE_FORMAT_BAYER24 + 1
 PL_IMAGE_FORMAT_RGB48 = PL_IMAGE_FORMAT_RGB24 + 1
 PL_IMAGE_FORMAT_RGB72 = PL_IMAGE_FORMAT_RGB48 + 1
+PL_IMAGE_FORMAT_MONO32 = PL_IMAGE_FORMAT_RGB72 + 1
+PL_IMAGE_FORMAT_BAYER32 = PL_IMAGE_FORMAT_MONO32 + 1
 
 # PL_IMAGE_COMPRESSIONS
 PL_IMAGE_COMPRESSION_NONE =  0
@@ -229,6 +233,18 @@ PL_IMAGE_COMPRESSION_BITPACK17 = PL_IMAGE_COMPRESSION_RESERVED16 + 1
 PL_IMAGE_COMPRESSION_BITPACK18 = PL_IMAGE_COMPRESSION_BITPACK17 + 1
 PL_IMAGE_COMPRESSION_RESERVED24 =  24
 PL_IMAGE_COMPRESSION_RESERVED32 =  32
+
+# PL_FRAME_ROTATE_MODES
+PL_FRAME_ROTATE_MODE_NONE =  0
+PL_FRAME_ROTATE_MODE_90CW = PL_FRAME_ROTATE_MODE_NONE + 1
+PL_FRAME_ROTATE_MODE_180CW = PL_FRAME_ROTATE_MODE_90CW + 1
+PL_FRAME_ROTATE_MODE_270CW = PL_FRAME_ROTATE_MODE_180CW + 1
+
+# PL_FRAME_FLIP_MODES
+PL_FRAME_FLIP_MODE_NONE =  0
+PL_FRAME_FLIP_MODE_X = PL_FRAME_FLIP_MODE_NONE + 1
+PL_FRAME_FLIP_MODE_Y = PL_FRAME_FLIP_MODE_X + 1
+PL_FRAME_FLIP_MODE_XY = PL_FRAME_FLIP_MODE_Y + 1
 
 # PL_PARAM_ATTRIBUTES
 ATTR_CURRENT = 0
@@ -290,7 +306,13 @@ EXT_TRIG_INTERNAL =  (7 + 0) << 8
 EXT_TRIG_TRIG_FIRST =  (7 + 1) << 8
 EXT_TRIG_EDGE_RISING =  (7 + 2) << 8
 EXT_TRIG_LEVEL =  (7 + 3) << 8
+EXT_TRIG_SOFTWARE_FIRST =  (7 + 4) << 8
+EXT_TRIG_SOFTWARE_EDGE =  (7 + 5) << 8
 
+
+# PL_SW_TRIG_STATUSES
+PL_SW_TRIG_STATUS_TRIGGERED =  0
+PL_SW_TRIG_STATUS_IGNORED = PL_SW_TRIG_STATUS_TRIGGERED + 1
 
 # PL_EXPOSE_OUT_MODES
 EXPOSE_OUT_FIRST_ROW =  0
@@ -298,7 +320,8 @@ EXPOSE_OUT_ALL_ROWS = EXPOSE_OUT_FIRST_ROW + 1
 EXPOSE_OUT_ANY_ROW = EXPOSE_OUT_ALL_ROWS + 1
 EXPOSE_OUT_ROLLING_SHUTTER = EXPOSE_OUT_ANY_ROW + 1
 EXPOSE_OUT_LINE_TRIGGER = EXPOSE_OUT_ROLLING_SHUTTER + 1
-MAX_EXPOSE_OUT_MODE = EXPOSE_OUT_LINE_TRIGGER + 1
+EXPOSE_OUT_GLOBAL_SHUTTER = EXPOSE_OUT_LINE_TRIGGER + 1
+MAX_EXPOSE_OUT_MODE = EXPOSE_OUT_GLOBAL_SHUTTER + 1
 
 # PL_FAN_SPEEDS
 FAN_SPEED_HIGH = 0
@@ -329,6 +352,7 @@ PL_CAM_IFC_TYPE_PCIE =  0x800
 PL_CAM_IFC_TYPE_PCIE_LVDS = PL_CAM_IFC_TYPE_PCIE + 1
 PL_CAM_IFC_TYPE_PCIE_X1 = PL_CAM_IFC_TYPE_PCIE_LVDS + 1
 PL_CAM_IFC_TYPE_PCIE_X4 = PL_CAM_IFC_TYPE_PCIE_X1 + 1
+PL_CAM_IFC_TYPE_PCIE_X8 = PL_CAM_IFC_TYPE_PCIE_X4 + 1
 PL_CAM_IFC_TYPE_VIRTUAL =  0x1000
 PL_CAM_IFC_TYPE_ETHERNET =  0x2000
 
@@ -371,7 +395,8 @@ PP_FEATURE_DESPECKLE_BRIGHT_LOW = PP_FEATURE_HIGH_DYNAMIC_RANGE + 1
 PP_FEATURE_DENOISING = PP_FEATURE_DESPECKLE_BRIGHT_LOW + 1
 PP_FEATURE_DESPECKLE_DARK_HIGH = PP_FEATURE_DENOISING + 1
 PP_FEATURE_ENHANCED_DYNAMIC_RANGE = PP_FEATURE_DESPECKLE_DARK_HIGH + 1
-PP_FEATURE_MAX = PP_FEATURE_ENHANCED_DYNAMIC_RANGE + 1
+PP_FEATURE_FRAME_SUMMING = PP_FEATURE_ENHANCED_DYNAMIC_RANGE + 1
+PP_FEATURE_MAX = PP_FEATURE_FRAME_SUMMING + 1
 
 # PP_PARAMETER_IDS
 PP_PARAMETER_RF_FUNCTION =  (PP_FEATURE_RING_FUNCTION * PP_MAX_PARAMETERS_PER_FEATURE)
@@ -408,7 +433,10 @@ PP_FEATURE_DESPECKLE_DARK_HIGH_ENABLED =  (PP_FEATURE_DESPECKLE_DARK_HIGH * PP_M
 PP_FEATURE_DESPECKLE_DARK_HIGH_THRESHOLD = PP_FEATURE_DESPECKLE_DARK_HIGH_ENABLED + 1
 PP_FEATURE_DESPECKLE_DARK_HIGH_MIN_ADU_AFFECTED = PP_FEATURE_DESPECKLE_DARK_HIGH_THRESHOLD + 1
 PP_FEATURE_ENHANCED_DYNAMIC_RANGE_ENABLED =  (PP_FEATURE_ENHANCED_DYNAMIC_RANGE * PP_MAX_PARAMETERS_PER_FEATURE)
-PP_PARAMETER_ID_MAX = PP_FEATURE_ENHANCED_DYNAMIC_RANGE_ENABLED + 1
+PP_FEATURE_FRAME_SUMMING_ENABLED =  (PP_FEATURE_FRAME_SUMMING * PP_MAX_PARAMETERS_PER_FEATURE)
+PP_FEATURE_FRAME_SUMMING_COUNT = PP_FEATURE_FRAME_SUMMING_ENABLED + 1
+PP_FEATURE_FRAME_SUMMING_32_BIT_MODE = PP_FEATURE_FRAME_SUMMING_COUNT + 1
+PP_PARAMETER_ID_MAX = PP_FEATURE_FRAME_SUMMING_32_BIT_MODE + 1
 
 # PL_SMT_MODES
 SMTMODE_ARBITRARY_ALL =  0
@@ -596,6 +624,24 @@ class md_frame_header(ctypes.Structure):
                 ('_reserved', ctypes.c_uint8 * 6),
                ]
 
+class md_frame_header_v3(ctypes.Structure):
+    _fields_ = [
+                ('signature', ctypes.c_uint32),
+                ('version', ctypes.c_uint8),
+                ('frameNr', ctypes.c_uint32),
+                ('roiCount', ctypes.c_uint16),
+                ('timestampBOF', ctypes.c_void_p),
+                ('timestampEOF', ctypes.c_void_p),
+                ('exposureTime', ctypes.c_void_p),
+                ('bitDepth', ctypes.c_uint8),
+                ('colorMask', ctypes.c_uint8),
+                ('flags', ctypes.c_uint8),
+                ('extendedMdSize', ctypes.c_uint16),
+                ('imageFormat', ctypes.c_uint8),
+                ('imageCompression', ctypes.c_uint8),
+                ('_reserved', ctypes.c_uint8 * 6),
+               ]
+
 class md_frame_roi_header(ctypes.Structure):
     _fields_ = [
                 ('roiNr', ctypes.c_uint16),
@@ -647,16 +693,3 @@ class md_frame(ctypes.Structure):
                 ('roiCount', ctypes.c_uint16),
                ]
 
-### ADDED BY HAND. LAST UPDATED: 2019-09-25 ###
-clear_modes = {"Never": CLEAR_NEVER, "Pre-Exposure": CLEAR_PRE_EXPOSURE,"Pre-Sequence": CLEAR_PRE_SEQUENCE, "Post-Sequence": CLEAR_POST_SEQUENCE, "Pre-Post-Sequence": CLEAR_PRE_POST_SEQUENCE,"Pre-Exposure Post-Sequence": CLEAR_PRE_EXPOSURE_POST_SEQ, "Max Clear": MAX_CLEAR_MODE}
-clear_mode_name = {key: val for key, val in clear_modes.items()}
-exp_resolutions = {0: EXP_RES_ONE_MILLISEC, 1: EXP_RES_ONE_MICROSEC, 2: EXP_RES_ONE_SEC}
-exp_resolutions_name = {key: val for key, val in exp_resolutions.items()}
-exp_modes = {"Timed": TIMED_MODE, "Strobed": STROBED_MODE, "Bulb": BULB_MODE,"Trigger First": TRIGGER_FIRST_MODE, "Flash": FLASH_MODE,"Variable Timed": VARIABLE_TIMED_MODE, "Int Strobe": INT_STROBE_MODE,"Max Exposure": MAX_EXPOSE_MODE, "Ext Trig Internal": EXT_TRIG_INTERNAL,"Ext Trig Trig First": EXT_TRIG_TRIG_FIRST, "Ext Trig Edge Rising": EXT_TRIG_EDGE_RISING}
-exp_mode_name = {key: val for key, val in exp_modes.items()}
-exp_out_modes = {"First Row": 0, "All Rows": 1, "Any Rows": 2, "Max": 3}
-exp_out_mode_name = {val: key for key, val in exp_out_modes.items()}
-centroids_modes = {"Locate": PL_CENTROIDS_MODE_LOCATE, "Track": PL_CENTROIDS_MODE_TRACK, "Blob": PL_CENTROIDS_MODE_BLOB}
-centroids_modes_name = {key: val for key, val in centroids_modes.items()}
-prog_scan_modes = {"Auto": PL_SCAN_MODE_AUTO, "Line Delay": PL_SCAN_MODE_PROGRAMMABLE_LINE_DELAY,"Scan Width": PL_SCAN_MODE_PROGRAMMABLE_SCAN_WIDTH}
-prog_scan_modes_name = {key: val for key, val in prog_scan_modes.items()}

@@ -24,41 +24,6 @@ pvcam = r'{}inc/pvcam.h'.format(pvcam_sdk_path)
 constants = r'./pyvcam/constants.py'
 
 
-def by_hand_writer():
-    """Constructs a string that contains additional global variables not found in PVCAM.h
-
-    This will automatically generate a date timestamp of when the file was generated. Add additonal
-    attributes to the list.
-
-    Returns:
-        A string of all non-PVCAM.h constants, enums, or defines that are needed across many
-        modules.
-    """
-    include = ['clear_modes = {"Never": CLEAR_NEVER, "Pre-Exposure": CLEAR_PRE_EXPOSURE,' +
-               '"Pre-Sequence": CLEAR_PRE_SEQUENCE, "Post-Sequence": CLEAR_POST_SEQUENCE, ' +
-               '"Pre-Post-Sequence": CLEAR_PRE_POST_SEQUENCE,' +
-               '"Pre-Exposure Post-Sequence": CLEAR_PRE_EXPOSURE_POST_SEQ, ' +
-               '"Max Clear": MAX_CLEAR_MODE}',
-               'clear_mode_name = {key: val for key, val in clear_modes.items()}',
-               'exp_resolutions = {0: EXP_RES_ONE_MILLISEC, 1: EXP_RES_ONE_MICROSEC, 2: EXP_RES_ONE_SEC}',
-               'exp_resolutions_name = {key: val for key, val in exp_resolutions.items()}',
-               'exp_modes = {"Timed": TIMED_MODE, "Strobed": STROBED_MODE, "Bulb": BULB_MODE,' +
-               '"Trigger First": TRIGGER_FIRST_MODE, "Flash": FLASH_MODE,' +
-               '"Variable Timed": VARIABLE_TIMED_MODE, "Int Strobe": INT_STROBE_MODE,' +
-               '"Max Exposure": MAX_EXPOSE_MODE, "Ext Trig Internal": EXT_TRIG_INTERNAL,' +
-               '"Ext Trig Trig First": EXT_TRIG_TRIG_FIRST, "Ext Trig Edge Rising": EXT_TRIG_EDGE_RISING}',
-               'exp_mode_name = {key: val for key, val in exp_modes.items()}',
-               'exp_out_modes = {"First Row": 0, "All Rows": 1, "Any Rows": 2, "Max": 3}',
-               'exp_out_mode_name = {val: key for key, val in exp_out_modes.items()}',
-               'centroids_modes = {"Locate": PL_CENTROIDS_MODE_LOCATE, "Track": PL_CENTROIDS_MODE_TRACK, "Blob": PL_CENTROIDS_MODE_BLOB}',
-               'centroids_modes_name = {key: val for key, val in centroids_modes.items()}',
-               'prog_scan_modes = {"Auto": PL_SCAN_MODE_AUTO, "Line Delay": PL_SCAN_MODE_PROGRAMMABLE_LINE_DELAY,' +
-               '"Scan Width": PL_SCAN_MODE_PROGRAMMABLE_SCAN_WIDTH}',
-               'prog_scan_modes_name = {key: val for key, val in prog_scan_modes.items()}']
-
-    comment = "### ADDED BY HAND. LAST UPDATED: {} ###\n".format(date.today())
-    return comment + "\n".join(include) + "\n"
-
 def define_writer(match):
     """Constructs a string representing defines in header files.
 
@@ -295,7 +260,6 @@ if __name__ == '__main__':
                 outfile.write('                (\'{}\', {}),\n'.format(item[0],
                                                                        item[1]))
             outfile.write('               ]\n\n')
-        outfile.write(by_hand_writer())
 
     # Diagnostic
     if False:

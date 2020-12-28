@@ -1,0 +1,92 @@
+[[Installation]]
+python setup.py install
+
+[[Camera Class]]
+
+[Camera Selection]
+get_available_camera_names
+detect_camera
+select_camera
+open
+close
+
+[Basic Frame Acquisition]
+get_frame
+get_sequence
+get_vtm_sequence
+
+[Advanced Frame Acquisition]
+start_live
+start_seq
+check_frame_status
+poll_frame
+abort
+finish
+
+[Configure Acquisition]
+calculate_reshape
+update_mode
+reset_pp
+
+[Parameters]
+get_param
+set_param
+check_param
+get_post_processing_param
+set_post_processing_param
+read_enum
+
+[Camera Object Data]
+centroids_modes
+clear_modes
+exp_modes
+exp_out_modes
+exp_resolutions
+handle
+is_open
+name
+port_speed_gain_table
+post_processing_table
+prog_scan_modes
+prog_scan_dirs
+
+[Camera Properties]
+adc_offset           get
+bin_x                get|set
+bin_y                get|set
+binning              get|set
+bit_depth            get
+cam_fw               get
+centroids_mode       get|set
+chip_name            get
+clear_mode           get|set
+clear_time           get
+driver_version       get
+exp_mode             get|set
+exp_out_mode         get|set
+exp_res              get|set
+exp_res_index        get
+exp_time             get|set
+gain                 get|set
+last_exp_time        get
+meta_data_enabled    get|set
+pix_time             get
+post_trigger_delay   get
+pre_trigger_delay    get
+prog_scan_mode       get|set
+prog_scan_dir        get|set
+prog_scan_dir_reset  get|set
+prog_scan_line_delay get|set
+prog_scan_width      get|set
+readout_port         get|set
+readout_time         get
+roi                  get|set
+scan_line_time       get
+sensor_size          get
+serial_no            get
+shape                get
+speed_table_index    get|set
+temp                 get
+temp_setpoint        get|set
+trigger_table        get
+vtm_exp_time         get|set
