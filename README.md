@@ -11,7 +11,7 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 * A C/C++ compiler is needed to build native source code. For Windows, MSVC 1928 was used for testing.
 * The newest version of Python 3 which can be downloaded [here](https://www.python.org/downloads/).
 * The latest PVCAM and PVCAM SDK which can be downloaded [here](https://www.photometrics.com/support/software/#software).
-* PyVCAM was developed and tested using Microsoft Windows 10/64-bit. The build package also supports Linux, but testing has been minimal.
+* PyVCAM was developed and tested using Microsoft Windows 10/64-bit.
 
 
 ### Installing
