@@ -719,10 +719,10 @@ void pm::Acquisition::DiskThreadLoop_Single()
     const std::string saveDir = m_camera->GetSettings().GetSaveDir();
     const size_t saveFirst = (isAcqModeLive)
         ? m_camera->GetSettings().GetSaveFirst()
-        : std::min(frameCount, m_camera->GetSettings().GetSaveFirst());
+        : std::min<size_t>(frameCount, m_camera->GetSettings().GetSaveFirst());
     const size_t saveLast = (isAcqModeLive)
         ? 0
-        : std::min(frameCount, m_camera->GetSettings().GetSaveLast());
+        : std::min<size_t>(frameCount, m_camera->GetSettings().GetSaveLast());
 
     const rgn_type rgn = SettingsReader::GetImpliedRegion(
             m_camera->GetSettings().GetRegions());
@@ -869,10 +869,10 @@ void pm::Acquisition::DiskThreadLoop_Stack()
     const std::string saveDir = m_camera->GetSettings().GetSaveDir();
     const size_t saveFirst = (isAcqModeLive)
         ? m_camera->GetSettings().GetSaveFirst()
-        : std::min(frameCount, m_camera->GetSettings().GetSaveFirst());
+        : std::min<size_t>(frameCount, m_camera->GetSettings().GetSaveFirst());
     const size_t saveLast = (isAcqModeLive)
         ? 0
-        : std::min(frameCount, m_camera->GetSettings().GetSaveLast());
+        : std::min<size_t>(frameCount, m_camera->GetSettings().GetSaveLast());
     const size_t maxStackSize = m_camera->GetSettings().GetMaxStackSize();
 
     const rgn_type rgn = SettingsReader::GetImpliedRegion(
