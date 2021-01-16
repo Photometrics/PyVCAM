@@ -156,6 +156,36 @@ bool pm::FakeCamera::Close()
     return Camera::Close();
 }
 
+// Returns the desired size (number of frames) of the circular (or sequence)
+// frame buffer
+uns32 pm::FakeCamera::GetDesiredFrameBufferSizeInFrames(const SettingsReader& settings)
+{
+    // If the settings specify a buffer size, just use it outright
+    uns32 frame_count = m_settings.GetBufferFrameCount();
+    if (frame_count > 0)
+        return frame_count;
+
+    switch (m_settings.GetAcqMode())
+    {
+        case AcqMode::SnapSequence:
+            // buffer size = number of frames to acquire
+            frame_count = m_settings.GetAcqFrameCount();
+            break;
+
+        case AcqMode::SnapCircBuffer:
+        case AcqMode::LiveCircBuffer:
+            frame_count = 10; // arbitrary
+            break;
+
+        case AcqMode::SnapTimeLapse:
+        case AcqMode::LiveTimeLapse:
+            frame_count = 1;
+            break;
+    }
+
+    return frame_count;
+}
+
 bool pm::FakeCamera::SetupExp(const SettingsReader& settings)
 {
     if (!Camera::SetupExp(settings))
@@ -168,7 +198,7 @@ bool pm::FakeCamera::SetupExp(const SettingsReader& settings)
         return false;
     }
 
-    const uns32 frameCount = m_settings.GetBufferFrameCount();
+    const uns32 frameCount = GetDesiredFrameBufferSizeInFrames(settings);
     const uns32 frameBytes = CalculateFrameBytes();
 
     if (!AllocateBuffers(frameCount, frameBytes))
@@ -1161,7 +1191,7 @@ void pm::FakeCamera::FrameGeneratorLoop()
        routine that is normally called by PVCAM. */
 
     const AcqMode acqMode = m_settings.GetAcqMode();
-    const uns32 bufferFrameCount = m_settings.GetBufferFrameCount();
+    const size_t bufferFrameCount = GetMaxBufferredFrames();
     const unsigned int timeLapseDelay = m_settings.GetTimeLapseDelay();
 
     const double microsecPerFrame = 1000000.0 / m_targetFps

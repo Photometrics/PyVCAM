@@ -18,6 +18,9 @@
     #error Unsupported OS
 #endif
 
+// Local
+#include "Log.h"
+
 bool pm::StrToBool(const std::string& str, bool& value)
 {
     if (str.empty())
@@ -141,7 +144,7 @@ bool GetProcMemInfo(size_t* total, size_t* avail)
 } // namespace pm
 #endif
 
-size_t pm::GetTotalRamMB()
+size_t pm::GetTotalPhysicalMemBytes()
 {
 #if defined(_WIN32)
 
@@ -149,18 +152,18 @@ size_t pm::GetTotalRamMB()
     status.dwLength = sizeof(status);
     GlobalMemoryStatusEx(&status);
     // Right shift by 20 bytes converts bytes to megabytes
-    return (size_t)(status.ullTotalPhys >> 20);
+    return (size_t) status.ullTotalPhys;
 
 #elif defined(__linux__)
 
     size_t total;
     const bool ok = pm::GetProcMemInfo(&total, nullptr);
-    return (ok) ? (total >> 20) : 0;
+    return (ok) ? total : 0;
 
 #endif
 }
 
-size_t pm::GetAvailRamMB()
+size_t pm::GetAvailPhysicalMemBytes()
 {
 #if defined(_WIN32)
 
@@ -168,13 +171,13 @@ size_t pm::GetAvailRamMB()
     status.dwLength = sizeof(status);
     GlobalMemoryStatusEx(&status);
     // Right shift by 20 bytes converts bytes to megabytes
-    return (size_t)(status.ullAvailPhys >> 20);
+    return (size_t) status.ullAvailPhys;
 
 #elif defined(__linux__)
 
     size_t avail;
     const bool ok = pm::GetProcMemInfo(nullptr, &avail);
-    return (ok) ? (avail >> 20) : 0;
+    return (ok) ? avail : 0;
 
 #endif
 }
@@ -237,4 +240,36 @@ std::vector<std::string> pm::GetFiles(const std::string& dir, const std::string&
 #endif
 
     return files;
+}
+
+// Increases the priority of the current thread to THREAD_PRIORITY_ABOVE_NORMAL
+// if its priority is not already as high as that
+void pm::SetCurrentThreadPriorityAboveNormal()
+{
+    DWORD thread_id = GetCurrentThreadId();
+    HANDLE thread_handle = GetCurrentThread();
+    int old_priority = GetThreadPriority(thread_handle);
+    int new_priority = THREAD_PRIORITY_ABOVE_NORMAL;
+
+    if (old_priority >= new_priority &&
+        old_priority != THREAD_PRIORITY_ERROR_RETURN)
+    {
+        // thread priority is already higher than normal
+        return;
+    }
+
+    if (!SetThreadPriority(thread_handle, new_priority))
+    {
+        unsigned int error_code = GetLastError();
+        Log::LogE(
+            "Failed to increase the priority of thread ID %u: error code %u\n",
+            (unsigned int) thread_id,
+            error_code);
+        return;
+    }
+
+    pm::Log::LogD("Changed priority of thread ID %u from %d to %d\n",
+        (unsigned int) thread_id,
+        (int) old_priority,
+        (int) new_priority);
 }

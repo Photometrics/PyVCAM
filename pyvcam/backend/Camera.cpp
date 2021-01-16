@@ -16,7 +16,7 @@ pm::Camera::Camera()
     m_settings(),
     m_speeds(),
     m_frameAcqCfg(),
-    m_frameCount(0),
+    m_bufferSize(0),
     m_buffer(nullptr),
     m_frames(),
     m_framesMap()
@@ -802,7 +802,9 @@ bool pm::Camera::SetupExp(const SettingsReader& settings)
     const AcqMode acqMode = m_settings.GetAcqMode();
     const int32 trigMode = m_settings.GetTrigMode();
 
-    if (acqMode == AcqMode::SnapSequence && acqFrameCount > bufferFrameCount)
+    if (acqMode == AcqMode::SnapSequence
+            && bufferFrameCount > 0
+            && acqFrameCount > bufferFrameCount)
     {
         Log::LogE("When in snap sequence mode, "
                 "we cannot acquire more frames than the buffer size (%u)",
@@ -1064,7 +1066,7 @@ std::shared_ptr<pm::Frame> pm::Camera::GetFrameAt(size_t index) const
 {
     if (index >= m_frames.size())
     {
-        Log::LogD("Frame index out of buffer boundaries");
+        Log::LogE("Frame index out of buffer boundaries");
         return nullptr;
     }
 
@@ -1281,7 +1283,9 @@ bool pm::Camera::BuildSpeedTable()
 
 bool pm::Camera::AllocateBuffers(uns32 frameCount, uns32 frameBytes)
 {
-    if (m_frameCount == frameCount
+    const uns32 bufferBytes = frameCount * frameBytes;
+
+    if (m_bufferSize == bufferBytes
             && m_frameAcqCfg.GetFrameBytes() == frameBytes
             && m_buffer)
         return true;
@@ -1308,8 +1312,6 @@ bool pm::Camera::AllocateBuffers(uns32 frameCount, uns32 frameBytes)
     }
 
     const Frame::AcqCfg frameAcqCfg(frameBytes, roiCount, hasMetadata);
-
-    const uns32 bufferBytes = frameCount * frameBytes;
 
     if (bufferBytes == 0)
     {
@@ -1366,7 +1368,7 @@ bool pm::Camera::AllocateBuffers(uns32 frameCount, uns32 frameBytes)
     m_frames.shrink_to_fit();
 
     m_frameAcqCfg = frameAcqCfg;
-    m_frameCount = frameCount;
+    m_bufferSize = bufferBytes;
 
     return true;
 }
@@ -1380,5 +1382,16 @@ void pm::Camera::DeleteBuffers()
     m_buffer = nullptr;
 
     m_frameAcqCfg = Frame::AcqCfg();
-    m_frameCount = 0;
+    m_bufferSize = 0;
+}
+
+// Returns the max number of frames that will fit in the
+// circular (or sequence) frame buffer used by pvcam
+size_t pm::Camera::GetMaxBufferredFrames() const
+{
+    size_t bytes_per_frame = m_frameAcqCfg.GetFrameBytes();
+    if (bytes_per_frame < 1)
+        return 0;
+
+    return m_bufferSize / bytes_per_frame;
 }

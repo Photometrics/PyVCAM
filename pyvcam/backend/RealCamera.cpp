@@ -180,11 +180,12 @@ bool pm::RealCamera::Close()
 
 bool pm::RealCamera::SetupExp(const SettingsReader& settings)
 {
+    const uns32 kMinCircBufFrames = 16; // our minimum size for circular buffers
+
     if (!Camera::SetupExp(settings))
         return false;
 
     const uns32 acqFrameCount = m_settings.GetAcqFrameCount();
-    const uns32 bufferFrameCount = m_settings.GetBufferFrameCount();
     const AcqMode acqMode = m_settings.GetAcqMode();
 
     uns32 exposure = m_settings.GetExposure();
@@ -248,6 +249,37 @@ bool pm::RealCamera::SetupExp(const SettingsReader& settings)
         break;
     }
 
+    // Size (number of frames) of the circular (or sequence) frame buffer.
+    // Unless a specific size has been specified, default to call the pvcam API
+    // function to get the recommended size of the buffer.
+    uns32 bufferFrameCount = m_settings.GetBufferFrameCount();
+    if (bufferFrameCount < 1)
+    {
+        ulong64 recommended_buffer_size = 0;
+
+        // PARAM_FRAME_BUFFER_SIZE only becomes available only after calling
+        // pl_exp_setup_seq() or pl_exp_setup_cont()
+        if (PV_OK != pl_get_param(m_hCam, PARAM_FRAME_BUFFER_SIZE,
+            ATTR_DEFAULT, (void*) &recommended_buffer_size))
+        {
+            Log::LogE("Failed to get the recommended size of the camera's "
+                "circular buffer: %s",
+                GetErrorMessage().c_str());
+            return false;
+        }
+
+        // round up to the nearest whole number of frames
+        bufferFrameCount =
+            (uns32) ((recommended_buffer_size + frameBytes - 1) / frameBytes);
+    }
+
+    // Enforce min. size for circular buffers
+    if (acqMode == AcqMode::SnapCircBuffer || acqMode == AcqMode::LiveCircBuffer)
+    {
+        if (bufferFrameCount < kMinCircBufFrames)
+            bufferFrameCount = kMinCircBufFrames;
+    }
+
     if (!AllocateBuffers(bufferFrameCount, frameBytes))
         return false;
 
@@ -301,8 +333,7 @@ bool pm::RealCamera::StartExp(CallbackEx3Fn callbackHandler, void* callbackConte
     {
     case AcqMode::SnapCircBuffer:
     case AcqMode::LiveCircBuffer:
-        keepGoing = (PV_OK == pl_exp_start_cont(m_hCam, m_buffer,
-                m_frameCount * frameBytes));
+        keepGoing = (PV_OK == pl_exp_start_cont(m_hCam, m_buffer, m_bufferSize));
         break;
     case AcqMode::SnapSequence:
         keepGoing = (PV_OK == pl_exp_start_seq(m_hCam, m_buffer));
@@ -324,7 +355,7 @@ bool pm::RealCamera::StartExp(CallbackEx3Fn callbackHandler, void* callbackConte
         }
         // Re-use internal buffer for buffering when sequence has one frame only
         const uns32 frameIndex =
-            m_timeLapseFrameCount % m_settings.GetBufferFrameCount();
+            m_timeLapseFrameCount % GetMaxBufferredFrames();
         keepGoing = (PV_OK == pl_exp_start_seq(m_hCam,
                 (void*)((uns8*)m_buffer + frameBytes * frameIndex)));
         break;

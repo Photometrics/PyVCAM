@@ -89,11 +89,8 @@ std::vector<std::string> SplitString(const std::string& string, char delimiter);
 // Joins strings from vector into one string using given delimiter
 std::string JoinStrings(const std::vector<std::string>& strings, char delimiter);
 
-// Type size_t limits size of total memory to 4096TB
-size_t GetTotalRamMB();
-
-// Type size_t limits size of available memory to 4096TB
-size_t GetAvailRamMB();
+size_t GetTotalPhysicalMemBytes();
+size_t GetAvailPhysicalMemBytes();
 
 // Return a list of file names in given folder with given extension
 std::vector<std::string> GetFiles(const std::string& dir, const std::string& ext);
@@ -138,6 +135,8 @@ template<typename R, typename U>
     const U fixedPoint = static_cast<U>(value * fractSteps) & mask;
     return fixedPoint;
 }
+
+void SetCurrentThreadPriorityAboveNormal();
 
 } // namespace pm
 

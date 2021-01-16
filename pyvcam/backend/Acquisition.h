@@ -65,17 +65,32 @@ public:
 private:
     // Allocates one new frame
     std::unique_ptr<Frame> AllocateNewFrame();
+    std::unique_ptr<Frame> GetUnusedFrame();
 
     // Put frame back to queue with unused frames
     void UnuseFrame(std::unique_ptr<Frame> frame);
 
     // Called from callback function to handle new frame
     bool HandleEofCallback();
+
+    // Adds a frame to the "to be processed" queue
+    void EnqueueFrameToBeProcessed(std::unique_ptr<Frame> frame);
+
     // Called from AcqThreadLoop to handle new frame
     bool HandleNewFrame(std::unique_ptr<Frame> frame);
 
+    // Returns the specified frame to the "unused" queue and records the lost
+    // frame number for later reporting.
+    void HandleLostFrame(std::unique_ptr<Frame> frame);
+
+    // Records the specified lost frame number for later reporting
+    void HandleLostFrameNumber(const uint32_t frame_number);
+
+    // Adds the specified frame to the "to be saved" queue
+    void EnqueueFrameToBeSaved(std::unique_ptr<Frame> frame);
+
     // Updates max. allowed number of frames in queue to be saved
-    void UpdateToBeSavedFramesMax();
+    size_t UpdateToBeSavedFramesMax();
     // Preallocate or release some ready-to-use frames at start/end
     bool PreallocateUnusedFrames();
     // Configures how frames will be stored on disk
@@ -126,7 +141,11 @@ private:
     // Time taken to finish saving, zero if in progress
     double m_diskTime;
 
-    uint32_t m_lastFrameNumber;
+    // Last processed frame number
+    uint32_t m_last_processed_frame_number;
+
+    // Latest frame number received from the camera
+    std::atomic<uint32_t> m_latest_received_frame_number;
 
     std::atomic<size_t> m_outOfOrderFrameCount;
 
@@ -174,9 +193,9 @@ private:
     std::mutex                          m_toBeSavedFramesMutex;
     // Condition the frame saving thread waits on for new frame
     std::condition_variable             m_toBeSavedFramesCond;
-    // Current size of queue with queued frames (for stats)
+    // Current size of the "to be saved frames" queue (for stats)
     std::atomic<size_t>                 m_toBeSavedFramesSize;
-    // Maximal size of queue with queued frames
+    // Maximal size of the "to be saved frames" queue
     std::atomic<size_t>                 m_toBeSavedFramesMax;
     // Highest number of frames that were ever stored in m_toBeSavedFrames queue
     std::atomic<size_t>                 m_toBeSavedFramesMaxPeak;

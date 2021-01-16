@@ -47,7 +47,8 @@ pm::Acquisition::Acquisition(std::shared_ptr<Camera> camera)
     m_acqTime(0.0),
     m_diskTimer(),
     m_diskTime(0.0),
-    m_lastFrameNumber(0),
+    m_last_processed_frame_number(0),
+    m_latest_received_frame_number(0),
     m_outOfOrderFrameCount(0),
     m_updateThreadMutex(),
     m_updateThreadCond(),
@@ -270,6 +271,23 @@ std::unique_ptr<pm::Frame> pm::Acquisition::AllocateNewFrame()
             m_camera->GetSettings().GetAcqMode() != AcqMode::SnapSequence);
 }
 
+// Gets an unused frame from the buffer if possible, or else
+// allocates a new one
+std::unique_ptr<pm::Frame> pm::Acquisition::GetUnusedFrame()
+{
+    std::unique_lock<std::mutex> lock(m_unusedFramesMutex);
+    if (m_unusedFrames.empty())
+    {
+        lock.unlock();
+        return AllocateNewFrame();
+    }
+
+    std::unique_ptr<Frame> frame = std::move(m_unusedFrames.front());
+    m_unusedFrames.pop();
+    return frame;
+}
+
+// Gives the frame back to the collection of unused frames
 void pm::Acquisition::UnuseFrame(std::unique_ptr<Frame> frame)
 {
     std::unique_lock<std::mutex> lock(m_unusedFramesMutex);
@@ -281,26 +299,7 @@ bool pm::Acquisition::HandleEofCallback()
     if (m_acqThreadAbortFlag)
         return true; // Return value doesn't matter, abort is already in progress
 
-    std::unique_ptr<Frame> frame = nullptr;
-    {
-        std::unique_lock<std::mutex> lock(m_unusedFramesMutex);
-        // Get free frame buffer, either create new or re-use old one
-        if (m_toBeProcessedFramesSize < m_toBeProcessedFramesMax)
-        {
-            if (!m_unusedFrames.empty())
-            {
-                frame = std::move(m_unusedFrames.front());
-                m_unusedFrames.pop();
-            }
-            else
-            {
-                frame = std::move(AllocateNewFrame());
-            }
-        }
-    }
-    if (!frame)
-        // No room for new frame, dropping it and keep going
-        return true;
+    std::unique_ptr<Frame> frame = GetUnusedFrame();
 
     if (!m_camera->GetLatestFrame(*frame))
     {
@@ -309,23 +308,50 @@ bool pm::Acquisition::HandleEofCallback()
         return false;
     }
 
+    m_latest_received_frame_number = frame->GetInfo().GetFrameNr();
+
     // Put frame to queue for processing
+    EnqueueFrameToBeProcessed(std::move(frame));
+
+    return true;
+}
+
+// Enqueues a frame to the "to be processed" queue
+void pm::Acquisition::EnqueueFrameToBeProcessed(std::unique_ptr<Frame> frame)
+{
+    std::unique_ptr<Frame> frame_to_drop = nullptr;
+
+    // context for holding the lock
     {
         std::unique_lock<std::mutex> lock(m_toBeProcessedFramesMutex);
 
         m_toBeProcessedFrames.push(std::move(frame));
-        m_toBeProcessedFramesSize = m_toBeProcessedFrames.size();
 
-        if (m_toBeProcessedFramesMaxPeak < m_toBeProcessedFramesSize)
+        // If the queue is full, drop the oldest frame. The oldest frame can
+        // no longer be trusted. Its frame data is still in the camera's
+        // circular buffer and is about to be overwritten.
+        if (m_toBeProcessedFrames.size() > m_toBeProcessedFramesMax)
         {
-            // operator= cannot be used as it is deleted
-            m_toBeProcessedFramesMaxPeak.exchange(m_toBeProcessedFramesSize);
+            frame_to_drop = std::move(m_toBeProcessedFrames.front());
+            m_toBeProcessedFrames.pop();
         }
+
+        m_toBeProcessedFramesSize = m_toBeProcessedFrames.size();
     }
+
     // Notify all waiters about new captured frame
     m_toBeProcessedFramesCond.notify_all();
 
-    return true;
+    if (frame_to_drop != nullptr)
+    {
+        // Note: intentionally not calling HandleLostFrame() here.
+        // It is best if the tracking of lost frames is managed in one place and
+        // on a single thread. It is currently being tracked on the AcqThreadLoop
+        // thread. That thread will notice the gap in frame numbers and will
+        // track them as lost. Adding handling here would double-count lost
+        // frames and would require locking to guard m_uncaughtFrames.
+        UnuseFrame(std::move(frame_to_drop));
+    }
 }
 
 bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
@@ -334,49 +360,66 @@ bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
     if (!frame->CopyData())
         return false;
 
-    // Sync validity of frame in camera's circular buffer
-    size_t index;
-    if (m_camera->GetFrameIndex(*frame, index))
-    {
-        auto camFrame = m_camera->GetFrameAt(index);
-        if (camFrame)
-        {
-            camFrame->OverrideValidity(frame->IsValid());
-        }
-    }
-
     const uint32_t frameNr = frame->GetInfo().GetFrameNr();
 
-    if (frameNr <= m_lastFrameNumber)
+    // Double-check that the frame data in the pvcam circular buffer was not
+    // overwritten before it could be copied out in the above call to
+    // frame->CopyData(). If the camera has produced too many new frames since
+    // the frame of interest, consider the frame as lost.
+    if (m_latest_received_frame_number > frameNr + m_toBeProcessedFramesMax - 1)
+    {
+        HandleLostFrame(std::move(frame));
+        Log::LogD("Treating frame number %u as lost because of the "
+            "possibility that its data was overwritten in the pvcam "
+            "circular buffer before it could be copied out.",
+            (unsigned int) frameNr);
+        return true;
+    }
+
+    // Sync validity of frame in camera's circular buffer
+
+    // TODO - REVISIT.
+    // m_camera->GetFrameIndex() and m_camera->GetFrameAt() are not thread
+    // safe. The frame map is updated on another thread. TBD - can the
+    // frame map be entirely removed?  Why is it needed?
+    size_t index;
+    std::shared_ptr<pm::Frame> camFrame = nullptr;
+    if (!m_camera->GetFrameIndex(*frame, index) ||
+        (camFrame = m_camera->GetFrameAt(index)) == nullptr)
+    {
+        // the frame is no longer in the camera's circular buffer
+        HandleLostFrame(std::move(frame));
+        Log::LogE("Lost frame number %u: missing from the camera's circular buffer",
+            (unsigned int) frameNr);
+        return true;
+    }
+
+    // TODO - REVISIT.
+    // The call to camFrame->OverrideValidity() looks fishy.
+    // Now that frame->CopyData() has been called, frame should be valid,
+    // but I do not see why or how camFrame can be considered valid.
+    // Can the call to OverrideValidity be removed?
+    camFrame->OverrideValidity(frame->IsValid());
+
+    if (frameNr <= m_last_processed_frame_number)
     {
         m_outOfOrderFrameCount++;
+        HandleLostFrame(std::move(frame));
 
         Log::LogE("Frame number out of order: %u, last frame number was %u, ignoring",
-                frameNr, m_lastFrameNumber);
+                frameNr, m_last_processed_frame_number);
 
-        m_toBeProcessedFramesLost++;
-        // Drop frame for invalid frame number
-        UnuseFrame(std::move(frame));
-
-        // Number out of order, cannot add it to m_unsavedFrames stats
         return true;
     }
 
     // Check to make sure we didn't skip a frame
-    const uint32_t lostFrameCount = frameNr - m_lastFrameNumber - 1;
-    if (lostFrameCount > 0)
+    for (uint32_t lost_frame_number = m_last_processed_frame_number + 1;
+        lost_frame_number < frameNr; lost_frame_number++)
     {
-        m_toBeProcessedFramesLost += lostFrameCount;
-
-        // Log all the frame numbers we missed
-        for (uint32_t frameNumber = m_lastFrameNumber + 1;
-                frameNumber < frameNr; frameNumber++)
-        {
-            // TODO: Handle return value, abort on failure?
-            m_uncaughtFrames.AddItem(frameNumber);
-        }
+        HandleLostFrameNumber(lost_frame_number);
     }
-    m_lastFrameNumber = frameNr;
+
+    m_last_processed_frame_number = frameNr;
 
     m_toBeProcessedFramesValid++;
 
@@ -387,77 +430,107 @@ bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
         m_fpsLimiter->InputNewFrame(frame->Clone());
     }
 
-    // Context for saveLock to be held
-    {
-        std::unique_lock<std::mutex> saveLock(m_toBeSavedFramesMutex);
-
-        if (m_toBeSavedFramesSize < m_toBeSavedFramesMax)
-        {
-            m_toBeSavedFrames.push(std::move(frame));
-            m_toBeSavedFramesSize = m_toBeSavedFrames.size();
-
-            if (m_toBeSavedFramesMaxPeak < m_toBeSavedFramesSize)
-            {
-                // operator= cannot be used as it is deleted
-                m_toBeSavedFramesMaxPeak.exchange(m_toBeSavedFramesSize);
-            }
-        }
-        else
-        {
-            m_toBeSavedFramesLost++;
-
-            saveLock.unlock();
-
-            // Drop the frame, not enough RAM to queue it for saving
-            UnuseFrame(std::move(frame));
-
-            // Log the dropped frame
-            m_unsavedFrames.AddItem(
-                    m_toBeProcessedFramesValid + m_toBeProcessedFramesLost);
-        }
-    }
-    // Notify all waiters about new queued frame
-    m_toBeSavedFramesCond.notify_all();
-
+    EnqueueFrameToBeSaved(std::move(frame));
     return true;
 }
 
-void pm::Acquisition::UpdateToBeSavedFramesMax()
+// Returns the specified frame to the "unused" queue and records the lost
+// frame number for later reporting.
+void pm::Acquisition::HandleLostFrame(std::unique_ptr<Frame> frame)
 {
-    static const size_t totalRamMB = GetTotalRamMB();
-    const size_t availRamMB = GetAvailRamMB();
-    /* We allow allocation of memory up to bigger value from these:
-       - 90% of total RAM
-       - whole available RAM reduced by 1024MB */
-    const size_t dontTouchRamMB = std::min<size_t>(totalRamMB * (100 - 90) / 100, 1024);
-    const size_t maxFreeRamMB =
-        (availRamMB >= dontTouchRamMB) ? availRamMB - dontTouchRamMB : 0;
-    // Left shift by 20 bits "converts" megabytes to bytes
-    const size_t maxFreeRamBytes = maxFreeRamMB << 20;
+    HandleLostFrameNumber(frame->GetInfo().GetFrameNr());
+    UnuseFrame(std::move(frame));
+}
 
-    const size_t frameBytes = m_camera->GetFrameAcqCfg().GetFrameBytes();
-    const size_t maxNewFrameCount =
-        (frameBytes == 0) ? 0 : maxFreeRamBytes / frameBytes;
+// Records the specified lost frame number for later reporting
+void pm::Acquisition::HandleLostFrameNumber(const uint32_t frame_number)
+{
+    m_toBeProcessedFramesLost++;
+    m_uncaughtFrames.AddItem(frame_number);
+}
 
-    m_toBeSavedFramesMax = m_toBeSavedFramesSize + maxNewFrameCount;
+// Adds the specified frame to the "to be saved" queue
+void pm::Acquisition::EnqueueFrameToBeSaved(std::unique_ptr<Frame> frame)
+{
+    std::unique_lock<std::mutex> saveLock(m_toBeSavedFramesMutex);
+
+    if (m_toBeSavedFramesSize >= m_toBeSavedFramesMax)
+    {
+        // Drop the frame, max queue size has been reached
+        m_toBeSavedFramesLost++;
+        saveLock.unlock();
+
+        UnuseFrame(std::move(frame));
+
+        // Log the dropped frame
+        m_unsavedFrames.AddItem(
+            m_toBeProcessedFramesValid + m_toBeProcessedFramesLost);
+        return;
+    }
+
+    m_toBeSavedFrames.push(std::move(frame));
+    m_toBeSavedFramesSize = m_toBeSavedFrames.size();
+
+    if (m_toBeSavedFramesMaxPeak < m_toBeSavedFramesSize)
+        m_toBeSavedFramesMaxPeak.store(m_toBeSavedFramesSize);
+    // Notify all waiters about new queued frame
+    m_toBeSavedFramesCond.notify_all();
+}
+
+// Updates and returns the max number of frames allowed in the "to be saved"
+// frame queue. Currently 1 Gb worth of frames.
+// Call this whenever the frame acquisition settings change, since the
+// bytes needed per frame depends on those settings.
+size_t pm::Acquisition::UpdateToBeSavedFramesMax()
+{
+    const size_t kMaxBytes = 1 << 30;  // 1 Gb
+    const size_t kHardMinFrames = 128;
+    const size_t kHardMaxFrames = 65536;
+
+    const size_t bytes_per_frame = m_camera->GetFrameAcqCfg().GetFrameBytes();
+
+    if (bytes_per_frame < 1)
+    {
+        Log::LogE("Cannot determine the optimal size of the 'to be saved' "
+            "frame buffer: bytes per frame is unknown");
+        m_toBeSavedFramesMax = 0;
+        return m_toBeSavedFramesMax;
+    }
+
+    m_toBeSavedFramesMax = kMaxBytes / bytes_per_frame;
+    if (m_toBeSavedFramesMax < kHardMinFrames)
+        m_toBeSavedFramesMax = kHardMinFrames;
+    else if (m_toBeSavedFramesMax > kHardMaxFrames)
+        m_toBeSavedFramesMax = kHardMaxFrames;
+
+    return m_toBeSavedFramesMax;
 }
 
 bool pm::Acquisition::PreallocateUnusedFrames()
 {
-    // Limit the queue with captured frames to half of the circular buffer size
-    m_toBeProcessedFramesMax =
-        (m_camera->GetSettings().GetBufferFrameCount() / 2) + 1;
-
-    UpdateToBeSavedFramesMax();
-
     const Frame::AcqCfg frameAcqCfg = m_camera->GetFrameAcqCfg();
-    const size_t frameCount = m_camera->GetSettings().GetAcqFrameCount();
     const size_t frameBytes = frameAcqCfg.GetFrameBytes();
+
+    // The "to be processed" queue must be smaller than the pvcam circular
+    // buffer because frame data does not get copied out of the pvcam
+    // circular buffer until frames are removed from this queue,
+    // the call to frame->CopyData() in HandleNewFrame().
+    const size_t unsafe_frames = 2;
+    if (m_camera->GetMaxBufferredFrames() <= unsafe_frames)
+    {
+        Log::LogE("Cannot initialize image acquisition: pvcam circular buffer is too small");
+        return false;
+    }
+    m_toBeProcessedFramesMax = m_camera->GetMaxBufferredFrames() - unsafe_frames;
+
+    const size_t max_frame_count = UpdateToBeSavedFramesMax();
+
+    const size_t frameCount = m_camera->GetSettings().GetAcqFrameCount();
     const size_t frameCountIn100MB =
         (frameBytes == 0) ? 0 : ((100 << 20) / frameBytes);
     const size_t recommendedFrameCount = std::min<size_t>(
             10 + std::min<size_t>(frameCount, frameCountIn100MB),
-            m_toBeSavedFramesMax);
+            max_frame_count);
 
     // Moved unprocessed frames to unused frames queue
     while (!m_toBeProcessedFrames.empty())
@@ -577,7 +650,8 @@ void pm::Acquisition::AcqThreadLoop()
     m_toBeProcessedFramesLost = 0;
     m_toBeProcessedFramesMaxPeak = 0;
 
-    m_lastFrameNumber = 0;
+    m_last_processed_frame_number = 0;
+    m_latest_received_frame_number = 0;
     m_outOfOrderFrameCount = 0;
     m_uncaughtFrames.Clear();
 
@@ -588,6 +662,8 @@ void pm::Acquisition::AcqThreadLoop()
     const size_t frameCount = (isAcqModeLive)
         ? 0
         : m_camera->GetSettings().GetAcqFrameCount();
+
+    pm::SetCurrentThreadPriorityAboveNormal();
 
     if (!m_camera->StartExp(&Acquisition::EofCallback, this))
     {
@@ -672,6 +748,8 @@ void pm::Acquisition::DiskThreadLoop()
 
     const StorageType storageType = m_camera->GetSettings().GetStorageType();
     const size_t maxStackSize = m_camera->GetSettings().GetMaxStackSize();
+
+    pm::SetCurrentThreadPriorityAboveNormal();
 
     if (maxStackSize > 0)
         DiskThreadLoop_Stack();
@@ -1086,7 +1164,6 @@ void pm::Acquisition::UpdateThreadLoop()
 {
     const std::vector<std::string> progress{ "|", "/", "-", "\\" };
     size_t progressIndex = 0;
-    size_t maxRefreshCounter = 0;
 
     while (!(m_acqThreadDoneFlag && m_diskThreadDoneFlag))
     {
@@ -1099,13 +1176,6 @@ void pm::Acquisition::UpdateThreadLoop()
         }
         if (m_acqThreadDoneFlag && m_diskThreadDoneFlag)
             break;
-
-        // Don't update limits too often
-        maxRefreshCounter++;
-        if ((maxRefreshCounter % 8 == 0) && !m_acqThreadDoneFlag)
-        {
-            UpdateToBeSavedFramesMax();
-        }
 
         // Print info about progress
         std::ostringstream ss;
@@ -1184,8 +1254,7 @@ void pm::Acquisition::PrintDiskThreadStats() const
         << "\n  Average # frames between drops = " << m_unsavedFrames.GetAvgSpacing()
         << "\n  Longest series of dropped frames = " << m_unsavedFrames.GetLargestCluster()
         << "\n  Max. used frames = " << m_toBeSavedFramesMaxPeak
-        // m_toBeSavedFramesMax could be less than a peak which would confuse users
-        //<< " out of " << m_toBeSavedFramesMax
+        << " out of " << m_toBeSavedFramesMax
         << "\n  Processing ran with " << fps << " fps (~" << MiBps << "MiB/s)\n";
 
     Log::LogI(ss.str());
