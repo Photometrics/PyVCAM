@@ -213,6 +213,10 @@ protected:
 
     // Other non-PVCAM and combined parameters
     uns32 m_acqFrameCount;
+
+    // Size (number of frames) of the circular frame buffer (or sequence frame
+    // buffer) to be allocated and provided to pvcam.
+    // If zero, an appropriate size will automatically be determined.
     uns32 m_bufferFrameCount;
 
     uns16 m_binSer;

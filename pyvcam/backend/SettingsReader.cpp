@@ -25,7 +25,7 @@ pm::SettingsReader::SettingsReader()
     m_lastMuxedSignal(1),
     m_expTimeRes(EXP_RES_ONE_MILLISEC),
     m_acqFrameCount(1),
-    m_bufferFrameCount(10),
+    m_bufferFrameCount(0),
     m_binSer(1),
     m_binPar(1),
     m_regions(),

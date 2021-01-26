@@ -418,7 +418,7 @@ std::shared_ptr<pm::Frame> pm::Frame::Clone(bool deepCopy) const
     return frame;
 }
 
-bool pm::Frame::Copy(const Frame& from, Frame& to, bool deepCopy) const
+bool pm::Frame::Copy(const Frame& from, Frame& to, bool deepCopy)
 {
     if (from.m_acqCfg != to.m_acqCfg)
     {
@@ -441,6 +441,7 @@ bool pm::Frame::Copy(const Frame& from, Frame& to, bool deepCopy) const
     }
     else
     {
+        to.SetInfo(from.m_info);
         to.m_shallowInfo = from.m_info;
     }
 

@@ -158,7 +158,7 @@ private:
     /* Uses SetDataPointer and CopyData methods to make the copy. It also copies
        frame info and trajectories. Metadata if available has to be decoded by
        calling DecodeMetadata method as we cannot safely do a deep copy. */
-    bool Copy(const Frame& from, Frame& to, bool deepCopy = true) const;
+    static bool Copy(const Frame& from, Frame& to, bool deepCopy = true);
 
 private:
     const Frame::AcqCfg m_acqCfg;

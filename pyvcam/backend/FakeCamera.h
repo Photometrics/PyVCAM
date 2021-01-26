@@ -82,6 +82,10 @@ private:
     // This is the function used to generate frames.
     void FrameGeneratorLoop(); // Routine launched by m_framegenThread
 
+    // Returns the desired size (number of frames) of the circular (or sequence)
+    // frame buffer
+    uns32 GetDesiredFrameBufferSizeInFrames(const SettingsReader& settings);
+
 private:
     static bool s_isInitialized; // Init state is common for all cameras
 

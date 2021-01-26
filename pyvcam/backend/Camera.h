@@ -97,6 +97,8 @@ public:
     const std::vector<Speed>& GetSpeedTable() const
     { return m_speeds; }
 
+    size_t Camera::GetMaxBufferredFrames() const;
+
     // Setup acquisition
     virtual bool SetupExp(const SettingsReader& settings);
     // Start acquisition
@@ -150,9 +152,8 @@ protected:
     std::vector<Speed> m_speeds;
 
     Frame::AcqCfg m_frameAcqCfg; // Number of bytes in one frame in buffer, etc.
-    uns32 m_frameCount; // Number of frames in buffer (circ/sequence)
-    void* m_buffer; // PVCAM buffer
-
+    void* m_buffer; // circular (or sequence) frame buffer
+    uns32 m_bufferSize; // size (in bytes) of the frame buffer
     std::vector<std::shared_ptr<Frame>> m_frames;
     // Lookup map - frameNr is the key, index to m_frames vector is the value
     mutable std::map<uint32_t, size_t> m_framesMap;
