@@ -11,7 +11,6 @@
 
 /* Local */
 #include "Camera.h"
-#include "FakeCamera.h"
 #include "Log.h"
 #include "osutils.h"
 #include "PrdFileUtils.h"
@@ -352,6 +351,9 @@ void pm::Acquisition::EnqueueFrameToBeProcessed(std::unique_ptr<Frame> frame)
     if (m_toBeProcessedFramesMaxPeak < frames_awaiting_processing)
         m_toBeProcessedFramesMaxPeak.store(frames_awaiting_processing);
 
+    frames_awaiting_processing_sum += frames_awaiting_processing;
+    frames_awaiting_processing_observations += 1;
+
     if (frame_to_drop != nullptr)
     {
         // Note: intentionally not calling HandleLostFrame() here.
@@ -643,6 +645,8 @@ void pm::Acquisition::AcqThreadLoop()
     m_toBeProcessedFramesValid = 0;
     m_toBeProcessedFramesLost = 0;
     m_toBeProcessedFramesMaxPeak = 0;
+    frames_awaiting_processing_sum = 0;
+    frames_awaiting_processing_observations = 0;
 
     m_last_processed_frame_number = 0;
     m_latest_received_frame_number = 0;
@@ -1216,6 +1220,9 @@ void pm::Acquisition::PrintAcqThreadStats() const
         << "\n  Average # frames between drops = " << m_uncaughtFrames.GetAvgSpacing()
         << "\n  Longest series of dropped frames = " << m_uncaughtFrames.GetLargestCluster()
         << "\n  Peak # frames queued = " << m_toBeProcessedFramesMaxPeak
+        << " out of " << m_toBeProcessedFramesMax
+        << "\n  Average # frames queued = "
+        << frames_awaiting_processing_sum / (double) frames_awaiting_processing_observations
         << " out of " << m_toBeProcessedFramesMax
         << "\n  Acquisition ran with " << fps << " fps (~" << MiBps << "MiB/s)";
     if (m_outOfOrderFrameCount > 0)

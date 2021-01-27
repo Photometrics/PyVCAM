@@ -20,7 +20,6 @@
 /* Local */
 #include "Acquisition.h"
 #include "Camera.h"
-#include "ConsoleLogger.h"
 #include "Frame.h"
 #include "Log.h"
 #include "PrdFileFormat.h"
@@ -74,8 +73,13 @@ bool Helper::InitAcquisition()
 		return false;
 	}
 
+	pm::FpsLimiterCallbackType fpslimiter_callback = [this](std::shared_ptr<pm::Frame> frame)
+	{
+		return this->OnFpsLimiterEvent(frame);
+	};
+
 	// Get FPS Listener instance
-	if (!m_fpslimiter->Start(this))
+	if (!m_fpslimiter->Start(fpslimiter_callback))
 	{
 		pm::Log::LogE("Failure starting FPS listener instance!!!");
 		return false;
@@ -221,15 +225,30 @@ bool Helper::StartAcquisition()
 	// Run acquisition
 	g_userAbortFlag = false;
 	m_userAbortFlag = false;
-	if (!m_acquisition->Start(m_fpslimiter))
+
+	bool success = false;
+	switch (m_settings.GetAcqMode())
+	{
+		case pm::AcqMode::LiveCircBuffer:
+		case pm::AcqMode::LiveTimeLapse:
+			success = m_acquisition->Start(m_fpslimiter);
+			break;
+		default:
+			// Not passing m_fpslimiter to m_acquisition->Start() makes
+			// acquisition faster and reduces frame drops at the expense of
+			// preventing live feed during acquisition. If live feed is needed
+			// during acquisition, this will need to be revisited.
+			success = m_acquisition->Start(nullptr);
+			break;
+	}
+
+	if (!success)
 	{
 		g_acquisition = m_acquisition;
 		return false;
 	}
-	else
-	{
-		acq_active = true;
-	}
+
+	acq_active = true;
 
 	return true;
 }
@@ -311,7 +330,7 @@ bool Helper::GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16
 	return true;
 }
 
-void Helper::OnFpsLimiterEvent(pm::FpsLimiter* sender, std::shared_ptr<pm::Frame> frame)
+void Helper::OnFpsLimiterEvent(std::shared_ptr<pm::Frame> frame)
 {
 	// Hold frame mutex
     std::lock_guard<std::mutex> lock(m_frameMutex);

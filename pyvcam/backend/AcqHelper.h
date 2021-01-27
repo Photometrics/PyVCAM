@@ -8,7 +8,7 @@
 #include "Camera.h"
 #include "Settings.h"
 
-class Helper final : private pm::IFpsLimiterListener
+class Helper final
 {
 public:
 	Helper();
@@ -40,9 +40,8 @@ public: // Acquisition functions
 	void InputTimerTick(); // Input FPS limiter timer tick
 	bool GetFrameData(void** data, uns32* frameBytes, uns32* frameNum, uns16* frameW, uns16* frameH);
 
-private: // IFpsLimiterListener
-    virtual void OnFpsLimiterEvent(pm::FpsLimiter* sender,
-            std::shared_ptr<pm::Frame> frame) override;
+private:
+    void OnFpsLimiterEvent(std::shared_ptr<pm::Frame> frame);
 
 private:
 	bool InitAcquisition();

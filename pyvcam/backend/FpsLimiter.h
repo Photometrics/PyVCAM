@@ -3,6 +3,7 @@
 #define PM_FPSLIMITER_H
 
 /* System */
+#include <functional>
 #include <atomic>
 #include <condition_variable>
 #include <memory>
@@ -14,14 +15,10 @@
 
 namespace pm {
 
-class FpsLimiter;
+// typedef std::function<void(uint32_t)> cb_t;
+using FpsLimiterCallbackType = std::function< void(std::shared_ptr<pm::Frame>) >;
 
-class IFpsLimiterListener
-{
-public:
-    virtual void OnFpsLimiterEvent(FpsLimiter* sender,
-            std::shared_ptr<pm::Frame> frame) = 0;
-};
+// std::function<void(std::shared_ptr<pm::Frame>)>;
 
 class FpsLimiter final
 {
@@ -33,7 +30,7 @@ public:
     FpsLimiter& operator=(const FpsLimiter&) = delete;
 
 public:
-    bool Start(IFpsLimiterListener* listener);
+    bool Start(FpsLimiterCallbackType callback_function);
     bool IsRunning() const;
     void Stop(bool processWaitingFrame = false);
 
@@ -44,19 +41,19 @@ private:
     void ThreadLoop();
 
 private:
-    IFpsLimiterListener* m_listener;
+    FpsLimiterCallbackType m_callback_func = nullptr;
 
     std::mutex m_mutex; // Covers all members
 
-    std::thread* m_thread;
-    std::atomic<bool> m_abortFlag;
+    std::thread* m_thread = nullptr;
+    std::atomic<bool> m_abortFlag = false;
 
     std::mutex m_eventMutex; // Covers only m_event* members
     std::condition_variable m_eventCond;
-    std::atomic<bool> m_eventFlag;
+    std::atomic<bool> m_eventFlag = false;
 
-    std::atomic<bool> m_timerEventOn;
-    std::atomic<bool> m_frameEventOn;
+    std::atomic<bool> m_timerEventOn = false;
+    std::atomic<bool> m_frameEventOn = false;
 
     std::shared_ptr<Frame> m_frame;
 };

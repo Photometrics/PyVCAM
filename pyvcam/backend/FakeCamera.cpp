@@ -174,7 +174,7 @@ uns32 pm::FakeCamera::GetDesiredFrameBufferSizeInFrames(const SettingsReader& se
 
         case AcqMode::SnapCircBuffer:
         case AcqMode::LiveCircBuffer:
-            frame_count = 10; // arbitrary
+            frame_count = 50;
             break;
 
         case AcqMode::SnapTimeLapse:

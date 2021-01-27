@@ -4,16 +4,6 @@
 #include <algorithm>
 
 pm::FpsLimiter::FpsLimiter()
-    : m_listener(nullptr),
-    m_mutex(),
-    m_thread(nullptr),
-    m_abortFlag(false),
-    m_eventMutex(),
-    m_eventCond(),
-    m_eventFlag(false),
-    m_timerEventOn(false),
-    m_frameEventOn(false),
-    m_frame(nullptr)
 {
 }
 
@@ -22,17 +12,17 @@ pm::FpsLimiter::~FpsLimiter()
     Stop();
 }
 
-bool pm::FpsLimiter::Start(IFpsLimiterListener* listener)
+bool pm::FpsLimiter::Start(FpsLimiterCallbackType callback_func)
 {
     std::unique_lock<std::mutex> lock(m_mutex);
 
     if (m_thread)
         return true;
 
-    if (!listener)
+    if (!callback_func)
         return false;
 
-    m_listener = listener;
+    m_callback_func = callback_func;
 
     m_frame = nullptr;
 
@@ -80,6 +70,8 @@ void pm::FpsLimiter::Stop(bool processLastWaitingFrame)
 
         m_frame = nullptr;
     }
+
+    m_callback_func = nullptr;
 }
 
 void pm::FpsLimiter::InputTimerTick()
@@ -152,7 +144,8 @@ void pm::FpsLimiter::ThreadLoop()
             // Need a copy as m_frame can be changed while entering OnFpsLimiterEvent
             frame = m_frame;
         }
-        m_listener->OnFpsLimiterEvent(this, frame);
+
+        m_callback_func(frame);
         frame = nullptr;
     }
 }

@@ -184,6 +184,9 @@ private:
     std::atomic<size_t>                 m_toBeProcessedFramesMax;
     // Highest number of frames that were ever stored in this queue
     std::atomic<size_t>                 m_toBeProcessedFramesMaxPeak;
+    // Sum of frames awaiting processing, for the average calculation
+    uint64_t                            frames_awaiting_processing_sum = 0;
+    uint64_t                            frames_awaiting_processing_observations = 0;
     // Holds how many new frames have been lost
     std::atomic<size_t>                 m_toBeProcessedFramesLost;
     // Holds how many new frames have been processed
