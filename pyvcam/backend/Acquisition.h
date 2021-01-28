@@ -16,7 +16,7 @@
 /* Local */
 #include "FpsLimiter.h"
 #include "Frame.h"
-#include "ListStatistics.h"
+#include "LostFrameTracker.h"
 #include "PrdFileFormat.h"
 #include "Timer.h"
 
@@ -83,10 +83,11 @@ private:
 
     // Returns the specified frame to the "unused" queue and records the lost
     // frame number for later reporting.
-    void HandleLostFrame(std::unique_ptr<Frame> frame);
+    void DropFrame(std::unique_ptr<Frame> frame);
 
-    // Records the specified lost frame number for later reporting
-    void HandleLostFrameNumber(const uint32_t frame_number);
+    // Records the specified lost frame numbers for later reporting
+    void TrackLostFrameRange(const uint32_t first_lost_frame_number,
+        const uint32_t last_lost_frame_number);
 
     // Adds the specified frame to the "to be saved" queue
     void EnqueueFrameToBeSaved(std::unique_ptr<Frame> frame);
@@ -121,10 +122,12 @@ private:
 
     uint32_t m_maxFramesPerStack; // Limited to 32 bit
 
-    // Uncaught frames statistics
-    ListStatistics<size_t> m_uncaughtFrames;
+    // Uncaught frames statistics and its lock/guard
+    LostFrameTracker m_uncaughtFrames;
+    std::mutex m_to_be_processed_frames_lost_mutex;
+
     // Unsaved frames statistics
-    ListStatistics<size_t> m_unsavedFrames;
+    LostFrameTracker m_unsavedFrames;
 
     std::thread*      m_acqThread;
     std::atomic<bool> m_acqThreadAbortFlag;
@@ -149,7 +152,7 @@ private:
     // Latest frame number received from the camera
     std::atomic<uint32_t> m_latest_received_frame_number;
 
-    std::atomic<size_t> m_outOfOrderFrameCount;
+    size_t m_outOfOrderFrameCount;
 
     // Mutex that guards all non-atomic m_updateThread* variables
     std::mutex              m_updateThreadMutex;
@@ -183,7 +186,7 @@ private:
     // Maximal size of queue with captured frames
     std::atomic<size_t>                 m_toBeProcessedFramesMax;
     // Highest number of frames that were ever stored in this queue
-    std::atomic<size_t>                 m_toBeProcessedFramesMaxPeak;
+    size_t                              m_toBeProcessedFramesPeak;
     // Sum of frames awaiting processing, for the average calculation
     uint64_t                            frames_awaiting_processing_sum = 0;
     uint64_t                            frames_awaiting_processing_observations = 0;
@@ -203,7 +206,7 @@ private:
     // Maximal size of the "to be saved frames" queue
     std::atomic<size_t>                 m_toBeSavedFramesMax;
     // Highest number of frames that were ever stored in m_toBeSavedFrames queue
-    std::atomic<size_t>                 m_toBeSavedFramesMaxPeak;
+    size_t                              m_toBeSavedFramesPeak;
     // Holds how many queued frames have not been saved to disk
     std::atomic<size_t>                 m_toBeSavedFramesLost;
     // Holds how many new frames have been processed

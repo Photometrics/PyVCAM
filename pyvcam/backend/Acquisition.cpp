@@ -57,7 +57,7 @@ pm::Acquisition::Acquisition(std::shared_ptr<Camera> camera)
     m_toBeProcessedFramesCond(),
     m_toBeProcessedFramesSize(0),
     m_toBeProcessedFramesMax(1),
-    m_toBeProcessedFramesMaxPeak(0),
+    m_toBeProcessedFramesPeak(0),
     m_toBeProcessedFramesLost(0),
     m_toBeProcessedFramesValid(0),
     m_toBeSavedFrames(),
@@ -65,7 +65,7 @@ pm::Acquisition::Acquisition(std::shared_ptr<Camera> camera)
     m_toBeSavedFramesCond(),
     m_toBeSavedFramesSize(0),
     m_toBeSavedFramesMax(1),
-    m_toBeSavedFramesMaxPeak(0),
+    m_toBeSavedFramesPeak(0),
     m_toBeSavedFramesLost(0),
     m_toBeSavedFramesValid(0),
     m_toBeSavedFramesSaved(0),
@@ -311,7 +311,12 @@ bool pm::Acquisition::HandleEofCallback()
         return false;
     }
 
-    m_latest_received_frame_number = frame->GetInfo().GetFrameNr();
+    uint32_t frame_number = frame->GetInfo().GetFrameNr();
+    uint32_t last_frame_number =
+        m_latest_received_frame_number.exchange(frame_number);
+
+    if (frame_number > last_frame_number + 1 && last_frame_number != 0)
+        TrackLostFrameRange(last_frame_number, frame_number - 1);
 
     // Put frame to queue for processing
     EnqueueFrameToBeProcessed(std::move(frame));
@@ -348,66 +353,50 @@ void pm::Acquisition::EnqueueFrameToBeProcessed(std::unique_ptr<Frame> frame)
     m_toBeProcessedFramesCond.notify_all();
 
     // update the peak size of the "frames to be processed" queue
-    if (m_toBeProcessedFramesMaxPeak < frames_awaiting_processing)
-        m_toBeProcessedFramesMaxPeak.store(frames_awaiting_processing);
+    if (m_toBeProcessedFramesPeak < frames_awaiting_processing)
+        m_toBeProcessedFramesPeak = frames_awaiting_processing;
 
     frames_awaiting_processing_sum += frames_awaiting_processing;
     frames_awaiting_processing_observations += 1;
 
-    if (frame_to_drop != nullptr)
-    {
-        // Note: intentionally not calling HandleLostFrame() here.
-        // It is best if the tracking of lost frames is managed in one place and
-        // on a single thread. It is currently being tracked on the AcqThreadLoop
-        // thread. That thread will notice the gap in frame numbers and will
-        // track them as lost. Adding handling here would double-count lost
-        // frames and would require locking to guard m_uncaughtFrames.
-        UnuseFrame(std::move(frame_to_drop));
-    }
+    if (frame_to_drop)
+        DropFrame(std::move(frame_to_drop));
 }
 
 bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
 {
+    const uint32_t frameNr = frame->GetInfo().GetFrameNr();
+
     // Do deep copy
     if (!frame->CopyData())
     {
-        Log::LogE("Dropping a frame: something went wrong with the data copy");
-        HandleLostFrame(std::move(frame));
+        Log::LogE("Something went wrong with the data copy on frame number %u",
+            (unsigned int) frameNr);
+        DropFrame(std::move(frame));
         return false;
     }
 
-    const uint32_t frameNr = frame->GetInfo().GetFrameNr();
-
-    // Double-check that the frame data in the pvcam circular buffer was not
-    // overwritten before it could be copied out in the above call to
+    // Check if the frame data in the pvcam circular buffer was in danger of
+    // being overwritten before it could be copied out in the above call to
     // frame->CopyData(). If the camera has produced too many new frames since
-    // the frame of interest, consider the frame as lost.
+    // the frame of interest, drop the frame.
     if (m_latest_received_frame_number > frameNr + m_toBeProcessedFramesMax - 1)
     {
-        HandleLostFrame(std::move(frame));
-        Log::LogD("Treating frame number %u as lost because of the "
-            "possibility that its data was overwritten in the pvcam "
-            "circular buffer before it could be copied out.",
-            (unsigned int) frameNr);
+        DropFrame(std::move(frame));
         return true;
     }
 
     if (frameNr <= m_last_processed_frame_number)
     {
         m_outOfOrderFrameCount++;
-        HandleLostFrame(std::move(frame));
+        DropFrame(std::move(frame));
 
-        Log::LogE("Frame number out of order: %u, last frame number was %u, ignoring",
-                frameNr, m_last_processed_frame_number);
+        Log::LogE("Frame number out of order: %u"
+            ", last frame number was %u. Dropping this frame.",
+            (unsigned int) frameNr,
+            (unsigned int) m_last_processed_frame_number);
 
         return true;
-    }
-
-    // Check to make sure we didn't skip a frame
-    for (uint32_t lost_frame_number = m_last_processed_frame_number + 1;
-        lost_frame_number < frameNr; lost_frame_number++)
-    {
-        HandleLostFrameNumber(lost_frame_number);
     }
 
     m_last_processed_frame_number = frameNr;
@@ -427,17 +416,27 @@ bool pm::Acquisition::HandleNewFrame(std::unique_ptr<Frame> frame)
 
 // Returns the specified frame to the "unused" queue and records the lost
 // frame number for later reporting.
-void pm::Acquisition::HandleLostFrame(std::unique_ptr<Frame> frame)
+void pm::Acquisition::DropFrame(std::unique_ptr<Frame> frame)
 {
-    HandleLostFrameNumber(frame->GetInfo().GetFrameNr());
+    uint32_t frame_number = frame->GetInfo().GetFrameNr();
+    TrackLostFrameRange(frame_number, frame_number);
     UnuseFrame(std::move(frame));
 }
 
 // Records the specified lost frame number for later reporting
-void pm::Acquisition::HandleLostFrameNumber(const uint32_t frame_number)
+void pm::Acquisition::TrackLostFrameRange(
+    const uint32_t first_lost_frame_number, const uint32_t last_lost_frame_number)
 {
-    m_toBeProcessedFramesLost++;
-    m_uncaughtFrames.AddItem(frame_number);
+    if (last_lost_frame_number < first_lost_frame_number)
+        return;
+
+    uint32_t lost_frame_count = 1 + last_lost_frame_number - first_lost_frame_number;
+    m_toBeProcessedFramesLost += lost_frame_count;
+
+    {
+        std::unique_lock<std::mutex> lock(m_to_be_processed_frames_lost_mutex);
+        m_uncaughtFrames.AddRange(first_lost_frame_number, last_lost_frame_number);
+    }
 }
 
 // Adds the specified frame to the "to be saved" queue
@@ -470,8 +469,8 @@ void pm::Acquisition::EnqueueFrameToBeSaved(std::unique_ptr<Frame> frame)
     m_toBeSavedFramesCond.notify_all();
 
     // update the peak size of the "frames to be saved" queue
-    if (m_toBeSavedFramesMaxPeak < to_be_saved_frames_queue_size)
-        m_toBeSavedFramesMaxPeak.store(to_be_saved_frames_queue_size);
+    if (m_toBeSavedFramesPeak < to_be_saved_frames_queue_size)
+        m_toBeSavedFramesPeak = to_be_saved_frames_queue_size;
 }
 
 // Updates and returns the max number of frames allowed in the "to be saved"
@@ -644,7 +643,7 @@ void pm::Acquisition::AcqThreadLoop()
 
     m_toBeProcessedFramesValid = 0;
     m_toBeProcessedFramesLost = 0;
-    m_toBeProcessedFramesMaxPeak = 0;
+    m_toBeProcessedFramesPeak = 0;
     frames_awaiting_processing_sum = 0;
     frames_awaiting_processing_observations = 0;
 
@@ -740,7 +739,7 @@ void pm::Acquisition::DiskThreadLoop()
 
     m_toBeSavedFramesValid = 0;
     m_toBeSavedFramesLost = 0;
-    m_toBeSavedFramesMaxPeak = 0;
+    m_toBeSavedFramesPeak = 0;
     m_toBeSavedFramesSaved = 0;
     m_unsavedFrames.Clear();
 
@@ -1204,7 +1203,7 @@ void pm::Acquisition::PrintAcqThreadStats() const
 {
     const size_t frameCount = m_toBeProcessedFramesValid + m_toBeProcessedFramesLost;
     const double frameDropsPercent = (frameCount > 0)
-        ? ((double)m_uncaughtFrames.GetCount() / (double)frameCount) * 100
+        ? ((double) m_toBeProcessedFramesLost / (double) frameCount) * 100.0
         : 0.0;
     const double fps = (m_acqTime > 0.0)
         ? (double)m_toBeProcessedFramesValid / m_acqTime
@@ -1215,11 +1214,11 @@ void pm::Acquisition::PrintAcqThreadStats() const
     std::ostringstream ss;
     ss << "\nAcquisition thread queue stats:"
         << "\n    Frame count = " << frameCount
-        << "\n  # Frame drops = " << m_uncaughtFrames.GetCount()
+        << "\n  # Frame drops = " << m_toBeProcessedFramesLost
         << "\n  % Frame drops = " << frameDropsPercent
         << "\n  Average # frames between drops = " << m_uncaughtFrames.GetAvgSpacing()
         << "\n  Longest series of dropped frames = " << m_uncaughtFrames.GetLargestCluster()
-        << "\n  Peak # frames queued = " << m_toBeProcessedFramesMaxPeak
+        << "\n  Peak # frames queued = " << m_toBeProcessedFramesPeak
         << " out of " << m_toBeProcessedFramesMax
         << "\n  Average # frames queued = "
         << frames_awaiting_processing_sum / (double) frames_awaiting_processing_observations
@@ -1254,7 +1253,7 @@ void pm::Acquisition::PrintDiskThreadStats() const
         << "\n  % Frame drops = " << frameDropsPercent
         << "\n  Average # frames between drops = " << m_unsavedFrames.GetAvgSpacing()
         << "\n  Longest series of dropped frames = " << m_unsavedFrames.GetLargestCluster()
-        << "\n  Peak # frames queued = " << m_toBeSavedFramesMaxPeak
+        << "\n  Peak # frames queued = " << m_toBeSavedFramesPeak
         << " out of " << m_toBeSavedFramesMax
         << "\n  Processing ran with " << fps << " fps (~" << MiBps << "MiB/s)\n";
 

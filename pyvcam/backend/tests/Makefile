@@ -1,4 +1,4 @@
-
+# Makefile for PyVCAM unit tests
 
 TARGET = pyvcam_test.exe
 
@@ -9,7 +9,7 @@ all: $(TARGET)
 
 .PHONY: clean
 clean:
-    rm -f *.obj pyvcam_test.*
+    rm -f *.obj pyvcam_test.* *.pdb
 
 $(TARGET):$(SOURCES)
     cl \
