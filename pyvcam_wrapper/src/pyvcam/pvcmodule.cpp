@@ -776,14 +776,16 @@ pvc_get_frame(PyObject *self, PyObject *args)
 
         Py_BEGIN_ALLOW_THREADS
         while (checkStatusResult == PV_OK) {
-
+            if (camInstance.newData_ || camInstance.abortData_) {
+                break;
+            }
             // We want to wait for a new frame, but every so often check if readout failed
             std::unique_lock<std::mutex> lock(g_frameMutex);
             static const int READOUT_FAILED_TIMEOUT = 200;
             g_conditionalVariable.wait_for(lock, std::chrono::milliseconds(READOUT_FAILED_TIMEOUT));
 
             checkStatusResult = pl_exp_check_status(hCam, &status, &byte_cnt);
-            if (camInstance.newData_ || camInstance.abortData_ || status == READOUT_FAILED || status == READOUT_COMPLETE) {
+            if (status == READOUT_FAILED || status == READOUT_COMPLETE) {
                 break;
             }
         }
