@@ -763,7 +763,7 @@ get_frame(int16 hCam, int16 dimX, int16 dimY, int16 bitsPerPixel, bool oldestFra
         uns32 byte_cnt;
         rs_bool checkStatusResult = pl_exp_check_status(hCam, &status, &byte_cnt);
 
-        Py_BEGIN_ALLOW_THREADS
+        /*Py_BEGIN_ALLOW_THREADS
         while (checkStatusResult == PV_OK) {
             if (camInstance.newData_ || camInstance.abortData_) {
                 break;
@@ -779,9 +779,13 @@ get_frame(int16 hCam, int16 dimX, int16 dimY, int16 bitsPerPixel, bool oldestFra
             }
         }
         Py_END_ALLOW_THREADS
-
+        */
         std::lock_guard<std::mutex> lock(g_camInstanceMutex);
 
+        if (!camInstance.newData_) {
+            PyErr_SetString(PyExc_RuntimeError, "no frames to read.");
+            return NULL;
+        }
         if (checkStatusResult == PV_FAIL) {
             camInstance.newData_ = false;
             set_g_msg();
