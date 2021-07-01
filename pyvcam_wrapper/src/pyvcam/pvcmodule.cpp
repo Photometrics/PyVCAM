@@ -144,9 +144,9 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
         }
         else {
             // Add frame to queue. Reset the queue in live mode so that returned frame is the latest
-            if (!camInstance.seqMode_) {
+            /*if (!camInstance.seqMode_) {
                 camInstance.resetQueue();
-            }
+            }*/
 
             frame.count = camInstance.frameCnt_;
             camInstance.frameQueue_.push(frame);
