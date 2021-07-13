@@ -1,0 +1,11 @@
+LICENSE
+README.md
+setup.py
+pyvcam.egg-info/PKG-INFO
+pyvcam.egg-info/SOURCES.txt
+pyvcam.egg-info/dependency_links.txt
+pyvcam.egg-info/top_level.txt
+src/pyvcam/__init__.py
+src/pyvcam/camera.py
+src/pyvcam/constants.py
+src/pyvcam/pvcmodule.cpp
