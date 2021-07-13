@@ -97,7 +97,8 @@ setup(name='pyvcam',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
-      ext_modules=ext_modules)
+      ext_modules=ext_modules,
+      install_requires=['wxPython','pyserial','opencv-python','numpy','libtiff'] )
 
 # TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
 # pip.main(['install', 'wxPython'])
