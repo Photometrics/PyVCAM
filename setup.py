@@ -59,7 +59,7 @@ include_dirs = [numpy.get_include()]
 
 if is_linux:
     extra_compile_args = ['-std=c++11']
-    include_dirs.append('{}/include/'.format(pvcam_sdk_path))
+    include_dirs.append(f'{pvcam_sdk_path}/include/')
 
     if is_arch_aarch64:
         lib_dirs = [f'{pvcam_sdk_path}/library/aarch64']
