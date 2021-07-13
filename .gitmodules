@@ -1,0 +1,3 @@
+[submodule "pvcam-sdk"]
+	path = pvcam-sdk
+	url = git@github.com:UNTNeogiLab/pvcam-sdk.git
