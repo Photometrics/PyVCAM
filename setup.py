@@ -53,7 +53,7 @@ elif is_windows:
     print('Uninstall package: pip uninstall pyvcam  \n')
     print('************************************************************\n')
 
-pvcam_sdk_path = f"{os.getcwd()}/pvcam-sdk"
+pvcam_sdk_path = "/opt/pvcam/sdk"
 import numpy
 include_dirs = [numpy.get_include()]
 
@@ -62,11 +62,11 @@ if is_linux:
     include_dirs.append('{}/include/'.format(pvcam_sdk_path))
 
     if is_arch_aarch64:
-        lib_dirs = ['{}/library/aarch64'.format(pvcam_sdk_path)]
+        lib_dirs = [f'{pvcam_sdk_path}/library/aarch64']
     elif is_arch_x86_64:
-        lib_dirs = ['{}/library/x86_64'.format(pvcam_sdk_path)]
+        lib_dirs = [f'{pvcam_sdk_path}/library/x86_64']
     elif is_arch_i686:
-        lib_dirs = ['{}/library/i686'.format(pvcam_sdk_path)]
+        lib_dirs = [f'{pvcam_sdk_path}/library/i686']
 
     libs = ['pvcam']
 
