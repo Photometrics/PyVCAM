@@ -1,9 +1,10 @@
-import os, platform
+import os
+import pip
+import platform
+import shutil
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
-import pip
-import shutil
-
+import numpy
 is_windows = 'win' in platform.system().lower()
 is_linux = 'lin' in platform.system().lower()
 
@@ -53,11 +54,16 @@ elif is_windows:
     print('Uninstall package: pip uninstall pyvcam  \n')
     print('************************************************************\n')
 
-pvcam_sdk_path = "/opt/pvcam/sdk"
-import numpy
+
+
 include_dirs = [numpy.get_include()]
 
 if is_linux:
+    try:
+        pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
+    except KeyError:
+        pvcam_sdk_path = "/opt/pvcam/sdk"
+
     extra_compile_args = ['-std=c++11']
     include_dirs.append(f'{pvcam_sdk_path}/include/')
 
@@ -71,6 +77,7 @@ if is_linux:
     libs = ['pvcam']
 
 elif is_windows:
+    pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
     extra_compile_args = []
     include_dirs.append('{}/inc/'.format(pvcam_sdk_path))
 
@@ -98,7 +105,7 @@ setup(name='pyvcam',
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
       ext_modules=ext_modules,
-      install_requires=['pyserial','opencv-python','numpy','libtiff'] )
+      install_requires=['pyserial', 'opencv-python', 'numpy', 'libtiff'])
 
 # TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
 # pip.main(['install', 'wxPython'])
