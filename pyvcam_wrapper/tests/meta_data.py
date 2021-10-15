@@ -10,7 +10,7 @@ def main():
     cam = next(Camera.detect_camera())
     cam.open()
     cam.meta_data_enabled = True
-    cam.roi = (0, 1000, 0, 1000)
+    cam.set_roi = (0, 0, 1000, 1000)
 
     num_frames = 1
     cnt = 0
