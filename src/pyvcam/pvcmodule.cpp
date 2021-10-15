@@ -4,12 +4,30 @@
 #include <condition_variable>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <stdint.h>
 #include <thread>
 #include <queue>
 #include "pvcmodule.h"
 
+#ifdef _WIN32
+    #include <Windows.h>
+    #include <malloc.h> // _aligned_malloc
+    using FileHandle = HANDLE;
+    const/*expr*/ auto cInvalidFileHandle = (FileHandle)INVALID_HANDLE_VALUE;
+#else
+    #include <stdlib.h> // aligned_alloc
+    #include <sys/types.h> // open
+    #include <sys/stat.h> // open
+    #include <fcntl.h> // open
+    #include <unistd.h> // close, write, sysconf
+    using FileHandle = int;
+    constexpr auto cInvalidFileHandle = (FileHandle)-1;
+#endif
+
 #define NPY_NO_DEPRECATED_API
+static const int MAX_ROIS = 15;
 
 struct Frame_T {
     void* address;
@@ -37,6 +55,7 @@ class Cam_Instance_T {
 public:
     Cam_Instance_T()
         : frameBuffer_(NULL)
+        , frameCount_(0)
         , frameSize_(0)
         , prevTime_(std::chrono::high_resolution_clock::now())
         , fps_(0.0)
@@ -45,6 +64,10 @@ public:
         , newData_(false)
         , seqMode_(false)
         , metaDataEnabled_(false)
+        , streamToDisk_(false)
+        , hFileStreamToDisk_(cInvalidFileHandle)
+        , readIndex_(0)
+        , frameResidual_(0)
     {
     }
 
@@ -63,17 +86,31 @@ public:
         resetQueue();
     }
 
-    bool allocateFrameBuffer(uns32 sizeBytes)
+    bool allocateFrameBuffer(uns32 sizeBytes, uns32 frameCount, uns32 frameSize)
     {
         cleanUpFrameBuffer();
-        frameBuffer_ = reinterpret_cast<uns16*>(new (std::nothrow) uns8[sizeBytes]);
+
+        // Always align frameBuffer on a page boundary. This is required for non-buffered streaming to disk
+#ifdef _WIN32
+        frameBuffer_ = _aligned_malloc(sizeBytes, ALIGNMENT_BOUNDARY);
+#else
+        frameBuffer_ = aligned_alloc(ALIGNMENT_BOUNDARY, sizeBytes);
+#endif
+
+        frameCount_ = frameCount;
+        frameSize_ = frameSize;
         return frameBuffer_ != NULL;
     }
     
     void cleanUpFrameBuffer()
     {
-        delete frameBuffer_;
+#ifdef _WIN32
+        _aligned_free(frameBuffer_);
+#else
+        free(frameBuffer_);
+#endif
         frameBuffer_ = NULL;
+        frameCount_ = 0;
         frameSize_ = 0;
     }
 
@@ -86,7 +123,98 @@ public:
         mdFrame_.roiCapacity = MAX_ROIS;
     }
 
-    uns16 *frameBuffer_;             /*Address of all frames*/
+    bool setStreamToDisk(const char* streamToDiskPath)
+    {
+        bool ret = true;
+        if (streamToDiskPath)
+        {
+            printf("Stream to disk path set: %s\n", streamToDiskPath);
+
+            // Open file for stream to disk
+#ifdef _WIN32
+            const int flags = FILE_FLAG_NO_BUFFERING;
+            hFileStreamToDisk_ = ::CreateFileA(streamToDiskPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, flags, NULL);
+#else
+            // The O_DIRECT flag is the key on Linux
+            const int flags = O_DIRECT | (O_WRONLY | O_CREAT | O_TRUNC);
+            const mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
+            hFileStreamToDisk_ = ::open(streamToDiskPath, flags, mode);
+#endif
+            ret = hFileStreamToDisk_ != cInvalidFileHandle;
+            if (ret) {
+                streamToDisk_ = true;
+                readIndex_ = 0;
+                frameResidual_ = 0;
+            }
+        }
+        return ret;
+    }
+
+    void streamFrameToDisk(void* frameAddress)
+    {
+        if (hFileStreamToDisk_ != cInvalidFileHandle)
+        {
+            // When streaming to a file, we must always write to an alignment boundary. Since the frame may not be a multiple
+            // of the alignment boundary, we might not write the entire frame. The remainder of the frame will be written on
+            // the next pass through this function. When we reach the end of the circular buffer we may need to pad additional
+            // bytes onto the end of the frame to meet the alignment requirement. These bytes are to be discarded later when
+            // using the file..
+
+            // Frames may arrive out of order. To handle this situation, readIndex_ is used to track which bytes
+            // stream to file next rather than the pointer returned by PVCAM
+
+            uns32 availableBytes = frameResidual_ + frameSize_;
+
+            // This routine may fall behind writing the latest data. Attempt to catch up when the frameAddress is ahead of the
+            // read index by more than a frame.
+            uintptr_t availableIndex = (uintptr_t)frameAddress - (uintptr_t)frameBuffer_;
+            if (availableIndex > readIndex_) {
+                if (availableIndex - readIndex_ > frameResidual_ + frameSize_) {
+                    availableBytes = availableIndex - readIndex_;
+                }
+            }
+
+            uns32 bytesToWrite = (availableBytes / ALIGNMENT_BOUNDARY) * ALIGNMENT_BOUNDARY;
+            bool lastFrameInBuffer = ((frameSize_ * frameCount_) - (readIndex_ + bytesToWrite)) < ALIGNMENT_BOUNDARY;
+            if (lastFrameInBuffer)
+            {
+                bytesToWrite += ALIGNMENT_BOUNDARY;
+            }
+
+            void* alignedFrameData = &(reinterpret_cast<uns8*>(frameBuffer_)[readIndex_]);
+            uns32 bytesWritten = 0;
+#ifdef _WIN32
+            WriteFile(hFileStreamToDisk_, alignedFrameData, (DWORD)bytesToWrite, (LPDWORD)&bytesWritten, NULL);
+#else
+            bytesWritten += write(hFileStreamToDisk_, alignedFrameData, bytesToWrite);
+#endif
+            if (bytesWritten != bytesToWrite) {
+                printf("Stream to disk error: Not all bytes written. Corrupted frames written to disk. Expected: %d Written: %d\n", bytesToWrite, bytesWritten);
+            }
+
+            // Store the count of frame bytes not written.
+            // Increment read index or reset to start of frame buffer if needed
+            frameResidual_ = (lastFrameInBuffer) ? 0 : availableBytes - bytesWritten;
+            readIndex_ = (lastFrameInBuffer) ? 0 : readIndex_ + bytesWritten;
+        }
+    }
+
+    void unsetStreamToDisk()
+    {
+        if (hFileStreamToDisk_ != cInvalidFileHandle)
+        {
+#ifdef _WIN32
+            CloseHandle(hFileStreamToDisk_);
+#else
+            close(hFileStreamToDisk_);
+#endif
+            streamToDisk_ = false;
+            hFileStreamToDisk_ = cInvalidFileHandle;
+        }
+    }
+
+    void* frameBuffer_;             /*Address of all frames*/
+    uns32 frameCount_;
     uns32 frameSize_;
     std::queue<Frame_T> frameQueue_;
     std::chrono::time_point<std::chrono::high_resolution_clock> prevTime_;
@@ -95,16 +223,22 @@ public:
     bool abortData_;
     bool newData_;
     bool seqMode_;
+    std::mutex frameMutex_;
+    std::condition_variable conditionalVariable_;
 
     // Meta data objects
     bool metaDataEnabled_;
     md_frame mdFrame_;
-    static const int MAX_ROIS = 1;
     md_frame_roi mdFramRoiArray_[MAX_ROIS];
+
+    // Stream to disk
+    static const size_t ALIGNMENT_BOUNDARY = 4096;
+    bool streamToDisk_;
+    FileHandle hFileStreamToDisk_;
+    uns32 readIndex_;
+    uns32 frameResidual_;
 };
 
-std::condition_variable g_conditionalVariable;
-std::mutex g_frameMutex;
 std::mutex g_camInstanceMutex;
 std::map<int16, Cam_Instance_T> g_camInstanceMap;
 
@@ -114,6 +248,9 @@ void set_g_msg(void) { pl_error_message(pl_error_code(), g_msg); }
 int is_avail(int16 hCam, uns32 param_id);
 int valid_enum_param(int16 hCam, uns32 param_id, int32 selected_val);
 bool check_meta_data_enabled(int16 hCam, bool& metaDataEnabled);
+void populateMetaDataFrameHeader(md_frame_header* pMetaDataFrameHeader, PyObject* frame_header);
+void populateMetaDataRoiHeader(md_frame_roi_header* pMetaDataRoiHeader, PyObject* roi_header);
+void populateRegions(rgn_type* roiArray, uns16 numRois, PyObject * roiListObj);
 
 void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
 {
@@ -123,7 +260,7 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
         Cam_Instance_T& camInstance = g_camInstanceMap.at(pFrameInfo->hCam);
         camInstance.frameCnt_++;
 
-        //printf("Called back. Frame count %d\n", g_frameCnt);
+        //printf("Called back. Frame count %d\n", camInstance.frameCnt_);
 
         // Re-compute FPS every 5 frames
         const int FPS_FRAME_COUNT = 5;
@@ -152,7 +289,11 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
             camInstance.frameQueue_.push(frame);
             camInstance.newData_ = true;
 
-            g_conditionalVariable.notify_all();
+            if (camInstance.streamToDisk_) {
+                camInstance.streamFrameToDisk(frame.address);
+            }
+
+            camInstance.conditionalVariable_.notify_all();
         }
     }
     catch (const std::out_of_range& oor) {
@@ -317,8 +458,8 @@ pvc_open_camera(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    Cam_Instance_T camInstance;
-    g_camInstanceMap[hCam] = camInstance;
+    // Add defaulted Cam_Instance_T
+    g_camInstanceMap[hCam];
 
     return PyLong_FromLong(hCam);
 }
@@ -504,19 +645,14 @@ pvc_check_param(PyObject *self, PyObject *args)
 static PyObject *
 pvc_start_live(PyObject *self, PyObject *args)
 {
-    int16 hCam;    /* Camera handle. */
-    uns16 s1;      /* First pixel in serial register. */
-    uns16 s2;      /* Last pixel in serial register. */
-    uns16 sbin;    /* Serial binning. */
-    uns16 p1;      /* First pixel in parallel register. */
-    uns16 p2;      /* Last pixel in serial register. */
-    uns16 pbin;    /* Parallel binning. */
-    uns32 expTime; /* Exposure time. */
-    int16 expMode; /* Exposure mode. */
-    const int16 bufferMode = CIRC_OVERWRITE;
-    const uns16 circBufferFrames = 16;
+    int16 hCam;                 /* Camera handle. */
+    PyObject * roiListObj;      /* the list of ROIs */
+    uns32 expTime;              /* Exposure time. */
+    int16 expMode;              /* Exposure mode. */
+    uns16 buffer_frame_count;   /* Number of frames in the circular frame buffer. */
+    char* stream_to_disk_path;  /* Path and filename to store frames */
 
-    if (!PyArg_ParseTuple(args, "hhhhhhhih", &hCam, &s1, &s2, &sbin, &p1, &p2, &pbin, &expTime, &expMode)) {
+    if (!PyArg_ParseTuple(args, "hO!IhHz", &hCam, &PyList_Type, &roiListObj, &expTime, &expMode, &buffer_frame_count, &stream_to_disk_path)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -527,13 +663,14 @@ pvc_start_live(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    /* Struct that contains the frame size and binning information. */
-    rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-    uns32 exposureBytes;
+    /* Construct ROI list */
+    uns16 rgn_total = (uns16)PyList_Size(roiListObj);
+    std::unique_ptr<rgn_type[]> roiArray(new rgn_type[rgn_total]);
+    populateRegions(roiArray.get(), rgn_total, roiListObj);
 
     /* Setup the acquisition. */
-    uns16 rgn_total = 1;
-    if (!pl_exp_setup_cont(hCam, rgn_total, &frame, expMode, expTime, &exposureBytes, bufferMode)) {
+    uns32 exposureBytes;
+    if (!pl_exp_setup_cont(hCam, rgn_total, roiArray.get(), expMode, expTime, &exposureBytes, CIRC_OVERWRITE)) {
         set_g_msg();
         PyErr_SetString(PyExc_RuntimeError, g_msg);
         return NULL;
@@ -548,16 +685,22 @@ pvc_start_live(PyObject *self, PyObject *args)
             return NULL;
         }
 
-        if (!camInstance.allocateFrameBuffer(circBufferFrames * exposureBytes))
+        uns32 buffer_size = buffer_frame_count * exposureBytes;
+        if (!camInstance.allocateFrameBuffer(buffer_size, buffer_frame_count, exposureBytes))
         {
-            PyErr_SetString(PyExc_MemoryError, "Unable to properly allocate memory for frame.");
+            PyErr_SetString(PyExc_MemoryError, "Unable to allocate memory for frame.");
             return NULL;
         }
 
-        camInstance.frameSize_ = exposureBytes;
+        if (!camInstance.setStreamToDisk(stream_to_disk_path))
+        {
+            PyErr_SetString(PyExc_MemoryError, "Unable to set stream to disk. Check file path.");
+            return NULL;
+        }
+
         camInstance.prevTime_ = std::chrono::high_resolution_clock::now();
 
-        if (!pl_exp_start_cont(hCam, camInstance.frameBuffer_, circBufferFrames * exposureBytes / sizeof(uns16))) {
+        if (!pl_exp_start_cont(hCam, camInstance.frameBuffer_, buffer_size)) {
             set_g_msg();
             PyErr_SetString(PyExc_RuntimeError, g_msg);
             return NULL;
@@ -579,22 +722,12 @@ pvc_start_live(PyObject *self, PyObject *args)
 static PyObject *
 pvc_start_seq(PyObject *self, PyObject *args)
 {
-    /* TODO: Make setting acquisition apart of this function. Do not make them
-       pass into the function call as arguments.
-    */
-    int16 hCam;      /* Camera handle. */
-    uns16 s1;        /* First pixel in serial register. */
-    uns16 s2;        /* Last pixel in serial register. */
-    uns16 sbin;      /* Serial binning. */
-    uns16 p1;        /* First pixel in parallel register. */
-    uns16 p2;        /* Last pixel in parallel register. */
-    uns16 pbin;      /* Parallel binning. */
-    uns32 expTime;   /* Exposure time. */
-    uns16 expMode;   /* Exposure mode. */
-    uns16 expTotal;  /* Total frames */
-    if (!PyArg_ParseTuple(args, "hHHHHHHIHH", &hCam, &s1, &s2, &sbin,
-        &p1, &p2, &pbin,
-        &expTime, &expMode, &expTotal)) {
+    int16 hCam;            /* Camera handle. */
+    PyObject * roiListObj; /* the list of ROIs */
+    uns32 expTime;         /* Exposure time. */
+    int16 expMode;         /* Exposure mode. */
+    uns16 expTotal;        /* Total frames */
+    if (!PyArg_ParseTuple(args, "hO!IhH", &hCam, &PyList_Type, &roiListObj, &expTime, &expMode, &expTotal)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
@@ -605,20 +738,19 @@ pvc_start_seq(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    /* Struct that contains the frame size and binning information. */
-    rgn_type frame = { s1, s2, sbin, p1, p2, pbin };
-    uns32 exposureBytes;
-    uns32 exposureBytesPerFrame;
+    /* Construct ROI list */
+    uns16 rgn_total = (uns16)PyList_Size(roiListObj);
+    std::unique_ptr<rgn_type[]> roiArray(new rgn_type[rgn_total]);
+    populateRegions(roiArray.get(), rgn_total, roiListObj);
 
     /* Setup the acquisition. */
-    uns16 rgn_total = 1;
-    if (!pl_exp_setup_seq(hCam, expTotal, rgn_total, &frame, expMode, expTime, &exposureBytes)) {
+    uns32 exposureBytes;
+    if (!pl_exp_setup_seq(hCam, expTotal, rgn_total, roiArray.get(), expMode, expTime, &exposureBytes)) {
         set_g_msg();
         PyErr_SetString(PyExc_RuntimeError, g_msg);
         return NULL;
     }
-
-    exposureBytesPerFrame = exposureBytes / expTotal;
+    uns32 exposureBytesPerFrame = exposureBytes / expTotal;
 
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
     try {
@@ -629,13 +761,12 @@ pvc_start_seq(PyObject *self, PyObject *args)
             return NULL;
         }
 
-        if (!camInstance.allocateFrameBuffer(exposureBytes))
+        if (!camInstance.allocateFrameBuffer(exposureBytes, expTotal, exposureBytesPerFrame))
         {
-            PyErr_SetString(PyExc_MemoryError, "Unable to properly allocate memory for frame.");
+            PyErr_SetString(PyExc_MemoryError, "Unable to allocate memory for frame.");
             return NULL;
         }
 
-        camInstance.frameSize_ = exposureBytesPerFrame;
         camInstance.prevTime_ = std::chrono::high_resolution_clock::now();
 
         if (!pl_exp_start_seq(hCam, camInstance.frameBuffer_)) {
@@ -727,37 +858,18 @@ pvc_check_frame_status(PyObject *self, PyObject *args)
 static PyObject *
 pvc_get_frame(PyObject *self, PyObject *args)
 {
-    /* TODO: Make setting acquisition apart of this function. Do not make them
-    pass into the function call as arguments.
-    */
     int16 hCam;                /* Camera handle. */
-    int16 dimX;             /* Pixels in x direction */
-    int16 dimY;             /* Pixels in y direction */
-    volatile int16 bitsPerPixel; /* Bits per pixel bitsPerPixel must be marked volatile to be populated correctly for reasons unknown */
+    PyObject * roiListObj;     /* The list of ROIs */
+    int typenum;               /* Numpy typenum specifying data type for image data */
+    int timeout_ms;            /* Poll frame timeout in ms. Negative values will wait forever. */
+    bool oldestFrame;
 
-    if (!PyArg_ParseTuple(args, "hhhh", &hCam, &dimX, &dimY, &bitsPerPixel)) {
+    if (!PyArg_ParseTuple(args, "hO!iip", &hCam, &PyList_Type, &roiListObj, &typenum, &timeout_ms, &oldestFrame)) {
         PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
         return NULL;
     }
 
     import_array();  /* Initialize PyArrayObject. */
-    int dimensions = 1;
-    npy_intp numPixels = dimX * dimY;
-    int type;
-    switch(bitsPerPixel){
-        case 8:
-            type = NPY_UINT8;
-            break;
-        case 16:
-            type = NPY_UINT16;
-            break;
-        case 32:
-            type = NPY_UINT32;
-            break;
-        default:
-            PyErr_SetString(PyExc_ValueError, "Illegal bits per pixel.");
-            return NULL;
-    }
 
     // WARNING. We are accessing a camera instance below without locking the object so that
     //          the new frame handler or abort can take the lock and alter date. Care must be
@@ -774,23 +886,27 @@ pvc_get_frame(PyObject *self, PyObject *args)
         uns32 byte_cnt;
         rs_bool checkStatusResult = pl_exp_check_status(hCam, &status, &byte_cnt);
 
-        Py_BEGIN_ALLOW_THREADS
-        while (checkStatusResult == PV_OK) {
-            if (camInstance.newData_ || camInstance.abortData_) {
-                break;
-            }
-            // We want to wait for a new frame, but every so often check if readout failed
-            std::unique_lock<std::mutex> lock(g_frameMutex);
-            static const int READOUT_FAILED_TIMEOUT = 200;
-            g_conditionalVariable.wait_for(lock, std::chrono::milliseconds(READOUT_FAILED_TIMEOUT));
+        // Wait for frame in a loop if using a timeout and new data isn't available and abort hasn't occurred
+        if (timeout_ms != 0 && !camInstance.newData_ && !camInstance.abortData_)
+        {
+            int32 elapsed_ms = 0;
+            Py_BEGIN_ALLOW_THREADS
+            while (checkStatusResult == PV_OK) {
+                // We want to wait for a new frame, but every so often check if readout failed
+                std::unique_lock<std::mutex> lock(camInstance.frameMutex_);
+                static const int READOUT_FAILED_TIMEOUT_ms = 5000;
+                camInstance.conditionalVariable_.wait_for(lock, std::chrono::milliseconds(READOUT_FAILED_TIMEOUT_ms));
+                elapsed_ms += READOUT_FAILED_TIMEOUT_ms;
 
-            checkStatusResult = pl_exp_check_status(hCam, &status, &byte_cnt);
-            if (status == READOUT_FAILED || status == READOUT_COMPLETE) {
-                break;
+                // Exit loop if read out is finished, new data available, abort occurred or timeout expires,
+                checkStatusResult = pl_exp_check_status(hCam, &status, &byte_cnt);
+                if (status == READOUT_FAILED || status == READOUT_COMPLETE || camInstance.newData_ || camInstance.abortData_ ||
+                   (elapsed_ms >= timeout_ms && timeout_ms > 0)) {
+                    break;
+                }
             }
+            Py_END_ALLOW_THREADS
         }
-        Py_END_ALLOW_THREADS
-
         std::lock_guard<std::mutex> lock(g_camInstanceMutex);
 
         if (checkStatusResult == PV_FAIL) {
@@ -812,13 +928,22 @@ pvc_get_frame(PyObject *self, PyObject *args)
         }
         else if (status == READOUT_COMPLETE && !camInstance.newData_) {
             camInstance.abortData_ = false;
-            camInstance.newData_ = false;
             PyErr_SetString(PyExc_RuntimeError, "frame callback not called. Frame was likely aborted in PVCAM due to host command. Check log.");
             return NULL;
         }
+        else if (!camInstance.newData_) {
+            camInstance.abortData_ = false;
+            PyErr_SetString(PyExc_RuntimeError, "frame timeout. Verify timeout exceeds exposure time. If applicable, check external trigger source.");
+            return NULL;
+        }
 
-        Frame_T frame = camInstance.frameQueue_.front();
-        camInstance.frameQueue_.pop();
+        Frame_T frame;
+        if (oldestFrame) {
+            frame = camInstance.frameQueue_.front();
+            camInstance.frameQueue_.pop();
+        } else {
+            frame = camInstance.frameQueue_.back();
+        }
 
         //printf("New Data FPS: %f Cnt: %d\r\n", camInstance.fps_, frame.count);
 
@@ -826,91 +951,53 @@ pvc_get_frame(PyObject *self, PyObject *args)
         camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
         
         PyObject *frameDict = PyDict_New();
-        PyObject* numpy_frame;
-        
+        PyObject* roiDataList = PyList_New(0);
+        const int NUM_DIMS = 2;
         if (camInstance.metaDataEnabled_) {
+
+            PyObject* frame_header = PyDict_New();
+            PyObject* roiHeaderList = PyList_New(0);
+            PyObject* meta_data = PyDict_New();
+            PyDict_SetItem(meta_data, PyUnicode_FromString("frame_header"), frame_header);
+            PyDict_SetItem(meta_data, PyUnicode_FromString("roi_headers"), roiHeaderList);
+            PyDict_SetItem(frameDict, PyUnicode_FromString("meta_data"), meta_data);
 
             camInstance.initializeMetaData();
             if (!pl_md_frame_decode(&camInstance.mdFrame_, frame.address, camInstance.frameSize_)) {
-                PyErr_SetString(PyExc_RuntimeError, "Meta decode failed.");
+                PyErr_SetString(PyExc_RuntimeError, "Meta data decode failed.");
                 return NULL;
             }
 
-            PyObject* frame_header = PyDict_New();
-            md_frame_header* pMetaDataFrameHeader = camInstance.mdFrame_.header;
-            PyDict_SetItem(frame_header, PyUnicode_FromString("signature"), PyUnicode_FromString(reinterpret_cast<const char*>(&pMetaDataFrameHeader->signature)));
-            PyDict_SetItem(frame_header, PyUnicode_FromString("version"), PyLong_FromLong(pMetaDataFrameHeader->version));
-            PyDict_SetItem(frame_header, PyUnicode_FromString("frameNr"), PyLong_FromLong(pMetaDataFrameHeader->frameNr));
-            PyDict_SetItem(frame_header, PyUnicode_FromString("roiCount"), PyLong_FromLong(pMetaDataFrameHeader->roiCount));
+            populateMetaDataFrameHeader(camInstance.mdFrame_.header, frame_header);
 
-            if (pMetaDataFrameHeader->version < 3) {
-                PyDict_SetItem(frame_header, PyUnicode_FromString("timestampBOF"), PyLong_FromLong(pMetaDataFrameHeader->timestampBOF));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("timestampEOF"), PyLong_FromLong(pMetaDataFrameHeader->timestampEOF));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("timestampResNs"), PyLong_FromLong(pMetaDataFrameHeader->timestampResNs));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTime"), PyLong_FromLong(pMetaDataFrameHeader->exposureTime));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTimeResNs"), PyLong_FromLong(pMetaDataFrameHeader->exposureTimeResNs));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("roiTimestampResNs"), PyLong_FromLong(pMetaDataFrameHeader->roiTimestampResNs));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("bitDepth"), PyLong_FromLong(pMetaDataFrameHeader->bitDepth));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("colorMask"), PyLong_FromLong(pMetaDataFrameHeader->colorMask));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataFrameHeader->flags));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataFrameHeader->extendedMdSize));
+            for (uns32 i = 0; i < camInstance.mdFrame_.header->roiCount; i++) {
 
-                if (pMetaDataFrameHeader->version > 1) {
-                    PyDict_SetItem(frame_header, PyUnicode_FromString("imageFormat"), PyLong_FromLong(pMetaDataFrameHeader->imageFormat));
-                    PyDict_SetItem(frame_header, PyUnicode_FromString("imageCompression"), PyLong_FromLong(pMetaDataFrameHeader->imageCompression));
-                }
-            } else {
-                md_frame_header_v3* pMetaDataFrameHeaderV3 = reinterpret_cast<md_frame_header_v3*>(pMetaDataFrameHeader);
-                PyDict_SetItem(frame_header, PyUnicode_FromString("timestampBOF"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->timestampBOF));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("timestampEOF"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->timestampEOF));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTime"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->exposureTime));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("bitDepth"), PyLong_FromLong(pMetaDataFrameHeaderV3->bitDepth));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("colorMask"), PyLong_FromLong(pMetaDataFrameHeaderV3->colorMask));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataFrameHeaderV3->flags));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataFrameHeaderV3->extendedMdSize));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("imageFormat"), PyLong_FromLong(pMetaDataFrameHeaderV3->imageFormat));
-                PyDict_SetItem(frame_header, PyUnicode_FromString("imageCompression"), PyLong_FromLong(pMetaDataFrameHeaderV3->imageCompression));
-            }
-            PyObject* meta_data = PyDict_New();
-            PyDict_SetItem(meta_data, PyUnicode_FromString("frame_header"), frame_header);
-
-            PyObject* roiHeaderList = PyList_New(0);
-            for (int i = 0; i < pMetaDataFrameHeader->roiCount; i++) {
-
-                PyObject* roi_header = PyDict_New();
                 md_frame_roi_header* pMetaDataRoiHeader = camInstance.mdFrame_.roiArray[i].header;
-
-                PyDict_SetItem(roi_header, PyUnicode_FromString("roiNr"), PyLong_FromLong(pMetaDataRoiHeader->roiNr));
-                PyDict_SetItem(roi_header, PyUnicode_FromString("timestampBOR"), PyLong_FromLong(pMetaDataRoiHeader->timestampBOR));
-                PyDict_SetItem(roi_header, PyUnicode_FromString("timestampEOR"), PyLong_FromLong(pMetaDataRoiHeader->timestampEOR));
-
-                PyObject* roi = PyDict_New();
-                PyDict_SetItem(roi, PyUnicode_FromString("s1"), PyLong_FromLong(pMetaDataRoiHeader->roi.s1));
-                PyDict_SetItem(roi, PyUnicode_FromString("s2"), PyLong_FromLong(pMetaDataRoiHeader->roi.s2));
-                PyDict_SetItem(roi, PyUnicode_FromString("sbin"), PyLong_FromLong(pMetaDataRoiHeader->roi.sbin));
-                PyDict_SetItem(roi, PyUnicode_FromString("p1"), PyLong_FromLong(pMetaDataRoiHeader->roi.p1));
-                PyDict_SetItem(roi, PyUnicode_FromString("p2"), PyLong_FromLong(pMetaDataRoiHeader->roi.p2));
-                PyDict_SetItem(roi, PyUnicode_FromString("pbin"), PyLong_FromLong(pMetaDataRoiHeader->roi.pbin));
-                PyDict_SetItem(roi_header, PyUnicode_FromString("roi"), roi);
-
-                PyDict_SetItem(roi_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataRoiHeader->flags));
-                PyDict_SetItem(roi_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataRoiHeader->extendedMdSize));
-                PyDict_SetItem(roi_header, PyUnicode_FromString("roiDataSize"), PyLong_FromLong(pMetaDataRoiHeader->roiDataSize));
-
+                PyObject* roi_header = PyDict_New();
+                populateMetaDataRoiHeader(pMetaDataRoiHeader, roi_header);
                 PyList_Append(roiHeaderList, roi_header);
-                PyDict_SetItem(meta_data, PyUnicode_FromString("roi_headers"), roiHeaderList);
+
+                npy_intp pixelsS = (pMetaDataRoiHeader->roi.s2 - pMetaDataRoiHeader->roi.s1 + 1) / pMetaDataRoiHeader->roi.sbin;
+                npy_intp pixelsP = (pMetaDataRoiHeader->roi.p2 - pMetaDataRoiHeader->roi.p1 + 1) / pMetaDataRoiHeader->roi.pbin;
+                npy_intp dims[NUM_DIMS] = {pixelsP, pixelsS};
+                PyObject* numpy_frame = (PyObject *)PyArray_SimpleNewFromData(NUM_DIMS, dims, typenum, camInstance.mdFrame_.roiArray[i].data);
+                PyList_Append(roiDataList, numpy_frame);
             }
-
-            PyDict_SetItem(frameDict, PyUnicode_FromString("meta_data"), meta_data);
-
-            // TODO: Only a single region of interest is currently supported. If multiple regions are required, the frame dictionary layout needs to
-            // change and multiple dataAddresses are needed
-            numpy_frame = (PyObject *)PyArray_SimpleNewFromData(dimensions, &numPixels, type, camInstance.mdFrame_.roiArray[0].data);
         }
-        else {
-            numpy_frame = (PyObject *)PyArray_SimpleNewFromData(dimensions, &numPixels, type, frame.address);
+        else
+        {
+            /* Construct ROI list. Since meta data is disabled, there can only be 1 region */
+            rgn_type roi;
+            populateRegions(&roi, 1, roiListObj);
+
+            npy_intp pixelsS = (roi.s2 - roi.s1 + 1) / roi.sbin;
+            npy_intp pixelsP = (roi.p2 - roi.p1 + 1) / roi.pbin;
+            npy_intp dims[NUM_DIMS] = {pixelsP, pixelsS};
+            PyObject* numpy_frame = (PyObject *)PyArray_SimpleNewFromData(NUM_DIMS, dims, typenum, frame.address);
+            PyList_Append(roiDataList, numpy_frame);
         }
-        PyDict_SetItem(frameDict, PyUnicode_FromString("pixel_data"), numpy_frame);
+
+        PyDict_SetItem(frameDict, PyUnicode_FromString("pixel_data"), roiDataList);
 
         PyObject *fps = PyFloat_FromDouble(camInstance.fps_);
         PyObject *frame_count = PyLong_FromLong(frame.count);
@@ -952,6 +1039,7 @@ pvc_stop_live(PyObject *self, PyObject *args)
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
         camInstance.cleanUpFrameBuffer();
+        camInstance.unsetStreamToDisk();
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
@@ -1030,10 +1118,13 @@ pvc_abort(PyObject *self, PyObject *args)
     }
 
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-    Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
     try {
+        Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
         camInstance.cleanUpFrameBuffer();
+        camInstance.unsetStreamToDisk();
+
         camInstance.abortData_ = true;
+        camInstance.conditionalVariable_.notify_all();
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
@@ -1241,6 +1332,84 @@ bool check_meta_data_enabled(int16 hCam, bool& metaDataEnabled)
     }
 
     return true;
+}
+
+void populateMetaDataFrameHeader(md_frame_header* pMetaDataFrameHeader, PyObject* frame_header)
+{
+    PyDict_SetItem(frame_header, PyUnicode_FromString("signature"), PyUnicode_FromString(reinterpret_cast<const char*>(&pMetaDataFrameHeader->signature)));
+    PyDict_SetItem(frame_header, PyUnicode_FromString("version"), PyLong_FromLong(pMetaDataFrameHeader->version));
+    PyDict_SetItem(frame_header, PyUnicode_FromString("frameNr"), PyLong_FromLong(pMetaDataFrameHeader->frameNr));
+    PyDict_SetItem(frame_header, PyUnicode_FromString("roiCount"), PyLong_FromLong(pMetaDataFrameHeader->roiCount));
+
+    if (pMetaDataFrameHeader->version < 3) {
+        PyDict_SetItem(frame_header, PyUnicode_FromString("timestampBOF"), PyLong_FromLong(pMetaDataFrameHeader->timestampBOF));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("timestampEOF"), PyLong_FromLong(pMetaDataFrameHeader->timestampEOF));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("timestampResNs"), PyLong_FromLong(pMetaDataFrameHeader->timestampResNs));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTime"), PyLong_FromLong(pMetaDataFrameHeader->exposureTime));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTimeResNs"), PyLong_FromLong(pMetaDataFrameHeader->exposureTimeResNs));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("roiTimestampResNs"), PyLong_FromLong(pMetaDataFrameHeader->roiTimestampResNs));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("bitDepth"), PyLong_FromLong(pMetaDataFrameHeader->bitDepth));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("colorMask"), PyLong_FromLong(pMetaDataFrameHeader->colorMask));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataFrameHeader->flags));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataFrameHeader->extendedMdSize));
+
+        if (pMetaDataFrameHeader->version > 1) {
+            PyDict_SetItem(frame_header, PyUnicode_FromString("imageFormat"), PyLong_FromLong(pMetaDataFrameHeader->imageFormat));
+            PyDict_SetItem(frame_header, PyUnicode_FromString("imageCompression"), PyLong_FromLong(pMetaDataFrameHeader->imageCompression));
+        }
+    } else {
+        md_frame_header_v3* pMetaDataFrameHeaderV3 = reinterpret_cast<md_frame_header_v3*>(pMetaDataFrameHeader);
+        PyDict_SetItem(frame_header, PyUnicode_FromString("timestampBOF"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->timestampBOF));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("timestampEOF"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->timestampEOF));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("exposureTime"), PyLong_FromUnsignedLongLong(pMetaDataFrameHeaderV3->exposureTime));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("bitDepth"), PyLong_FromLong(pMetaDataFrameHeaderV3->bitDepth));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("colorMask"), PyLong_FromLong(pMetaDataFrameHeaderV3->colorMask));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataFrameHeaderV3->flags));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataFrameHeaderV3->extendedMdSize));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("imageFormat"), PyLong_FromLong(pMetaDataFrameHeaderV3->imageFormat));
+        PyDict_SetItem(frame_header, PyUnicode_FromString("imageCompression"), PyLong_FromLong(pMetaDataFrameHeaderV3->imageCompression));
+    }
+}
+
+void populateMetaDataRoiHeader(md_frame_roi_header* pMetaDataRoiHeader, PyObject* roi_header)
+{
+    PyDict_SetItem(roi_header, PyUnicode_FromString("roiNr"), PyLong_FromLong(pMetaDataRoiHeader->roiNr));
+    PyDict_SetItem(roi_header, PyUnicode_FromString("timestampBOR"), PyLong_FromLong(pMetaDataRoiHeader->timestampBOR));
+    PyDict_SetItem(roi_header, PyUnicode_FromString("timestampEOR"), PyLong_FromLong(pMetaDataRoiHeader->timestampEOR));
+
+    PyObject* roi = PyDict_New();
+    PyDict_SetItem(roi, PyUnicode_FromString("s1"), PyLong_FromLong(pMetaDataRoiHeader->roi.s1));
+    PyDict_SetItem(roi, PyUnicode_FromString("s2"), PyLong_FromLong(pMetaDataRoiHeader->roi.s2));
+    PyDict_SetItem(roi, PyUnicode_FromString("sbin"), PyLong_FromLong(pMetaDataRoiHeader->roi.sbin));
+    PyDict_SetItem(roi, PyUnicode_FromString("p1"), PyLong_FromLong(pMetaDataRoiHeader->roi.p1));
+    PyDict_SetItem(roi, PyUnicode_FromString("p2"), PyLong_FromLong(pMetaDataRoiHeader->roi.p2));
+    PyDict_SetItem(roi, PyUnicode_FromString("pbin"), PyLong_FromLong(pMetaDataRoiHeader->roi.pbin));
+    PyDict_SetItem(roi_header, PyUnicode_FromString("roi"), roi);
+
+    PyDict_SetItem(roi_header, PyUnicode_FromString("flags"), PyLong_FromLong(pMetaDataRoiHeader->flags));
+    PyDict_SetItem(roi_header, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pMetaDataRoiHeader->extendedMdSize));
+    PyDict_SetItem(roi_header, PyUnicode_FromString("roiDataSize"), PyLong_FromLong(pMetaDataRoiHeader->roiDataSize));
+}
+
+void populateRegions(rgn_type* roiArray, uns16 numRois, PyObject * roiListObj)
+{
+    for (uns32 i = 0; i < numRois; i++)
+    {
+        PyObject* roiObj = PyList_GetItem(roiListObj, i);
+        PyObject* s1Obj = PyObject_GetAttrString(roiObj, "s1");
+        PyObject* s2Obj = PyObject_GetAttrString(roiObj, "s2");
+        PyObject* sbinObj = PyObject_GetAttrString(roiObj, "sbin");
+        PyObject* p1Obj = PyObject_GetAttrString(roiObj, "p1");
+        PyObject* p2Obj = PyObject_GetAttrString(roiObj, "p2");
+        PyObject* pbinObj = PyObject_GetAttrString(roiObj, "pbin");
+
+        roiArray[i].s1 = (uns16)PyLong_AsLong(s1Obj);
+        roiArray[i].s2 = (uns16)PyLong_AsLong(s2Obj);
+        roiArray[i].sbin = (uns16)PyLong_AsLong(sbinObj);
+        roiArray[i].p1 = (uns16)PyLong_AsLong(p1Obj);
+        roiArray[i].p2 = (uns16)PyLong_AsLong(p2Obj);
+        roiArray[i].pbin = (uns16)PyLong_AsLong(pbinObj);
+    }
 }
 
 /* When writing a new function, include it in the Method Table definitions!

@@ -1,6 +1,8 @@
 from pyvcam import pvc
 from pyvcam import constants as const
 
+from copy import deepcopy
+import os
 import time
 import numpy as np
 
@@ -17,10 +19,6 @@ class Camera:
 
         __mode(int): The bit-wise or between exposure mode and expose out mode.
         __exp_time(int): Integer representing the exposure time to be used for captures.
-
-        __binning(tuple): Tuple 2 integers representing the serial and parallel binning.
-        __roi(tuple): Tuple of 4 integers representing the region-of-interest.
-        __shape(tuple): Tuple of 2 integers representing the image dimensions.
     """
 
     class ReversibleEnumDict(dict):
@@ -48,6 +46,31 @@ class Camera:
             except IndexError:
                 raise ValueError('Invalid value: {0} for {1} - Available values are: {2}'.format(keyOrValue, self.name, list(self.values())))
 
+    class RegionOfInterest:
+
+        def __init__(self, s1, s2, sbin, p1, p2, pbin):
+            self.s1 = s1
+            self.s2 = s2 - ((s2 - s1 + 1) % sbin)  # Clip partially binned pixels
+            self.sbin = sbin
+            self.p1 = p1
+            self.p2 = p2 - ((p2 - p1 + 1) % pbin)  # Clip partially binned pixels
+            self.pbin = pbin
+
+        def __eq__(self, other):
+            if not isinstance(other, Camera.RegionOfInterest):
+                raise NotImplementedError
+
+            return self.s1 == other.s1 and self.s2 == other.s2 and self.p1 == other.p1 and self.p2 == other.p2
+
+        def checkOverlap(self, other):
+            return (self.s1 <= other.s1 <= self.s1 and self.p1 <= other.p1 <= self.p1) or \
+                   (self.s2 <= other.s2 <= self.s2 and self.p2 <= other.p2 <= self.p2)
+
+        @property
+        def shape(self):
+            return int((self.s2 - self.s1 + 1) / self.sbin), int((self.p2 - self.p1 + 1) / self.pbin)
+
+    WAIT_FOREVER = -1
 
     def __init__(self, name):
         """NOTE: CALL Camera.detect_camera() to get a camera object."""
@@ -63,10 +86,9 @@ class Camera:
         self.__mode = None
         self.__exp_time = 0
 
-        # Image metadata
-        self.__binning = (1, 1)
-        self.__roi = None
-        self.__shape = None
+        # Regions of interest
+        self.__defaultRoi = None  # The default RegionOfInterest object
+        self.__rois = []  # A list of RegionOfInterest objects
 
     def __repr__(self):
         return self.__name
@@ -101,7 +123,7 @@ class Camera:
                 cam_count += 1
             except RuntimeError:
                 raise RuntimeError('Failed to create a detected camera.')
-    
+
     @classmethod
     def select_camera(cls, name):
         """Select camera by name and creates a new Camera object.
@@ -145,8 +167,9 @@ class Camera:
         except AttributeError:
             self.set_param(const.PARAM_PMODE, const.PMODE_NORMAL)
 
-        # Set ROI to full frame
-        self.roi = (0, self.sensor_size[0], 0, self.sensor_size[1])
+        # Set ROI to full frame with no binning
+        self.__defaultRoi = Camera.RegionOfInterest(0, self.sensor_size[0] - 1, 1, 0, self.sensor_size[1] - 1, 1)
+        self.reset_rois()
 
         # Setup correct mode
         self.__exp_mode = self.get_param(const.PARAM_EXPOSURE_MODE)
@@ -183,7 +206,7 @@ class Camera:
                 numGains = int((gain_max - gain_min) / gain_increment + 1)
                 gains = [(gain_min + i * gain_increment) for i in range(numGains)]
 
-                self.__port_speed_gain_table[port_name].update({speed_name: {'speed_index': speed_index, 'pixel_time': self.pix_time, 'gain_range': gains}})
+                self.__port_speed_gain_table[port_name].update({speed_name: {'speed_index': speed_index, 'pixel_time': self.pix_time, 'bit_depth': self.bit_depth, 'gain_range': gains}})
 
                 for gain_index in gains:
                     self.gain = gain_index
@@ -192,7 +215,7 @@ class Camera:
                     except:
                         gain_name = 'Gain_' + str(gain_index)
 
-                    self.__port_speed_gain_table[port_name][speed_name][gain_name] = {'gain_index': gain_index, 'bit_depth': self.bit_depth}
+                    self.__port_speed_gain_table[port_name][speed_name][gain_name] = {'gain_index': gain_index}
 
         # Reset speed table back to default
         self.readout_port = 0
@@ -200,22 +223,26 @@ class Camera:
 
         # Learn post processing features
         self.__post_processing_table = {}
-        featureCount = self.get_param(const.PARAM_PP_INDEX, const.ATTR_COUNT)
-        for featureIndex in range(featureCount):
+        try:
+            featureCount = self.get_param(const.PARAM_PP_INDEX, const.ATTR_COUNT)
+            for featureIndex in range(featureCount):
 
-            self.set_param(const.PARAM_PP_INDEX, featureIndex)
-            featureId = self.get_param(const.PARAM_PP_FEAT_ID)
-            featureName = self.get_param(const.PARAM_PP_FEAT_NAME)
-            self.__post_processing_table[featureName] = {}
+                self.set_param(const.PARAM_PP_INDEX, featureIndex)
+                featureId = self.get_param(const.PARAM_PP_FEAT_ID)
+                featureName = self.get_param(const.PARAM_PP_FEAT_NAME)
+                self.__post_processing_table[featureName] = {}
 
-            paramCount = self.get_param(const.PARAM_PP_PARAM_INDEX, const.ATTR_COUNT)
-            for paramIndex in range(paramCount):
-                self.set_param(const.PARAM_PP_PARAM_INDEX, paramIndex)
-                paramId = self.get_param(const.PARAM_PP_PARAM_ID)
-                paramName = self.get_param(const.PARAM_PP_PARAM_NAME)
-                paramMin = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
-                paramMax = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
-                self.__post_processing_table[featureName][paramName] = {'feature_index': featureIndex, 'feature_id': featureId, 'param_index': paramIndex, 'param_id': paramId, 'param_min': paramMin, 'param_max': paramMax}
+                paramCount = self.get_param(const.PARAM_PP_PARAM_INDEX, const.ATTR_COUNT)
+                for paramIndex in range(paramCount):
+                    self.set_param(const.PARAM_PP_PARAM_INDEX, paramIndex)
+                    paramId = self.get_param(const.PARAM_PP_PARAM_ID)
+                    paramName = self.get_param(const.PARAM_PP_PARAM_NAME)
+                    paramMin = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
+                    paramMax = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
+                    self.__post_processing_table[featureName][paramName] = {'feature_index': featureIndex, 'feature_id': featureId, 'param_index': paramIndex, 'param_id': paramId, 'param_min': paramMin, 'param_max': paramMax}
+
+        except AttributeError:
+            pass
 
     def close(self):
         """Closes the camera.
@@ -256,7 +283,6 @@ class Camera:
         #        force status to READOUT_NOT_ACTIVE while not acquiring
         status = 'READOUT_NOT_ACTIVE' if (self.__acquisition_mode is None) else status
         return status
-
 
     def get_param(self, param_id, param_attr=const.ATTR_CURRENT):
         """Gets the current value of a specified parameter.
@@ -327,20 +353,6 @@ class Camera:
         except:
             raise RuntimeError('Failed to reset post-processing settings.')
 
-    def _calculate_reshape(self):
-        """Calculates the shape of the output frame based on serial/ parallel
-           binning and ROI. This function should only be called internally
-           whenever the binning or roi is modifed.
-
-        Side Effect(s):
-            - Changes self.__shape
-
-        Returns:
-            None
-        """
-        area = (self.__roi[1] - self.__roi[0], self.__roi[3] - self.__roi[2])
-        self.__shape = (int(area[0]/ self.bin_x), int(area[1]/self.bin_y))
-
     def _update_mode(self):
         """Updates the mode of the camera, which is the bit-wise or between
            exposure mode and expose out mode. It then sets up a small sequence
@@ -359,22 +371,94 @@ class Camera:
         self.__mode = self.__exp_mode | self.__exp_out_mode
         pvc.set_exp_modes(self.__handle, self.__mode)
 
-    def poll_frame(self):
+    def reset_rois(self):
+        """Resets the ROI list to default, which is full frame.
+
+        Returns:
+            None
+        """
+        self.__rois = [self.__defaultRoi]
+
+    def set_roi(self, s1, p1, w, h):
+        """Configures a ROI for the camera. The default ROI is the full frame. If the default is
+           set or only a single ROI is supported, this function will over-write that ROI. Otherwise,
+           this function will attempt to append this ROI to the list.
+
+        Returns:
+            None
+        """
+
+        if w < 1 or h < 1:
+            raise ValueError('Width and height must be >= 1')
+
+        s2 = s1 + w - 1
+        p2 = p1 + h - 1
+
+        # Check if new ROI is in bounds
+        inBounds = 0 <= s1 <= self.sensor_size[0] and \
+            0 <= s2 <= self.sensor_size[0] and \
+            0 <= p1 <= self.sensor_size[1] and \
+            0 <= p2 <= self.sensor_size[1]
+
+        if not inBounds:
+            raise ValueError('Could not add ROI. ROI extends beyond limits of frame')
+
+        # Get the total supported ROIs
+        roiCount = self.get_param(const.PARAM_ROI_COUNT, const.ATTR_MAX)
+
+        # Check if current ROI list only contains the default
+        usingDefaultRoi = False
+        if len(self.__rois) == 1:
+            usingDefaultRoi = self.__rois[0] == self.__defaultRoi
+
+        newRoi = Camera.RegionOfInterest(s1, s2, self.bin_x, p1, p2, self.bin_y)
+        if roiCount == 1 or usingDefaultRoi:
+            self.__rois = [newRoi]
+
+        elif len(self.__rois) < roiCount:
+
+            # Check that new ROI doesn't overlap with existing ROIs
+            for roi in self.__rois:
+                if roi.checkOverlap(newRoi):
+                    raise ValueError('Could not add ROI. New ROI overlaps existing ROI')
+
+            self.__rois.append(newRoi)
+        else:
+            raise ValueError('Could not add ROI. Camera only supports {} rois'.format(roiCount))
+
+    def poll_frame(self, timeout_ms=WAIT_FOREVER, oldestFrame=True, copyData=True):
         """Calls the pvc.get_frame function with the current camera settings.
 
         Parameter:
+            oldestFrame (bool): Selects whether to return the oldest or newest frame. Only the oldest frame will be popped off the underlying queue of frames. (optional).
+            copyData (bool): Selects whether to return a copy of the numpy frame which points to a new buffer, or the original numpy frame which points to the
+                             buffer used directly by PVCAM. Disabling this copy is not recommended for most situations. Refer to PyVCAM Wrapper.md for more details. (optional).
+
             None
         Returns:
             A dictionary with the frame containing available meta data and 2D np.array pixel data, frames per second and frame count.
         """
 
-        frame, fps, frame_count = pvc.get_frame(self.__handle, self.__shape[0], self.__shape[1], self.__bits_per_pixel)
+        frame, fps, frame_count = pvc.get_frame(self.__handle, self.__rois, self.__dtype.num, timeout_ms, oldestFrame)
 
-        frame['pixel_data'] = frame['pixel_data'].reshape(self.__shape[1], self.__shape[0])
-        frame['pixel_data'] = np.copy(frame['pixel_data'])
+        num_rois = len(frame['pixel_data'])
+        if copyData:
+            frameTmp = {'pixel_data': [None] * num_rois}
+            for roi_index in range(num_rois):
+                frameTmp['pixel_data'][roi_index] = np.copy(frame['pixel_data'][roi_index])
+
+            if 'meta_data' in frame.keys():
+                frameTmp['meta_data'] = deepcopy(frame['meta_data'])
+
+            frame = frameTmp
+
+        # If using a single ROI, remove list container
+        if num_rois == 1:
+            frame['pixel_data'] = frame['pixel_data'][0]
+
         return frame, fps, frame_count
 
-    def get_frame(self, exp_time=None):
+    def get_frame(self, exp_time=None, timeout_ms=WAIT_FOREVER):
         """Calls the pvc.get_frame function with the current camera settings.
 
         Parameter:
@@ -383,12 +467,12 @@ class Camera:
             A 2D np.array containing the pixel data from the captured frame.
         """
         self.start_seq(exp_time=exp_time, num_frames=1)
-        frame, fps, frame_count = self.poll_frame()
+        frame, fps, frame_count = self.poll_frame(timeout_ms=timeout_ms)
         self.finish()
 
         return frame['pixel_data']
 
-    def get_sequence(self, num_frames, exp_time=None, interval=None):
+    def get_sequence(self, num_frames, exp_time=None, timeout_ms=WAIT_FOREVER, interval=None):
         """Calls the pvc.get_frame function with the current camera settings in
             rapid-succession for the specified number of frames
 
@@ -399,17 +483,22 @@ class Camera:
         Returns:
             A 3D np.array containing the pixel data from the captured frames.
         """
-        stack = np.empty((num_frames, self.__shape[1], self.__shape[0]), dtype=np.uint16)
+
+        if len(self.__rois) > 1:
+            raise ValueError('get_sequence does not support multi-roi captures')
+
+        shape = self.__rois[0].shape
+        stack = np.empty((num_frames, shape[1], shape[0]), dtype=self.__dtype)
 
         for i in range(num_frames):
-            stack[i] = self.get_frame()
+            stack[i] = self.get_frame(exp_time=exp_time, timeout_ms=timeout_ms)
 
             if isinstance(interval, int):
-                time.sleep(interval/1000)
+                time.sleep(interval / 1000)
 
         return stack
 
-    def get_vtm_sequence(self, time_list, exp_res, num_frames, interval=None):
+    def get_vtm_sequence(self, time_list, exp_res, num_frames, timeout_ms=WAIT_FOREVER, interval=None):
         """Calls the pvc.get_frame function within a loop, setting vtm expTime
             between each capture.
 
@@ -424,23 +513,27 @@ class Camera:
         old_res = self.exp_res
         self.exp_res = exp_res
 
-        stack = np.empty((num_frames, self.shape[1], self.shape[0]), dtype=np.uint16)
+        if len(self.__rois) > 1:
+            raise ValueError('get_vtm_sequence does not support multi-roi captures')
+
+        shape = self.__rois[0].shape
+        stack = np.empty((num_frames, shape[1], shape[0]), dtype=self.__dtype)
 
         for i in range(num_frames):
             exp_time = time_list[i]
             try:
                 self.vtm_exp_time = exp_time
-                stack[i] = self.get_frame(exp_time=self.vtm_exp_time)
+                stack[i] = self.get_frame(exp_time=self.vtm_exp_time, timeout_ms=timeout_ms)
             except Exception:
-                raise(ValueError, 'Could not collect vtm frame')
+                raise ValueError('Could not collect vtm frame')
 
             if isinstance(interval, int):
-                time.sleep(interval/ 1000)
+                time.sleep(interval / 1000)
 
         self.exp_res = old_res
         return stack
 
-    def start_live(self, exp_time=None):
+    def start_live(self, exp_time=None, buffer_frame_count=16, stream_to_disk_path=None):
         """Calls the pvc.start_live function to setup a circular buffer acquisition.
 
         Parameter:
@@ -448,16 +541,24 @@ class Camera:
         Returns:
             None
         """
-        x_start, x_end, y_start, y_end = self.__roi
-        self._set_bits_per_pixel()
+        self._set_dtype()
 
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
 
+        if isinstance(stream_to_disk_path, str):
+            stream_to_disk_path_abs = os.path.abspath(stream_to_disk_path)
+            directory, filename = os.path.split(stream_to_disk_path_abs)
+            if os.path.exists(directory):
+                try:
+                    os.remove(filename)
+                except OSError:
+                    pass
+            else:
+                raise ValueError('Invalid directory for stream to disk: ' + directory)
+
         self.__acquisition_mode = 'Live'
-        self.__exposure_bytes = pvc.start_live(self.__handle, x_start, x_end - 1,
-                                               self.bin_x, y_start, y_end - 1,
-                                               self.bin_x, exp_time, self.__mode)
+        self.__exposure_bytes = pvc.start_live(self.__handle, self.__rois, exp_time, self.__mode, buffer_frame_count, stream_to_disk_path)
 
     def start_seq(self, exp_time=None, num_frames=1):
         """Calls the pvc.start_seq function to setup a non-circular buffer acquisition.
@@ -467,16 +568,13 @@ class Camera:
         Returns:
             None
         """
-        x_start, x_end, y_start, y_end = self.__roi
-        self._set_bits_per_pixel()
+        self._set_dtype()
 
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
 
         self.__acquisition_mode = 'Sequence'
-        self.__exposure_bytes = pvc.start_seq(self.__handle, x_start, x_end - 1,
-                                               self.bin_x, y_start, y_end - 1,
-                                               self.bin_x, exp_time, self.__mode, num_frames)
+        self.__exposure_bytes = pvc.start_seq(self.__handle, self.__rois, exp_time, self.__mode, num_frames)
 
     def finish(self):
         """Ends a previously started live or sequence acquisition.
@@ -559,17 +657,11 @@ class Camera:
         else:
             raise AttributeError('Could not set post processing param. feature_name not found')
 
-    def _set_bits_per_pixel(self):
-        port_value = self.readout_port
-        speed_index = self.speed_table_index
-        gain_index = self.gain
-
-        port_dict = [value for value in self.__port_speed_gain_table.values() if value['port_value'] == port_value][0]
-        speed_dict = [value for value in port_dict.values() if isinstance(value, dict) and value['speed_index'] == speed_index][0]
-        gain_dict = [value for value in speed_dict.values() if isinstance(value, dict) and value['gain_index'] == gain_index][0]
-
-        bit_depth = gain_dict['bit_depth']
-        self.__bits_per_pixel = (int) (8 * np.ceil(bit_depth / 8))
+    def _set_dtype(self):
+        bit_depth = self.bit_depth
+        bytes_per_pixel = int(np.ceil(bit_depth / 8))
+        dtypeKind = 'u{}'.format(bytes_per_pixel)
+        self.__dtype = np.dtype(dtypeKind)
 
     ### Getters/Setters below ###
 
@@ -647,7 +739,7 @@ class Camera:
 
     @property
     def serial_no(self):
-        #HACK: cytocam fix for messed up serial numbers
+        # HACK: cytocam fix for messed up serial numbers
         try:
             serial_no = self.get_param(const.PARAM_HEAD_SER_NUM_ALPHA)
             return serial_no
@@ -744,79 +836,48 @@ class Camera:
 
     @property
     def binning(self):
-        return self.__binning
+        return self.bin_x, self.bin_y
 
     @binning.setter
     def binning(self, value):
         if isinstance(value, tuple):
             self.bin_x = value[0]
             self.bin_y = value[1]
-            return
-        elif value in self.read_enum(const.PARAM_BINNING_SER).values():
-            self.__binning = (value, value)
-            self._calculate_reshape()
-            return
-
-        raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+        else:
+            self.binning = (value, value)
 
     @property
     def bin_x(self):
-        return self.__binning[0]
+        return self.__rois[0].sbin
 
     @bin_x.setter
     def bin_x(self, value):
         # Will raise ValueError if incompatible binning is set
         if value in self.read_enum(const.PARAM_BINNING_SER).values():
-            self.__binning = (value, self.__binning[1])
-            self._calculate_reshape()
+            for roi in self.__rois:
+                roi.sbin = value
             return
 
         raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+                                                               self.read_enum(const.PARAM_BINNING_SER).items()))
 
     @property
     def bin_y(self):
-        return self.__binning[1]
+        return self.__rois[0].pbin
 
     @bin_y.setter
     def bin_y(self, value):
         # Will raise ValueError if incompatible binning is set
         if value in self.read_enum(const.PARAM_BINNING_PAR).values():
-            self.__binning = (self.__binning[0], value)
-            self._calculate_reshape()
+            for roi in self.__rois:
+                roi.pbin = value
             return
 
         raise ValueError('{} only supports {} binnings'.format(self,
-                                self.read_enum(const.PARAM_BINNING_SER).items()))
+                                                               self.read_enum(const.PARAM_BINNING_SER).items()))
 
-    @property
-    def roi(self):
-        return self.__roi
-
-    @roi.setter
-    def roi(self, value):
-        # Takes in a tuple following (x_start, x_end, y_start, y_end), and
-        # sets self.__roi if valid
-        if (isinstance(value, tuple) and all(isinstance(x, int) for x in value)
-                and len(value) == 4):
-
-            if (value[0] in range(0, self.sensor_size[0] + 1) and
-                    value[1] in range(0, self.sensor_size[0] + 1) and
-                    value[2] in range(0, self.sensor_size[1] + 1) and
-                    value[3] in range(0, self.sensor_size[1] + 1)):
-                self.__roi = value
-                self._calculate_reshape()
-                return
-
-            else:
-                raise ValueError('Invalid ROI paramaters for {}'.format(self))
-
-        raise ValueError('{} ROI expects a tuple of 4 integers'.format(self))
-
-    @property
-    def shape(self):
-        return self.__shape
+    def shape(self, roi_index=0):
+        return self.__rois[roi_index].shape
 
     @property
     def last_exp_time(self):
@@ -842,7 +903,7 @@ class Camera:
 
     @property
     def exp_time(self):
-        #TODO: Testing
+        # TODO: Testing
         return self.__exp_time
 
     @exp_time.setter
@@ -922,13 +983,13 @@ class Camera:
     def temp(self):
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
-        return self.get_param(const.PARAM_TEMP)/100.0
+        return self.get_param(const.PARAM_TEMP) / 100.0
 
     @property
     def temp_setpoint(self):
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
-        return self.get_param(const.PARAM_TEMP_SETPOINT)/100.0
+        return self.get_param(const.PARAM_TEMP_SETPOINT) / 100.0
 
     @temp_setpoint.setter
     def temp_setpoint(self, value):
@@ -965,7 +1026,7 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         return self.get_param(const.PARAM_POST_TRIGGER_DELAY)
-		
+
     @property
     def centroids_mode(self):
         # Camera specific setting: will raise AttributeError if called with a
