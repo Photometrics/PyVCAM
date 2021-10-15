@@ -50,4 +50,4 @@ cam.speed_table_index = 0
 cam.gain = 1
 ```
 
-More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/Documents/PyVCAM%20Wrapper.md).
+More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/docs/PyVCAM%20Wrapper.md).
