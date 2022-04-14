@@ -874,7 +874,7 @@ class Camera:
             return
 
         raise ValueError('{} only supports {} binnings'.format(self,
-                                                               self.read_enum(const.PARAM_BINNING_SER).items()))
+                                                               self.read_enum(const.PARAM_BINNING_PAR).items()))
 
     def shape(self, roi_index=0):
         return self.__rois[roi_index].shape
