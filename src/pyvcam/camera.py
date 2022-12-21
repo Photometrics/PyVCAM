@@ -996,12 +996,12 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         try:
-            self.set_param(const.PARAM_TEMP_SETPOINT, value)
+            self.set_param(const.PARAM_TEMP_SETPOINT, value*100)
         except RuntimeError:
             min_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MIN)
             max_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MAX)
             raise ValueError("Invalid temp {} : Valid temps are in the range {} "
-                             "- {}.".format(value, min_temp, max_temp))
+                             "- {}.".format(value, min_temp/100, max_temp/100))
 
     @property
     def readout_time(self):

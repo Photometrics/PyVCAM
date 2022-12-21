@@ -261,8 +261,9 @@ class CameraConstructionTests(unittest.TestCase):
         self.test_cam.open()
         curr_temp = pvc.get_param(self.test_cam.handle, const.PARAM_TEMP,
                                   const.ATTR_CURRENT)
-        # Less than +/-2% variation of temperature between calls.
-        self.assertGreaterEqual(abs(curr_temp / self.test_cam.temp), 0.98)
+        new_temp = self.test_cam.temp
+        # Less than +/-20% variation of temperature between calls.
+        self.assertLessEqual((abs(curr_temp/100 -new_temp) / new_temp), 0.98)
 
     def test_get_temp_no_open_fail(self):
         self.assertRaises(RuntimeError, getattr, self.test_cam, "temp")
@@ -283,9 +284,11 @@ class CameraConstructionTests(unittest.TestCase):
                                            const.ATTR_MIN)
         max_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
                                            const.ATTR_MAX)
-        for i in range(max_temp, min_temp-1, -1):
+        min_temp_divid100 = (int)(min_temp/100)
+        max_temp_divid100 = (int)(max_temp/100)
+        for i in range(max_temp_divid100, min_temp_divid100-1, -1):
             self.test_cam.temp_setpoint = i
-            self.assertEqual(i/100, self.test_cam.temp_setpoint)
+            self.assertEqual(i, self.test_cam.temp_setpoint)
 
     def test_set_temp_to_high_fail(self):
         self.test_cam.open()
