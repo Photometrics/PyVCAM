@@ -97,12 +97,13 @@ setup(name='pyvcam',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
+      install_requires=['sipyco'],
       ext_modules=ext_modules)
 
 # TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
 # pip.main(['install', 'wxPython'])
 # pip.main(['install', 'pyserial'])
-# pip.main(['install', 'opencv-python'])
+pip.main(['install', 'opencv-python'])
 # pip.main(['install', 'git+https://github.com/pearu/pylibtiff.git'])
 # os.system('conda install -y -c conda-forge opencv=3.2.0')
 
