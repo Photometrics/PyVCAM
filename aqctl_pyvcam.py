@@ -2,7 +2,7 @@
 """
 aqctl_pyvcam.py
 
-Implement ARTIQ Network Device Support Package (NDSP) to support Teledyne PrimeBSI ion camera integration into ARTIQ experiment.
+Implement ARTIQ Network Device Support Package (NDSP) to support Teledyne PrimeBSI camera integration into ARTIQ experiment.
 
 Kevin Chen
 2023-02-24
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class PyVCAM:
     """
-    Teledyne PrimeBSI ion camera control.
+    Teledyne PrimeBSI camera control.
     """
     WAIT_FOREVER = -1
 
@@ -35,16 +35,6 @@ class PyVCAM:
         pvc.init_pvcam()
         self.cam = [cam for cam in Camera.detect_camera()][0]
 
-    def __del__(self) -> None:
-        """
-        Closes and destroys camera object during garbage collection.
-        NOTE: close() function returns an error if user has already called close.
-        """
-        try:
-            self.cam.close()
-        finally:
-            pvc.uninit_pvcam()
-
     def detect_camera(self) -> NotImplementedError:
         """
         Generator that yields a Camera object for a camera connected to the system.
@@ -52,7 +42,7 @@ class PyVCAM:
 
         :raises NotImplementedError:
         """
-        raise NotImplementedError("""Function should not be explicitly called; already implemented during initialization.""")
+        raise NotImplementedError("Function should not be explicitly called; already implemented during initialization.")
 
     def open(self) -> None:
         """
@@ -543,18 +533,24 @@ class PyVCAM:
         self.cam.temp_setpoint = value
 
 def get_argparser():
-    parser = argparse.ArgumentParser(description="""PyVCAM controller. Use this controller to drive the Teledyne PrimeBSI ion camera.""")
+    parser = argparse.ArgumentParser(description="PyVCAM controller. Use this controller to drive the Teledyne PrimeBSI camera.")
     common_args.simple_network_args(parser, 3249)
-    parser.add_argument("--desc", default=None, help="PyVCAM Wrapper. See documentation at https://github.com/Photometrics/PyVCAM")
+    parser.add_argument("-d", "--desc", default=None, help="PyVCAM Wrapper. See documentation at https://github.com/Photometrics/PyVCAM")
     common_args.verbosity_args(parser)
     return parser
 
 def main():
     args = get_argparser().parse_args()
     common_args.init_logger_from_args(args)
-    logger.info("PyVCAM open.")
-    # simple_server_loop({"pyvcam": PyVCAM()}, "::1", 3249)
-    simple_server_loop({"pyvcam": PyVCAM()}, common_args.bind_address_from_args(args), args.port)
+    camera = PyVCAM()
+
+    try:
+        camera.open()
+        simple_server_loop({"pyvcam": camera}, common_args.bind_address_from_args(args), args.port)
+        logger.info("PyVCAM open.")
+    finally:
+        camera.close()
+        pvc.uninit_pvcam()
 
 if __name__ == "__main__":
     main()
