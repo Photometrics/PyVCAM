@@ -1,7 +1,19 @@
+"""
+pyvcam_driver.py
+
+All functions from Photometrics PyVCAM Package to support ARTIQ Network Support Device Package (NDSP) integration into ARTIQ experiment.
+
+Kevin Chen
+2023-03-01
+QuantumIon
+University of Waterloo
+"""
+
 from pyvcam import pvc
 from pyvcam.camera import Camera
 from pyvcam import constants as const
 from typing import Union
+from PIL import Image
 
 class PyVCAM:
     """
@@ -489,7 +501,7 @@ class PyVCAM:
         """
         self.cam.speed_table_index = value
     
-    def temp(self) -> int:
+    def temp(self) -> float:
         """
         Returns the current temperature of a camera in Celsius.
 
@@ -497,7 +509,7 @@ class PyVCAM:
         """
         return self.cam.temp
     
-    def temp_setpoint(self) -> int:
+    def temp_setpoint(self) -> float:
         """
         Returns the camera's temperature setpoint. The temperature setpoint is 
         the temperature that a camera will attempt to keep it's temperature (in Celsius) at.
@@ -506,10 +518,20 @@ class PyVCAM:
         """
         return self.cam.temp_setpoint
     
-    def trigger_table(self, value: int) -> None:
+    def set_temp_setpoint(self, value: int) -> None:
         """
         Changes the camera's temperature setpoint.
 
         :return: None.
         """
         self.cam.temp_setpoint = value
+    
+    def trigger_table(self) -> dict[str, str]:
+        """
+        Returns a dictionary containing a table consisting of information of the last acquisition such as exposure time, 
+        readout time, clear time, pre-trigger delay, and post-trigger delay. 
+        If any of the parameters are unavailable, the dictionary item will be set to 'N/A'.
+
+        :return:
+        """
+        return self.cam.trigger_table

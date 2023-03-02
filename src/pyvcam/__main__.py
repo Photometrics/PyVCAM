@@ -16,6 +16,8 @@ import argparse
 import logging
 from pyvcam import pvc
 from pyvcam_driver import PyVCAM
+from pyvcam.camera import Camera
+
 
 logger = logging.getLogger(__name__)
 
