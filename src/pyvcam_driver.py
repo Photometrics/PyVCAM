@@ -12,7 +12,7 @@ University of Waterloo
 from pyvcam import pvc
 from pyvcam.camera import Camera
 from pyvcam import constants as const
-from typing import Union
+from typing import Union, Optional
 from PIL import Image
 
 class PyVCAM:
@@ -57,7 +57,7 @@ class PyVCAM:
         """
         self.cam.close()
     
-    def get_frame(self, exp_time: int=None, timeout_ms: int=WAIT_FOREVER) -> list[list[int]]:
+    def get_frame(self, exp_time: Optional[int]=None, timeout_ms: Optional[int]=WAIT_FOREVER) -> list[list[int]]:
         """
         Calls the pvc.get_frame function with the current camera settings to get a 2D numpy array of pixel data from a single snap image.
 
@@ -97,7 +97,7 @@ class PyVCAM:
         """
         self.cam.finish()
     
-    def get_param(self, param_id: int, param_attr: int=const.ATTR_CURRENT) -> int:
+    def get_param(self, param_id: int, param_attr: Optional[int]=const.ATTR_CURRENT) -> int:
         """
         Gets the current value of a specified parameter.
 
@@ -317,8 +317,8 @@ class PyVCAM:
         """
         return self.cam.serial_no
     
-    def get_sequence(self, num_frames: int, exp_time: int=None, 
-                     timeout_ms: int=WAIT_FOREVER, interval: int=None) -> list[list[list[int]]]:
+    def get_sequence(self, num_frames: int, exp_time: Optional[int]=None, 
+                     timeout_ms: Optional[int]=WAIT_FOREVER, interval: Optional[int]=None) -> list[list[list[int]]]:
         """
         Calls the pvc.get_frame function with the current camera settings in
         rapid-succession for the specified number of frames
@@ -331,8 +331,8 @@ class PyVCAM:
         """
         return self.cam.get_sequence(num_frames, exp_time, timeout_ms, interval)
     
-    def start_live(self, exp_time: int=None, buffer_frame_count: int=16,
-                   stream_to_disk_path: str=None) -> None:
+    def start_live(self, exp_time: Optional[int]=None, buffer_frame_count: Optional[int]=16,
+                   stream_to_disk_path: Optional[str]=None) -> None:
         """
         Calls the pvc.start_live function to setup a circular buffer acquisition.
 
@@ -345,19 +345,20 @@ class PyVCAM:
         """
         self.cam.start_live(exp_time, buffer_frame_count, stream_to_disk_path)
     
-    def start_seq(self, exp_time: int=None, num_frames: int=1) -> None:
+    def start_seq(self, exp_time: Optional[int]=None, num_frames: Optional[int]=1) -> None:
         """
         Calls the pvc.start_seq function to setup a non-circular buffer acquisition.
         This must be called before poll_frame.
 
         :param exp_time: The exposure time.
+        :param num_frames: 
 
         :return: None.
         """
         self.cam.start_seq(exp_time, num_frames)
     
-    def poll_frame(self, timeout_ms: int=WAIT_FOREVER, oldestFrame: bool=True, 
-                   copyData: bool=True) -> tuple[dict, float, int]:
+    def poll_frame(self, timeout_ms: Optional[int]=WAIT_FOREVER, oldestFrame: Optional[bool]=True, 
+                   copyData: Optional[bool]=True) -> tuple[dict, float, int]:
         """
         Returns a single frame as a dictionary with optional meta data if available. 
         This method must be called after either stat_live or start_seq and before either abort or finish. 
@@ -401,7 +402,7 @@ class PyVCAM:
         """
         self.cam.set_roi(s1, p1, width, height)
     
-    def shape(self, roi_index: int=0) -> tuple[int, int]:
+    def shape(self, roi_index: Optional[int]=0) -> tuple[int, int]:
         """
         Returns the reshape factor to be used when acquiring a ROI. This is equivalent to an acquired images shape.
         
