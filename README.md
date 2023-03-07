@@ -1,4 +1,4 @@
-# [ARTIQ](http://m-labs.hk/experiment-control/artiq/) [Network Device Support Package (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html) Integration for the PyVCAM Wrapper
+# [ARTIQ](http://m-labs.hk/experiment-control/artiq/) [Network Device Support Package (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html) Integration for the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM)
 
 PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK.
 
@@ -64,7 +64,7 @@ self.pyvcam.set_gain(1)             # sets gain value to 1
 #### Single Image Example
 This captures a single image with a 20 ms exposure time and prints the values of the first 5 pixels.
 ```
-# A camera object named cam has already been created
+# A camera object self.pyvcam has already been created
 frame = self.pyvcam.get_frame(exp_time=20)
 print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))
 ```
@@ -73,7 +73,7 @@ print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))
 This is an example of how to change some of the settings on the cameras.
 ```
 # A camera object self.pyvcam has already been created
-self.pyvcam.exp_mode(1792)  # sets the exposure mode to be 'Internal Trigger'
+self.pyvcam.set_exp_mode(1792)  # sets the exposure mode to be 'Internal Trigger'
 self.pyvcam.set_readout_port(0)
 self.pyvcam.set_speed_table_index(0)
 self.pyvcam.set_gain(1)
