@@ -45,6 +45,8 @@ Controller Activation
 * To specify a port, run with ``python -m pyvcam -p <port number>``. The default port is ``3249``.
     * **NOTE:** You need to modify your ``device_db.py`` file if you have changed the port number.
     
+.. _artiq-setup:
+
 ARTIQ Experiment Setup
 ^^^^^^^^^^^^^^^^^^^^^^
 

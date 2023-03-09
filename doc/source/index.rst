@@ -30,4 +30,5 @@ Contents
 .. toctree::
 
    README
+   functions
    usage
