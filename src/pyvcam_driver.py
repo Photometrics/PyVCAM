@@ -13,7 +13,6 @@ from pyvcam import pvc
 from pyvcam.camera import Camera
 from pyvcam import constants as const
 from typing import Union, Optional
-from PIL import Image
 
 class PyVCAM:
     """
