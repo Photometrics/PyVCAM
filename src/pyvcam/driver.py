@@ -1,7 +1,7 @@
 """
-pyvcam_driver.py
+driver.py
 
-All functions from Photometrics PyVCAM Package to support ARTIQ Network Support Device Package (NDSP) integration into ARTIQ experiment.
+Wrapper for PyVCAM Camera class to support ARTIQ Network Support Device Package (NDSP) integration into ARTIQ experiment.
 
 Kevin Chen
 2023-03-01
@@ -13,7 +13,6 @@ from pyvcam import pvc
 from pyvcam.camera import Camera
 from pyvcam import constants as const
 from typing import Union
-from PIL import Image
 
 class PyVCAM:
     """
@@ -40,7 +39,7 @@ class PyVCAM:
 
     def open(self) -> None:
         """
-        Opens camera. A RuntimeError will be raised if the call to PVCAM fails. 
+        Opens camera. A RuntimeError will be raised if the call to PVCAM fails.
         For more information about how Python interacts with the PVCAM library, refer to pvcmodule.cpp.
 
         :return: None.
@@ -50,13 +49,13 @@ class PyVCAM:
     def close(self) -> None:
         """
         Closes camera. Automatically called during uninitialization.
-        A RuntimeError will be raised if the call to PVCAM fails. 
+        A RuntimeError will be raised if the call to PVCAM fails.
         For more information about how Python interacts with the PVCAM library, refer to pvcmodule.cpp.
 
         :return: None.
         """
         self.cam.close()
-    
+
     def get_frame(self, exp_time: int=None, timeout_ms: int=WAIT_FOREVER) -> list[list[int]]:
         """
         Calls the pvc.get_frame function with the current camera settings to get a 2D numpy array of pixel data from a single snap image.
@@ -71,19 +70,19 @@ class PyVCAM:
         """
         Gets the frame transfer status. Will raise an exception if called prior to initiating acquisition
 
-        :return: String representation of PL_IMAGE_STATUSES enum from pvcam.h
+        :return: String representation of PL_IMAGE_STATUSES enum from pvcam.h.
                 'READOUT_NOT_ACTIVE' - The system is @b idle, no data is expected. If any arrives, it will be discarded.
                 'EXPOSURE_IN_PROGRESS' - The data collection routines are @b active. They are waiting for data to arrive, but none has arrived yet.
                 'READOUT_IN_PROGRESS' - The data collection routines are @b active. The data has started to arrive.
                 'READOUT_COMPLETE' - All frames available in sequnece mode.
-                'FRAME_AVAILABLE' - At least one frame is available in live mode
+                'FRAME_AVAILABLE' - At least one frame is available in live mode.
                 'READOUT_FAILED' - Something went wrong.
         """
         return self.cam.check_frame_status()
 
     def abort(self) -> None:
         """
-        Calls the pvc.abort function that aborts acquisition.
+        Aborts acquisition.
 
         :return: None.
         """
@@ -96,16 +95,13 @@ class PyVCAM:
         :return: None.
         """
         self.cam.finish()
-    
+
     def get_param(self, param_id: int, param_attr: int=const.ATTR_CURRENT) -> int:
         """
         Gets the current value of a specified parameter.
 
-        :param param_id: The parameter to get. Refer to constants.py for
-                            defined constants for each parameter.
-        :param param_attr: The desired attribute of the parameter to
-                            identify. Refer to constants.py for defined
-                            constants for each attribute.
+        :param param_id: The parameter to get. Refer to constants.py for defined constants for each parameter.
+        :param param_attr: The desired attribute of the parameter to identify. Refer to constants.py for defined constants for each attribute.
         :return: Value of specified parameter.
         """
         return self.cam.get_param(param_id, param_attr)
@@ -114,12 +110,10 @@ class PyVCAM:
         """
         Sets a specified setting of a camera to a specified value.
 
-        Note that pvc will raise a RuntimeError if the camera setting can not be
-        applied. Pvc will also raise a ValueError if the supplied arguments are
-        invalid for the specified parameter.
+        Note that pvc will raise a RuntimeError if the camera setting can not be applied.
+        Pvc will also raise a ValueError if the supplied arguments are invalid for the specified parameter.
 
-        :param param_id: An int that corresponds to a camera setting. Refer to
-                            constants.py for valid parameter values.
+        :param param_id: An int that corresponds to a camera setting. Refer to constants.py for valid parameter values.
         :param value: The value to set the camera setting to.
         :return: None.
         """
@@ -127,10 +121,10 @@ class PyVCAM:
 
     def bit_depth(self) -> int:
         """
-        Returns the bit depth of pixel data for images collected with this camera. 
-        Bit depth cannot be changed directly; instead, users must select a desired speed table index value that has the desired bit depth. 
-        Note that a camera may have additional speed table entries for different readout ports. 
-        See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see which 
+        Returns the bit depth of pixel data for images collected with this camera.
+        Bit depth cannot be changed directly; instead, users must select a desired speed table index value that has the desired bit depth.
+        Note that a camera may have additional speed table entries for different readout ports.
+        See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see which
         settings are controlled by which speed table index is currently selected.
 
         :return:
@@ -153,10 +147,10 @@ class PyVCAM:
         """
         return self.cam.driver_version
 
-    def exp_mode(self) -> str:
+    def get_exp_mode(self) -> str:
         """
-        Returns the current exposure mode of the camera. 
-        Note that exposure modes have names, but PVCAM interprets them as integer values. 
+        Returns the current exposure mode of the camera.
+        Note that exposure modes have names, but PVCAM interprets them as integer values.
         When called as a getter, the integer value will be returned to the user.
         Modified to return more descriptive string.
 
@@ -186,10 +180,10 @@ class PyVCAM:
         """
         return dict(self.cam.exp_modes)
 
-    def exp_res(self) -> str:
+    def get_exp_res(self) -> str:
         """
-        Returns the current exposure resolution of a camera. 
-        Note that exposure resolutions have names, but PVCAM interprets them as integer values. 
+        Returns the current exposure resolution of a camera.
+        Note that exposure resolutions have names, but PVCAM interprets them as integer values.
         When called as a getter, the integer value will be returned to the user.
         Modified to return more descriptive string.
 
@@ -225,27 +219,27 @@ class PyVCAM:
         """
         return dict(self.cam.exp_resolutions)
 
-    def exp_time(self) -> int:
+    def get_exp_time(self) -> int:
         """
-        Returns the exposure time the camera will use if not given an exposure time. 
+        Returns the exposure time the camera will use if not given an exposure time.
         It is recommended to modify this value to modify your acquisitions for better abstraction.
 
         :return:
         """
         return self.cam.exp_time
-    
+
     def set_exp_time(self, value: int) -> None:
         """
         Changes exposure time.
 
-        :param value: Desired exposure time
+        :param value: Desired exposure time.
         :return: None.
         """
         self.cam.exp_time = value
 
-    def gain(self) -> int:
+    def get_gain(self) -> int:
         """
-        Returns the current gain index for a camera. 
+        Returns the current gain index for a camera.
         A ValueError will be raised if an invalid gain index is supplied to the setter.
 
         :return:
@@ -256,15 +250,14 @@ class PyVCAM:
         """
         Changes gain.
 
-        :param value: Desired gain value
+        :param value: Desired gain value.
         :return: None.
         """
         self.cam.gain = value
 
     def last_exp_time(self) -> int:
         """
-        Returns the last exposure time the camera used for the last successful 
-        non-variable timed mode acquisition in what ever time resolution it was captured at.
+        Returns the last exposure time the camera used for the last successful non-variable timed mode acquisition in what ever time resolution it was captured at.
 
         :return:
         """
@@ -272,10 +265,10 @@ class PyVCAM:
 
     def pix_time(self) -> int:
         """
-        Returns the camera's pixel time, which is the inverse of the speed of the camera. 
-        Pixel time cannot be changed directly; instead users must select a desired speed table index value that has the desired pixel time. 
-        Note that a camera may have additional speed table entries for different readout ports. 
-        See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see which 
+        Returns the camera's pixel time, which is the inverse of the speed of the camera.
+        Pixel time cannot be changed directly; instead users must select a desired speed table index value that has the desired pixel time.
+        Note that a camera may have additional speed table entries for different readout ports.
+        See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see which
         settings are controlled by which speed table index is currently selected.
 
         :return:
@@ -284,16 +277,16 @@ class PyVCAM:
 
     def port_speed_gain_table(self) -> dict:
         """
-        Returns a dictionary containing the port, speed and gain table, 
+        Returns a dictionary containing the port, speed and gain table,
         which gives information such as bit depth and pixel time for each readout port, speed index and gain.
 
         :return:
         """
         return self.cam.port_speed_gain_table
 
-    def readout_port(self) -> int:
+    def get_readout_port(self) -> int:
         """
-        Some cameras may have many readout ports, which are output nodes from which a pixel stream can be read from. 
+        Some cameras may have many readout ports, which are output nodes from which a pixel stream can be read from.
         For more information about readout ports, refer to the Port and Speed Choices section inside the PVCAM User Manual
 
         :return:
@@ -316,12 +309,10 @@ class PyVCAM:
         :return:
         """
         return self.cam.serial_no
-    
-    def get_sequence(self, num_frames: int, exp_time: int=None, 
-                     timeout_ms: int=WAIT_FOREVER, interval: int=None) -> list[list[list[int]]]:
+
+    def get_sequence(self, num_frames: int, exp_time: int=None, timeout_ms: int=WAIT_FOREVER, interval: int=None) -> list[list[list[int]]]:
         """
-        Calls the pvc.get_frame function with the current camera settings in
-        rapid-succession for the specified number of frames
+        Calls the pvc.get_frame function with the current camera settings in rapid-succession for the specified number of frames.
 
         :param num_frames: Number of frames to capture in the sequence.
         :param exp_time: The exposure time.
@@ -330,21 +321,20 @@ class PyVCAM:
         :return: A 3D np.array containing the pixel data from the captured frames.
         """
         return self.cam.get_sequence(num_frames, exp_time, timeout_ms, interval)
-    
-    def start_live(self, exp_time: int=None, buffer_frame_count: int=16,
-                   stream_to_disk_path: str=None) -> None:
+
+    def start_live(self, exp_time: int=None, buffer_frame_count: int=16, stream_to_disk_path: str=None) -> None:
         """
         Calls the pvc.start_live function to setup a circular buffer acquisition.
 
         :param exp_time: The exposure time.
         :param buffer_frame_count: The number of frames in the circular frame buffer.
-        :param stream_to_disk_path: The file path for data written directly to disk by PVCAM. 
+        :param stream_to_disk_path: The file path for data written directly to disk by PVCAM.
                                     The default is None which disables this feature.
 
         :return: None.
         """
         self.cam.start_live(exp_time, buffer_frame_count, stream_to_disk_path)
-    
+
     def start_seq(self, exp_time: int=None, num_frames: int=1) -> None:
         """
         Calls the pvc.start_seq function to setup a non-circular buffer acquisition.
@@ -355,9 +345,8 @@ class PyVCAM:
         :return: None.
         """
         self.cam.start_seq(exp_time, num_frames)
-    
-    def poll_frame(self, timeout_ms: int=WAIT_FOREVER, oldestFrame: bool=True, 
-                   copyData: bool=True) -> tuple[dict, float, int]:
+
+    def poll_frame(self, timeout_ms: int=WAIT_FOREVER, oldest_frame: bool=True, copy_data: bool=True) -> tuple[dict, float, int]:
         """
         Returns a single frame as a dictionary with optional meta data if available. 
         This method must be called after either stat_live or start_seq and before either abort or finish. 
@@ -369,15 +358,15 @@ class PyVCAM:
         Use set_param(constants.PARAM_METADATA_ENABLED, True) to enable meta data.
 
         :param timeout_ms: Duration to wait for new frames.
-        :param oldestFrame: If True, the returned frame will the oldest frame and will be popped off the queue. 
+        :param oldest_frame: If True, the returned frame will the oldest frame and will be popped off the queue. 
                             If False, the returned frame will be the newest frame and will not be removed from the queue.
-        :param copyData: Selects whether to return a copy of the numpy frame which points to a new buffer, or the original numpy frame which points to the
+        :param copy_data: Selects whether to return a copy of the numpy frame which points to a new buffer, or the original numpy frame which points to the
                          buffer used directly by PVCAM. Disabling this copy is not recommended for most situations. Refer to PyVCAM Wrapper.md for more details.
 
         :return: A dictionary with the frame containing available meta data and 2D np.array pixel data, frames per second and frame count.
         """
-        return self.cam.poll_frame(timeout_ms, oldestFrame, copyData)
-    
+        return self.cam.poll_frame(timeout_ms, oldest_frame, copy_data)
+
     def reset_rois(self) -> None:
         """
         Resets the ROI list to default, which is full frame.
@@ -385,7 +374,7 @@ class PyVCAM:
         :return: None.
         """
         self.cam.reset_rois()
-    
+
     def set_roi(self, s1: int, p1: int, width: int, height: int) -> None:
         """
         Configures a ROI for the camera. The default ROI is the full frame. If the default is
@@ -400,7 +389,7 @@ class PyVCAM:
         :return: None.
         """
         self.cam.set_roi(s1, p1, width, height)
-    
+
     def shape(self, roi_index: int=0) -> tuple[int, int]:
         """
         Returns the reshape factor to be used when acquiring a ROI. This is equivalent to an acquired images shape.
@@ -410,7 +399,7 @@ class PyVCAM:
         :return:
         """
         return self.cam.shape(roi_index)
-    
+
     def read_enum(self, param_id: int) -> dict[str, int]:
         """
         Returns all settings names paired with their values of a parameter.
@@ -420,15 +409,15 @@ class PyVCAM:
         :return: A dictionary containing strings mapped to values.
         """
         return self.cam.read_enum(param_id)
-    
+
     def binning(self) -> tuple[int, int]:
         """
-        Returns current serial and parallel binning values
+        Returns current serial and parallel binning values.
 
         :return:
         """
         return self.cam.binning
-    
+
     def set_binning(self, value: Union[tuple[int, int], int]) -> None:
         """
         Changes binning. A single value wills et a square binning.
@@ -441,7 +430,7 @@ class PyVCAM:
         :return: None.
         """
         self.cam.binning = value
-    
+
     def chip_name(self) -> str:
         """
         Returns the camera sensor's name as a string.
@@ -449,46 +438,45 @@ class PyVCAM:
         :return:
         """
         return self.cam.chip_name
-    
+
     def post_trigger_delay(self) -> int:
         """
-        Returns the last acquisition's post-trigger delay reported by the camera in ms.
+        Returns the last acquisition's post-trigger delay reported by the camera in milliseconds.
         
         :return:
         """
         return self.cam.post_trigger_delay
-    
+
     def pre_trigger_delay(self) -> int:
         """
-        Returns the last acquisition's pre-trigger delay reported by the camera in ms.
+        Returns the last acquisition's pre-trigger delay reported by the camera in milliseconds.
 
         :return:
         """
         return self.cam.pre_trigger_delay
-    
+
     def scan_line_time(self) -> int:
         """
-        Returns the scan line time in ns.
+        Returns the scan line time in nanoseconds.
 
         :return:
         """
         return self.cam.scan_line_time
-    
+
     def sensor_size(self) -> tuple[int, int]:
         """
-        Returns the sensor size of the current camera in a tuple 
-        in the form (serial sensor size, parallel sensor size)
+        Returns the sensor size of the current camera in a tuple in the form (serial sensor size, parallel sensor size).
 
         :return:
         """
         return self.cam.sensor_size
-    
-    def speed_table_index(self) -> int:
+
+    def get_speed_table_index(self) -> int:
         """
         Returns the current numerical index of the speed table of the camera.
         """
         return self.cam.speed_table_index
-    
+
     def set_speed_table_index(self, value: int) -> None:
         """
         Changes the current numerical index of the speed table of the camera. 
@@ -500,7 +488,7 @@ class PyVCAM:
         :return: None.
         """
         self.cam.speed_table_index = value
-    
+
     def temp(self) -> float:
         """
         Returns the current temperature of a camera in Celsius.
@@ -508,8 +496,8 @@ class PyVCAM:
         :return:
         """
         return self.cam.temp
-    
-    def temp_setpoint(self) -> float:
+
+    def get_temp_setpoint(self) -> float:
         """
         Returns the camera's temperature setpoint. The temperature setpoint is 
         the temperature that a camera will attempt to keep it's temperature (in Celsius) at.
@@ -517,7 +505,7 @@ class PyVCAM:
         :return:
         """
         return self.cam.temp_setpoint
-    
+
     def set_temp_setpoint(self, value: int) -> None:
         """
         Changes the camera's temperature setpoint.
@@ -525,7 +513,7 @@ class PyVCAM:
         :return: None.
         """
         self.cam.temp_setpoint = value
-    
+
     def trigger_table(self) -> dict[str, str]:
         """
         Returns a dictionary containing a table consisting of information of the last acquisition such as exposure time, 
