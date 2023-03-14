@@ -1,7 +1,7 @@
 """
 pyvcam_driver.py
 
-All functions from Photometrics PyVCAM Package to support ARTIQ Network Support Device Package (NDSP) integration into ARTIQ experiment.
+Wrapper for PyVCAM Camera class to support ARTIQ Network Support Device Package (NDSP) integration into ARTIQ experiment.
 
 Kevin Chen
 2023-03-01
