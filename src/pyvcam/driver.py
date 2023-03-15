@@ -356,17 +356,17 @@ class PyVCAM:
 
     def poll_frame(self, timeout: int=WAIT_FOREVER, oldest_frame: bool=True, copy_data: bool=True) -> tuple[dict, float, int]:
         """
-        Returns a single frame as a dictionary with optional meta data if available. 
-        This method must be called after either stat_live or start_seq and before either abort or finish. 
+        Returns a single frame as a dictionary with optional meta data if available.
+        This method must be called after either stat_live or start_seq and before either abort or finish.
         Pixel data can be accessed via the pixel_data key. Available meta data can be accessed via the meta_data key.
 
-        If multiple ROIs are set, pixel data will be a list of region pixel data of length number of ROIs. 
+        If multiple ROIs are set, pixel data will be a list of region pixel data of length number of ROIs.
         Meta data will also contain information for each ROI.
 
         Use set_param(constants.PARAM_METADATA_ENABLED, True) to enable meta data.
 
         :param timeout: Duration to wait for new frames in milliseconds.
-        :param oldest_frame: If True, the returned frame will the oldest frame and will be popped off the queue. 
+        :param oldest_frame: If True, the returned frame will the oldest frame and will be popped off the queue.
                             If False, the returned frame will be the newest frame and will not be removed from the queue.
         :param copy_data: Selects whether to return a copy of the numpy frame which points to a new buffer, or the original numpy frame which points to the
                          buffer used directly by PVCAM. Disabling this copy is not recommended for most situations. Refer to PyVCAM Wrapper.md for more details.
@@ -401,7 +401,7 @@ class PyVCAM:
     def shape(self, roi_index: int=0) -> tuple[int, int]:
         """
         Returns the reshape factor to be used when acquiring a ROI. This is equivalent to an acquired images shape.
-        
+
         :param roi_index: Index of ROI
 
         :return:
@@ -429,7 +429,7 @@ class PyVCAM:
     def set_binning(self, value: Union[tuple[int, int], int]) -> None:
         """
         Changes binning. A single value will set a square binning.
-        Binning cannot be changed directly on the camera, but is used for setting up 
+        Binning cannot be changed directly on the camera, but is used for setting up
         acquisitions and returning correctly shaped images returned from get_frame and get_live_frame.
         Binning settings for individual ROIs is not supported.
 
@@ -450,7 +450,7 @@ class PyVCAM:
     def post_trigger_delay(self) -> int:
         """
         Returns the last acquisition's post-trigger delay reported by the camera in milliseconds.
-        
+
         :return:
         """
         return self.cam.post_trigger_delay
@@ -487,8 +487,8 @@ class PyVCAM:
 
     def set_speed_table_index(self, value: int) -> None:
         """
-        Changes the current numerical index of the speed table of the camera. 
-        See the Port and Speed Choices section inside the PVCAM User Manual for 
+        Changes the current numerical index of the speed table of the camera.
+        See the Port and Speed Choices section inside the PVCAM User Manual for
         a detailed explanation about PVCAM speed tables.
 
         :param value: Desired speed table index.
@@ -507,7 +507,7 @@ class PyVCAM:
 
     def get_temp_setpoint(self) -> float:
         """
-        Returns the camera's temperature setpoint. The temperature setpoint is 
+        Returns the camera's temperature setpoint. The temperature setpoint is
         the temperature at which a camera will attempt to stabilize it's temperature (in Celsius) at.
 
         :return:
@@ -524,8 +524,8 @@ class PyVCAM:
 
     def trigger_table(self) -> dict[str, str]:
         """
-        Returns a dictionary containing a table consisting of information of the last acquisition such as exposure time, 
-        readout time, clear time, pre-trigger delay, and post-trigger delay. 
+        Returns a dictionary containing a table consisting of information of the last acquisition such as exposure time,
+        readout time, clear time, pre-trigger delay, and post-trigger delay.
         If any of the parameters are unavailable, the dictionary item will be set to 'N/A'.
 
         :return:
