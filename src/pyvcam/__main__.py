@@ -33,13 +33,13 @@ def main():
     camera = PyVCAM()
 
     try:
-        # camera.open()
+        camera.open()
         logger.info('PyVCAM open.')
         simple_server_loop({"pyvcam": camera}, common_args.bind_address_from_args(args), args.port)
     finally:
-        # camera.close()
+        camera.close()
         logger.info('PyVCAM closed.')
-        pvc.uninit_pvcam()
+        del camera
 
 if __name__ == "__main__":
     main()

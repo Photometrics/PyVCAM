@@ -23,10 +23,18 @@ class PyVCAM:
     def __init__(self) -> None:
         """
         Creates camera object.
-        NOTE: This does not open the camera. User has to call open function.
+        NOTE: This does not open the camera. User has to call open function either in controller or experiment.
         """
         pvc.init_pvcam()
         self.cam = [cam for cam in Camera.detect_camera()][0]
+
+    def __del__(self) -> None:
+        """
+        Deletes camera object.
+        NOTE: This does not close the camera. User has to call close function either in controller or experiment.
+        """
+        pvc.uninit_pvcam()
+        print('del function called')
 
     def detect_camera(self) -> NotImplementedError:
         """
