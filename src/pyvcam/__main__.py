@@ -14,7 +14,6 @@ from sipyco.pc_rpc import simple_server_loop
 from sipyco import common_args
 import argparse
 import logging
-from pyvcam import pvc
 from pyvcam.driver import PyVCAM
 
 

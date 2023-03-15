@@ -34,7 +34,6 @@ class PyVCAM:
         NOTE: This does not close the camera. User has to call close function either in controller or experiment.
         """
         pvc.uninit_pvcam()
-        print('del function called')
 
     def detect_camera(self) -> NotImplementedError:
         """
@@ -64,15 +63,15 @@ class PyVCAM:
         """
         self.cam.close()
 
-    def get_frame(self, exp_time: int=None, timeout_ms: int=WAIT_FOREVER) -> list[list[int]]:
+    def get_frame(self, exp_time: int=None, timeout: int=WAIT_FOREVER) -> list[list[int]]:
         """
-        Calls the pvc.get_frame function with the current camera settings to get a 2D numpy array of pixel data from a single snap image.
+        Gets a 2D numpy array of pixel data from a single snap image.
 
         :param exp_time: Exposure time.
-        :param timeout_ms: Duration to wait for new frames. Default set to no timeout (forever).
+        :param timeout: Duration to wait for new frames in milliseconds. Default set to no timeout (forever).
         :return: A 2D np.array containing the pixel data from the captured frame.
         """
-        return self.cam.get_frame(exp_time, timeout_ms)
+        return self.cam.get_frame(exp_time, timeout)
 
     def check_frame_status(self) -> str:
         """
@@ -166,7 +165,7 @@ class PyVCAM:
         """
         return list(self.exp_modes().keys())[list(self.exp_modes().values()).index(self.cam.exp_mode)]
 
-    def set_exp_mode(self, key_or_value: int) -> None:
+    def set_exp_mode(self, key_or_value: Union[int, str]) -> None:
         """
         Changes exposure mode.
         Will raise ValueError if provided with an unrecognized key.
@@ -199,7 +198,7 @@ class PyVCAM:
         """
         return list(self.exp_resolutions().keys())[list(self.exp_resolutions().values()).index(self.cam.exp_res)]
 
-    def set_exp_res(self, key_or_value: int) -> None:
+    def set_exp_res(self, key_or_value: Union[int, str]) -> None:
         """
         Changes exposure resolution.
         Keys:
@@ -318,9 +317,9 @@ class PyVCAM:
         """
         return self.cam.serial_no
 
-    def get_sequence(self, num_frames: int, exp_time: int=None, timeout_ms: int=WAIT_FOREVER, interval: int=None) -> list[list[list[int]]]:
+    def get_sequence(self, num_frames: int, exp_time: int=None, timeout: int=WAIT_FOREVER, interval: int=None) -> list[list[list[int]]]:
         """
-        Calls the pvc.get_frame function with the current camera settings in rapid-succession for the specified number of frames.
+        Calls the get_frame function in rapid-succession for the specified number of frames.
 
         :param num_frames: Number of frames to capture in the sequence.
         :param exp_time: The exposure time.
@@ -328,11 +327,12 @@ class PyVCAM:
 
         :return: A 3D np.array containing the pixel data from the captured frames.
         """
-        return self.cam.get_sequence(num_frames, exp_time, timeout_ms, interval)
+        return self.cam.get_sequence(num_frames, exp_time, timeout, interval)
 
     def start_live(self, exp_time: int=None, buffer_frame_count: int=16, stream_to_disk_path: str=None) -> None:
         """
-        Calls the pvc.start_live function to setup a circular buffer acquisition.
+        Sets up a circular buffer acquisition.
+        This must be called before poll_frame.
 
         :param exp_time: The exposure time.
         :param buffer_frame_count: The number of frames in the circular frame buffer.
@@ -345,7 +345,7 @@ class PyVCAM:
 
     def start_seq(self, exp_time: int=None, num_frames: int=1) -> None:
         """
-        Calls the pvc.start_seq function to setup a non-circular buffer acquisition.
+        Sets up a non-circular buffer acquisition.
         This must be called before poll_frame.
 
         :param exp_time: The exposure time.
@@ -354,7 +354,7 @@ class PyVCAM:
         """
         self.cam.start_seq(exp_time, num_frames)
 
-    def poll_frame(self, timeout_ms: int=WAIT_FOREVER, oldest_frame: bool=True, copy_data: bool=True) -> tuple[dict, float, int]:
+    def poll_frame(self, timeout: int=WAIT_FOREVER, oldest_frame: bool=True, copy_data: bool=True) -> tuple[dict, float, int]:
         """
         Returns a single frame as a dictionary with optional meta data if available. 
         This method must be called after either stat_live or start_seq and before either abort or finish. 
@@ -365,7 +365,7 @@ class PyVCAM:
 
         Use set_param(constants.PARAM_METADATA_ENABLED, True) to enable meta data.
 
-        :param timeout_ms: Duration to wait for new frames.
+        :param timeout: Duration to wait for new frames in milliseconds.
         :param oldest_frame: If True, the returned frame will the oldest frame and will be popped off the queue. 
                             If False, the returned frame will be the newest frame and will not be removed from the queue.
         :param copy_data: Selects whether to return a copy of the numpy frame which points to a new buffer, or the original numpy frame which points to the
@@ -373,7 +373,7 @@ class PyVCAM:
 
         :return: A dictionary with the frame containing available meta data and 2D np.array pixel data, frames per second and frame count.
         """
-        return self.cam.poll_frame(timeout_ms, oldest_frame, copy_data)
+        return self.cam.poll_frame(timeout, oldest_frame, copy_data)
 
     def reset_rois(self) -> None:
         """
@@ -428,8 +428,8 @@ class PyVCAM:
 
     def set_binning(self, value: Union[tuple[int, int], int]) -> None:
         """
-        Changes binning. A single value wills et a square binning.
-        Binning cannot be changed directly on the camera; but is used for setting up 
+        Changes binning. A single value will set a square binning.
+        Binning cannot be changed directly on the camera, but is used for setting up 
         acquisitions and returning correctly shaped images returned from get_frame and get_live_frame.
         Binning settings for individual ROIs is not supported.
 
@@ -508,7 +508,7 @@ class PyVCAM:
     def get_temp_setpoint(self) -> float:
         """
         Returns the camera's temperature setpoint. The temperature setpoint is 
-        the temperature that a camera will attempt to keep it's temperature (in Celsius) at.
+        the temperature at which a camera will attempt to stabilize it's temperature (in Celsius) at.
 
         :return:
         """

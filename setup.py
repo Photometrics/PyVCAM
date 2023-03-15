@@ -90,15 +90,15 @@ ext_modules = [Extension('pyvcam.pvc',
 
 setup(name='pyvcam',
       version='2.1.5',
-      author='Teledyne Photometrics',
-      author_email='Steve.Bellinger@Teledyne.com',
-      url='https://github.com/Photometrics/PyVCAM',
-      description='Python wrapper for PVCAM functionality.',
+      author='Teledyne Photometrics, QuantumIon',
+      author_email='Steve.Bellinger@Teledyne.com, k377chen@uwaterloo.ca, collin.epstein@uwaterloo.ca',
+      url='https://github.com/quantumion/PyVCAM',
+      description='Python wrapper for PVCAM functionality integrated into ARTIQ experiment with the usage of NDSPs.',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
-      py_modules=['pyvcam.constants', 'pyvcam.driver'],
+      py_modules=['pyvcam.constants'],
       setup_requires=['numpy'],
-      install_requires=['sipyco', 'numpy'],
+      install_requires=['sipyco@git+https://github.com/m-labs/sipyco.git', 'numpy'],
       ext_modules=ext_modules)
 
 print('\n\n*************** Finished ***************\n')
