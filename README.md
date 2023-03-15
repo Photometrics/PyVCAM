@@ -16,7 +16,7 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 ## ARTIQ Integration with [Network Device Support Packages (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html)
 ### Initial Setup
 1. Clone this repository into your Projects folder with the command ```git clone git@github.com:quantumion/PyVCAM.git```.
-* **Note:** The following steps (2-3) may be skipped if installation is to be done on disk - virtual environment usage is not a requirement.
+* **Note:** The following steps (2-3) may be skipped if installation is to be done in the default/user specified environment - virtual environment usage is not a requirement.
 2. Navigate into your PyVCAM folder and create a virtual environment with ```virtualenv venv```. 
 3. Activate your virtual environment with ```source venv/bin/activate```.
 4. Install PyVCAM by running ```pip install .```.
@@ -49,15 +49,16 @@ def build(self):
 ### Usage
 * Camera functions run like a normal function with ```self.pyvcam.<function>()```.
 * Functions with argument parameters may be input into parenthesis.
-* Example usage:
-```
-print(self.pyvcam.gain())           # prints current gain value as int
-self.pyvcam.set_gain(1)             # sets gain value to 1
-```
+* **Due to the implementation of the driver class, functions must also be modified from their default style. Follow the style in the "Driver Wrapper" columns as shown below.**
+* Example usage given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class | Driver Wrapper                  | Result                           |
+|-------------------|---------------------------------|----------------------------------|
+| `print(cam.gain)` | `print(self.pyvcam.get_gain())` | Prints current gain value as int |
+| `cam.gain = 1`    | `self.pyvcam.set_gain(1)`       | Sets gain value to 1             |
+
 
 ## How to use the wrapper
-Due to the implementation of the driver class, functions must also be modified from their default style. Follow the style in the "Driver Wrapper" columns as shown below.
-
 #### Single Image Example
 This captures a single image with a 20 millisecond exposure time and prints the values of the first 5 pixels.
 * Given that a camera object cam/self.pyvcam has already been created:

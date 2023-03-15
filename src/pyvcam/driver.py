@@ -42,7 +42,7 @@ class PyVCAM:
 
         :raises NotImplementedError:
         """
-        raise NotImplementedError("Function should not be explicitly called; already implemented during initialization.")
+        raise NotImplementedError("Function should not be explicitly called; already called as needed during initialization.")
 
     def open(self) -> None:
         """
