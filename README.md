@@ -15,17 +15,14 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 
 ## ARTIQ Integration with [Network Device Support Packages (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html)
 ### Initial Setup
-1. Clone the [sipyco](https://github.com/m-labs/sipyco) repository into your Projects folder with the command ```git clone git@github.com:m-labs/sipyco.git```.
-2. Clone this repository into your Projects folder with the command ```git clone git@github.com:quantumion/PyVCAM.git```.
-3. Navigate into your PyVCAM folder and create a virtual environment with ```virtualenv venv```. 
-4. Activate your virtual environment with ```source venv/bin/activate```. Install numpy by running ```pip install numpy```.
-    * **Note:** Steps 3-4 may be skipped if installation is to be done on disk.
-5. Navigate into your sipyco directory, and run ```pip install .```.
-    * This installs the sipyco package into your PyVCAM environment.
-6. Activate the PyVCAM setup process by running ```python setup.py install```.
+1. Clone this repository into your Projects folder with the command ```git clone git@github.com:quantumion/PyVCAM.git```.
+* **Note:** The following steps (2-3) may be skipped if installation is to be done in the default/user specified environment - virtual environment usage is not a requirement.
+2. Navigate into your PyVCAM folder and create a virtual environment with ```virtualenv venv```. 
+3. Activate your virtual environment with ```source venv/bin/activate```.
+4. Install PyVCAM by running ```pip install .```.
 
 ### Controller Activation
-* Navigate to ```/src/``` folder and run ```python -m pyvcam```.
+* Run ```python -m pyvcam```.
 * Add flags to specify parameters. Add ```-h``` to see a list of flags.
 * To specify a port, run with ```python -m pyvcam -p <port number>```. The default port is ```3249```.
     * **NOTE:** You need to modify your ```device_db.py``` file if you have changed the port number.
@@ -36,9 +33,9 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 device_db = {
     "pyvcam": {
         "type": "controller",
-        "host": "::1",
+        "host": "::1", # Change this for a different host
         "port": 3249, # Change this for a different port number
-        "command": "python ~/Projects/QuantumIon-ARTIQ-System/pyvcam/aqctl_pyvcam.py -p {port}"
+        "command": "python /path/to/pyvcam -p {port}"
     }
     ... # The rest of your device_db
 }
@@ -48,35 +45,51 @@ device_db = {
 def build(self):
     self.setattr_device("pyvcam")
 ```
-* Run a Nix environment with ```nix develop```.
-* You can now run files with the ```artiq_run``` command.
 
 ### Usage
 * Camera functions run like a normal function with ```self.pyvcam.<function>()```.
 * Functions with argument parameters may be input into parenthesis.
-* Example usage:
-```
-print(self.pyvcam.gain())           # prints current gain value as int
-self.pyvcam.set_gain(1)             # sets gain value to 1
-```
+* **Due to the implementation of the driver class, functions must also be modified from their default style. Follow the style in the "Driver Wrapper" columns as shown below.**
+* Example usage given that a camera object cam/self.pyvcam has already been created:
 
-### How to use the wrapper
+| Bare PyVCAM Class | Driver Wrapper                  | Result                           |
+|-------------------|---------------------------------|----------------------------------|
+| `print(cam.gain)` | `print(self.pyvcam.get_gain())` | Prints current gain value as int |
+| `cam.gain = 1`    | `self.pyvcam.set_gain(1)`       | Sets gain value to 1             |
+
+
+## How to use the wrapper
 #### Single Image Example
-This captures a single image with a 20 ms exposure time and prints the values of the first 5 pixels.
-```
-# A camera object self.pyvcam has already been created
-frame = self.pyvcam.get_frame(exp_time=20)
-print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))
-```
+This captures a single image with a 20 millisecond exposure time and prints the values of the first 5 pixels.
+* Given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class                    | Driver Wrapper                               |
+|--------------------------------------|----------------------------------------------|
+| `frame = cam.get_frame(exp_time=20)` | `frame = self.pyvcam.get_frame(exp_time=20)` |
+
+`print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))`
+
+#### Reading Settings
+This prints the current settings of the camera.
+* Given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class              | Driver Wrapper                               |
+|--------------------------------|----------------------------------------------|
+| `print(cam.exp_mode)`          | `print(self.pyvcam.get_exp_mode())`          |
+| `print(cam.readout_port)`      | `print(self.pyvcam.get_readout_port())`      |
+| `print(cam.speed_table_index)` | `print(self.pyvcam.get_speed_table_index())` |
+| `print(cam.gain)`              | `print(self.pyvcam.get_gain())`              |
+
 
 #### Changing Settings Example
 This is an example of how to change some of the settings on the cameras.
-```
-# A camera object self.pyvcam has already been created
-self.pyvcam.set_exp_mode(1792)  # sets the exposure mode to be 'Internal Trigger'
-self.pyvcam.set_readout_port(0)
-self.pyvcam.set_speed_table_index(0)
-self.pyvcam.set_gain(1)
-```
+* Given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class                   | Driver Wrapper                         |
+|-------------------------------------|----------------------------------------|
+| `cam.exp_mode = "Internal Trigger"` | `self.pyvcam.set_exp_mode(1792)`       |
+| `cam.readout_port = 0`              | `self.pyvcam.set_readout_port(0)`      |
+| `cam.speed_table_index = 0`         | `self.pyvcam.set_speed_table_index(0)` |
+| `cam.gain = 1`                      | `self.pyvcam.set_gain(1)`              |
 
 More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/docs/PyVCAM%20Wrapper.md).

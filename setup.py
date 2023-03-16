@@ -90,21 +90,15 @@ ext_modules = [Extension('pyvcam.pvc',
 
 setup(name='pyvcam',
       version='2.1.5',
-      author='Teledyne Photometrics',
-      author_email='Steve.Bellinger@Teledyne.com',
-      url='https://github.com/Photometrics/PyVCAM',
-      description='Python wrapper for PVCAM functionality.',
+      author='Teledyne Photometrics, QuantumIon',
+      author_email='Steve.Bellinger@Teledyne.com, k377chen@uwaterloo.ca, cepstein@uwaterloo.ca',
+      url='https://github.com/quantumion/PyVCAM',
+      description='Python wrapper for PVCAM functionality integrated into ARTIQ experiment with the usage of NDSPs.',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
-      install_requires=['sipyco'],
+      setup_requires=['numpy'],
+      install_requires=['sipyco@git+https://github.com/m-labs/sipyco.git', 'numpy'],
       ext_modules=ext_modules)
-
-# TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
-# pip.main(['install', 'wxPython'])
-# pip.main(['install', 'pyserial'])
-# pip.main(['install', 'opencv-python'])
-# pip.main(['install', 'git+https://github.com/pearu/pylibtiff.git'])
-# os.system('conda install -y -c conda-forge opencv=3.2.0')
 
 print('\n\n*************** Finished ***************\n')
