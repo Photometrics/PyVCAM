@@ -99,6 +99,7 @@ setup(name='pyvcam',
       py_modules=['pyvcam.constants'],
       setup_requires=['numpy'],
       install_requires=['sipyco@git+https://github.com/m-labs/sipyco.git', 'numpy'],
+      python_requires=">=3.10",
       ext_modules=ext_modules)
 
 print('\n\n*************** Finished ***************\n')

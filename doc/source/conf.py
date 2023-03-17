@@ -6,7 +6,7 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import sys
-sys.path.insert(0, '/home/k377chen/Projects/PyVCAM/src/')
+sys.path.insert(0, '/home/k377chen/Projects/PyVCAM/src/pyvcam/')
 
 project = 'PyVCAM'
 copyright = '2023, QuantumIon'
