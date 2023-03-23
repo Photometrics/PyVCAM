@@ -269,9 +269,9 @@ class Camera:
 
         Returns:
             String representation of PL_IMAGE_STATUSES enum from pvcam.h
-            'READOUT_NOT_ACTIVE' - The system is idle, no data is expected. If any arrives, it will be discarded.
-            'EXPOSURE_IN_PROGRESS' - The data collection routines are active. They are waiting for data to arrive, but none has arrived yet.
-            'READOUT_IN_PROGRESS' - The data collection routines are active. The data has started to arrive.
+            'READOUT_NOT_ACTIVE' - The system is @b idle, no data is expected. If any arrives, it will be discarded.
+            'EXPOSURE_IN_PROGRESS' - The data collection routines are @b active. They are waiting for data to arrive, but none has arrived yet.
+            'READOUT_IN_PROGRESS' - The data collection routines are @b active. The data has started to arrive.
             'READOUT_COMPLETE' - All frames available in sequnece mode.
             'FRAME_AVAILABLE' - At least one frame is available in live mode
             'READOUT_FAILED' - Something went wrong.

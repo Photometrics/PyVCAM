@@ -95,10 +95,11 @@ This is an example of how to change some of the settings on the cameras.
 More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/docs/PyVCAM%20Wrapper.md).
 
 ## Generating Documentation Using [Sphinx](https://www.sphinx-doc.org/en/master/index.html)
-### Installing Sphinx
+### [Installing Sphinx from PyPI](https://www.sphinx-doc.org/en/master/usage/installation.html#installation-from-pypi)
 1. Install Sphinx by entering `pip install -U sphinx` in your terminal.
-2. After installation, type `sphinx-build --version` on the command prompt. A successful installation will return a version number.
+2. After installation, type `sphinx-build --version` in your terminal. A successful installation will return a version number.
 
 ### Generating Documentation
-1. Navigate to the `docs/` folder.
-2. Run the command `make html`. This reads the `.rst` files in `docs/source/` and automatically generates documentation in `html` format in `docs/build/`.
+1. Ensure the PyVCAM Package is already installed in your environment as shown in the [Initial Setup](#initial-setup). This is important as the Sphinx configuration will read directly from the installation.
+2. Navigate to the `docs/` folder.
+3. Run the command `make html`. This reads the `.rst` files in `docs/source/` and automatically generates documentation in `html` format in `docs/build/`.
