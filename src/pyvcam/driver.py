@@ -84,9 +84,9 @@ class PyVCAM:
 
         :return: String representation of PL_IMAGE_STATUSES enum from :code:`pvcam.h`.
 
-            | 'READOUT_NOT_ACTIVE' - The system is @b idle, no data is expected. If any arrives, it will be discarded.
-            | 'EXPOSURE_IN_PROGRESS' - The data collection routines are @b active. They are waiting for data to arrive, but none has arrived yet.
-            | 'READOUT_IN_PROGRESS' - The data collection routines are @b active. The data has started to arrive.
+            | 'READOUT_NOT_ACTIVE' - The system is idle, no data is expected. If any arrives, it will be discarded.
+            | 'EXPOSURE_IN_PROGRESS' - The data collection routines are active. They are waiting for data to arrive, but none has arrived yet.
+            | 'READOUT_IN_PROGRESS' - The data collection routines are active. The data has started to arrive.
             | 'READOUT_COMPLETE' - All frames available in sequnece mode.
             | 'FRAME_AVAILABLE' - At least one frame is available in live mode
             | 'READOUT_FAILED' - Something went wrong.
@@ -150,13 +150,13 @@ class PyVCAM:
 
     def bit_depth(self) -> int:
         """
-        :return: Bit depth of pixel data for images collected with this camera.
-        :rtype: int
-
         Bit depth cannot be changed directly; instead, users must select a desired speed table index value that has the desired bit depth.
         Note that a camera may have additional speed table entries for different readout ports.
         See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see
         which settings are controlled by which speed table index is currently selected.
+
+        :return: Bit depth of pixel data for images collected with this camera.
+        :rtype: int
         """
         return self.cam.bit_depth
 
@@ -176,10 +176,10 @@ class PyVCAM:
 
     def get_exp_mode(self) -> str:
         """
+        Refer to :func:`exp_modes` for the available exposure modes.
+
         :return: Current exposure mode of the camera.
         :rtype: str
-
-        Refer to :func:`exp_modes` for the available exposure modes.
         """
         return list(self.exp_modes().keys())[list(self.exp_modes().values()).index(self.cam.exp_mode)]
 
@@ -195,6 +195,7 @@ class PyVCAM:
             | 2048 - Trigger first
 
         :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
 
         :return: None.
         :raise ValueError: If provided with an unrecognized key or value.
@@ -210,10 +211,10 @@ class PyVCAM:
 
     def get_exp_res(self) -> str:
         """
+        Refer to :func:`exp_resolutions` for the available exposure resolutions.
+
         :return: Current exposure resolution of a camera.
         :rtype: str
-
-        Refer to :func:`exp_resolutions` for the available exposure resolutions.
         """
         return list(self.exp_resolutions().keys())[list(self.exp_resolutions().values()).index(self.cam.exp_res)]
 
@@ -228,6 +229,7 @@ class PyVCAM:
             | 1 - One Microsecond
 
         :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
 
         :return: None.
         :raise ValueError: If provided with an unrecognized key or value.
@@ -250,11 +252,11 @@ class PyVCAM:
 
     def get_exp_time(self) -> int:
         """
+        It is recommended to modify this value to modify your acquisitions for better abstraction.
+
         :return: The exposure time (in milliseconds or microseconds) the camera will use if not given an exposure time.
                 Refer to :func:`exp_res` for the current exposure time resolution.
         :rtype: int
-
-        It is recommended to modify this value to modify your acquisitions for better abstraction.
         """
         return self.cam.exp_time
 
@@ -298,13 +300,13 @@ class PyVCAM:
 
     def pix_time(self) -> int:
         """
-        :return: The camera's pixel time, which is the inverse of the speed of the camera.
-        :rtype: int
-
         Pixel time cannot be changed directly; instead users must select a desired speed table index value that has the desired pixel time.
         Note that a camera may have additional speed table entries for different readout ports.
         See Port and Speed Choices section inside the PVCAM User Manual for a visual representation of a speed table and to see
         which settings are controlled by which speed table index is currently selected.
+
+        :return: The camera's pixel time, which is the inverse of the speed of the camera.
+        :rtype: int
         """
         return self.cam.pix_time
 
@@ -483,7 +485,7 @@ class PyVCAM:
     def set_binning(self, value: tuple[int, int] | int) -> None:
         """
         Changes binning. A single value will set a square binning.
-        Binning cannot be changed directly on the camera; but is used for setting up
+        Binning cannot be changed directly on the camera, but is used for setting up
         acquisitions and returning correctly shaped images returned from :func:`get_frame` and :func:`get_live_frame`.
         Binning settings for individual ROIs is not supported.
 
@@ -558,10 +560,10 @@ class PyVCAM:
 
     def get_temp_setpoint(self) -> float:
         """
+        The temperature setpoint is the temperature at which a camera will attempt to stabilize it's temperature (in Celsius) at.
+
         :return: The camera's temperature setpoint in Celsius.
         :rtype: float
-
-        The temperature setpoint is the temperature at which a camera will attempt to stabilize it's temperature (in Celsius) at.
         """
         return self.cam.temp_setpoint
 

@@ -3,6 +3,7 @@ Class Functions
 
 PyVCAM Class
 ------------
-.. autoclass:: driver.PyVCAM
+.. module:: pyvcam.driver
+.. autoclass:: PyVCAM
     :members:
-    :special-members: __init__, __del__
+    :special-members:
