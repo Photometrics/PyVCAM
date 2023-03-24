@@ -10,7 +10,7 @@ To convert the returned array to a visible image, additional tools are required,
 Using the Pillow library
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-To save an image to disk, the ``Image`` class from the Python library ``PIL`` has to be imported first.
+One method of saving an image to disk uses the ``Image`` class from ``[pillow](https://python-pillow.org/)``.
 
 .. code-block:: python
 

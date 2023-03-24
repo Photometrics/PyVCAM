@@ -85,12 +85,12 @@ This prints the current settings of the camera.
 This is an example of how to change some of the settings on the cameras.
 * Given that a camera object cam/self.pyvcam has already been created:
 
-| Bare PyVCAM Class                   | Driver Wrapper                         |
-|-------------------------------------|----------------------------------------|
-| `cam.exp_mode = "Internal Trigger"` | `self.pyvcam.set_exp_mode(1792)` or<br/>`self.pyvcam.set_exp_mode("Internal Trigger")`|
-| `cam.readout_port = 0`              | `self.pyvcam.set_readout_port(0)`      |
-| `cam.speed_table_index = 0`         | `self.pyvcam.set_speed_table_index(0)` |
-| `cam.gain = 1`                      | `self.pyvcam.set_gain(1)`              |
+| Bare PyVCAM Class                   | Driver Wrapper                                 |
+|-------------------------------------|------------------------------------------------|
+| `cam.exp_mode = "Internal Trigger"` | `self.pyvcam.set_exp_mode("Internal Trigger")` |
+| `cam.readout_port = 0`              | `self.pyvcam.set_readout_port(0)`              |
+| `cam.speed_table_index = 0`         | `self.pyvcam.set_speed_table_index(0)`         |
+| `cam.gain = 1`                      | `self.pyvcam.set_gain(1)`                      |
 
 More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/docs/PyVCAM%20Wrapper.md).
 

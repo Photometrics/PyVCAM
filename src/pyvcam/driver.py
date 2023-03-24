@@ -48,7 +48,7 @@ class PyVCAM:
         """
         Opens camera. For more information about how Python interacts with the PVCAM library, refer to :code:`pvcmodule.cpp`.
 
-        :return: None.
+        :return: None
         :raise RuntimeError: If call to PVCAM fails (e.g. Camera is already open).
         """
         self.cam.open()
@@ -57,7 +57,7 @@ class PyVCAM:
         """
         Closes camera. For more information about how Python interacts with the PVCAM library, refer to :code:`pvcmodule.cpp`.
 
-        :return: None.
+        :return: None
         :raise RuntimeError: If call to PVCAM fails (e.g. Camera is already closed).
         """
         self.cam.close()
@@ -98,7 +98,7 @@ class PyVCAM:
         """
         Aborts acquisition.
 
-        :return: None.
+        :return: None
         """
         return self.cam.abort()
 
@@ -106,7 +106,7 @@ class PyVCAM:
         """
         Ends a previously started live or sequence acquisition.
 
-        :return: None.
+        :return: None
         """
         self.cam.finish()
 
@@ -141,7 +141,7 @@ class PyVCAM:
         :type param_id: int
         :type value: int or float
 
-        :return: None.
+        :return: None
         :raise RuntimeError: If the camera setting cannot be applied.
         :raise ValueError: If the supplied arguments are invalid for the specific parameter.
         :raise AttributeError: If camera does not support the specified paramter.
@@ -197,7 +197,7 @@ class PyVCAM:
         :param key_or_value: Key or value to change.
         :type key_or_value: int or str
 
-        :return: None.
+        :return: None
         :raise ValueError: If provided with an unrecognized key or value.
         """
         self.cam.exp_mode = key_or_value
@@ -231,7 +231,7 @@ class PyVCAM:
         :param key_or_value: Key or value to change.
         :type key_or_value: int or str
 
-        :return: None.
+        :return: None
         :raise ValueError: If provided with an unrecognized key or value.
         """
         self.cam.exp_res = key_or_value
@@ -267,7 +267,7 @@ class PyVCAM:
         :param value: Desired exposure time in milliseconds or microseconds.
         :type value: int
 
-        :return: None.
+        :return: None
         """
         self.cam.exp_time = value
 
@@ -286,14 +286,13 @@ class PyVCAM:
         :param value: Desired gain value
         :type value: int
 
-        :return: None.
+        :return: None
         """
         self.cam.gain = value
 
     def last_exp_time(self) -> int:
         """
-        :return: The last exposure time the camera used for the last successful
-                non-variable timed mode acquisition in what ever time resolution it was captured at.
+        :return: The last exposure time the camera used for the last successful non-variable timed mode acquisition in what ever time resolution it was captured at.
         :rtype: int
         """
         return self.cam.last_exp_time
@@ -335,7 +334,7 @@ class PyVCAM:
         :param value: Desired readout port.
         :type value: int
 
-        :return: None.
+        :return: None
         """
         self.cam.readout_port = value
 
@@ -379,7 +378,7 @@ class PyVCAM:
         :type buffer_frame_count: int or None
         :type stream_to_disk_path: str or None
 
-        :return: None.
+        :return: None
         """
         self.cam.start_live(exp_time, buffer_frame_count, stream_to_disk_path)
 
@@ -393,7 +392,7 @@ class PyVCAM:
         :type exp_time: int or None
         :type num_frames: int or None
 
-        :return: None.
+        :return: None
         """
         self.cam.start_seq(exp_time, num_frames)
 
@@ -426,7 +425,7 @@ class PyVCAM:
         """
         Resets the ROI list to default, which is full frame.
 
-        :return: None.
+        :return: None
         """
         self.cam.reset_rois()
 
@@ -445,7 +444,7 @@ class PyVCAM:
         :type width: int
         :type height: int
 
-        :return: None.
+        :return: None
         """
         self.cam.set_roi(s1, p1, width, height)
 
@@ -492,7 +491,7 @@ class PyVCAM:
         :param value: Desired binning value(s) as a tuple, or an int for a square binning.
         :type value: tuple[int, int] or int
 
-        :return: None.
+        :return: None
         """
         self.cam.binning = value
 
@@ -547,7 +546,7 @@ class PyVCAM:
         :param value: Desired speed table index.
         :type value: int
 
-        :return: None.
+        :return: None
         """
         self.cam.speed_table_index = value
 
@@ -574,7 +573,7 @@ class PyVCAM:
         :param value: Desired temperature setpoint in Celsius.
         :type value: int
 
-        :return: None.
+        :return: None
         """
         self.cam.temp_setpoint = value
 
