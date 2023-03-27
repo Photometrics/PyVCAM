@@ -185,7 +185,7 @@ class PyVCAM:
 
     def set_exp_mode(self, key_or_value: int | str) -> None:
         """
-        Changes exposure mode. Refer to :func:`exp_modes` for the available exposure modes.
+        Changes exposure mode. Refer to :func:`exp_modes` for the available exposure modes. Exact case matching is **required**.
 
         Default exposure modes:
 
@@ -221,6 +221,7 @@ class PyVCAM:
     def set_exp_res(self, key_or_value: int | str) -> None:
         """
         Changes exposure resolution. Refer to :func:`exp_resolutions` for the available exposure resolutions.
+        Exact case matching is **required**.
 
         Default exposure resolutions:
 
