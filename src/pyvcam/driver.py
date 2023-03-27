@@ -144,9 +144,21 @@ class PyVCAM:
         :return: None
         :raise RuntimeError: If the camera setting cannot be applied.
         :raise ValueError: If the supplied arguments are invalid for the specific parameter.
-        :raise AttributeError: If camera does not support the specified paramter.
+        :raise AttributeError: If camera does not support the specified parameter.
         """
         self.cam.set_param(param_id, value)
+
+    def check_param(self, param_id: int) -> bool:
+        """
+        Checks if a specified setting of a camera is available to read/modify.
+
+        :param param_id: An int that corresponds to a camera setting. Refer to constants.py for valid parameter values.
+        :type param_id: int
+
+        :return: True if available, False if unavailable.
+        :rtype: bool
+        """
+        return self.cam.check_param(param_id)
 
     def bit_depth(self) -> int:
         """
