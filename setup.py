@@ -97,6 +97,12 @@ setup(name='pyvcam',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
+<<<<<<< HEAD
+=======
+      setup_requires=['numpy'],
+      install_requires=['sipyco@git+https://github.com/m-labs/sipyco.git', 'numpy'],
+      python_requires=">=3.10",
+>>>>>>> f078cf0b6f249618d314a15bb498640c467f508b
       ext_modules=ext_modules)
 
 # TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
