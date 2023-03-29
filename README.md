@@ -1,4 +1,4 @@
-# PyVCAM Wrapper
+# [ARTIQ](http://m-labs.hk/experiment-control/artiq/) [Network Device Support Package (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html) Integration for the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM)
 
 PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK.
 
@@ -13,26 +13,6 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 * The latest PVCAM and PVCAM SDK which can be downloaded [here](https://www.photometrics.com/support/software/#software).
 * PyVCAM was developed and tested using Microsoft Windows 10/64-bit. The build package also supports Linux, but testing has been minimal.
 
-<<<<<<< HEAD
-
-### Installing
-When you are ready to install the wrapper use your command prompt to navigate into the directory that contains 
-setup.py and run ```python setup.py install``` 
-
-
-### How to use the wrapper
-#### Create Camera Example
-This will create a camera object using the first camera that is found that can then be used to interact with the camera.
-```
-from pyvcam import pvc 
-from pyvcam.camera import Camera   
-
-pvc.init_pvcam()                   # Initialize PVCAM 
-cam = next(Camera.detect_camera()) # Use generator to find first camera. 
-cam.open()                         # Open the camera.
-```
-
-=======
 ## ARTIQ Integration with [Network Device Support Packages (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html)
 ### Initial Setup
 1. Clone this repository into your Projects folder with the command `git clone git@github.com:quantumion/PyVCAM.git`.
@@ -79,29 +59,32 @@ def build(self):
 
 
 ## How to use the wrapper
->>>>>>> f078cf0b6f249618d314a15bb498640c467f508b
 #### Single Image Example
-This captures a single image with a 20 ms exposure time and prints the values of the first 5 pixels.
-```
-# A camera object named cam has already been created
-frame = cam.get_frame(exp_time=20)
-print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))
-```
+This captures a single image with a 20 millisecond exposure time and prints the values of the first 5 pixels.
+* Given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class                    | Driver Wrapper                               |
+|--------------------------------------|----------------------------------------------|
+| `frame = cam.get_frame(exp_time=20)` | `frame = self.pyvcam.get_frame(exp_time=20)` |
+
+`print("First five pixels of frame: {}, {}, {}, {}, {}".format(*frame[:5]))`
+
+#### Reading Settings
+This prints the current settings of the camera.
+* Given that a camera object cam/self.pyvcam has already been created:
+
+| Bare PyVCAM Class              | Driver Wrapper                               |
+|--------------------------------|----------------------------------------------|
+| `print(cam.exp_mode)`          | `print(self.pyvcam.get_exp_mode())`          |
+| `print(cam.readout_port)`      | `print(self.pyvcam.get_readout_port())`      |
+| `print(cam.speed_table_index)` | `print(self.pyvcam.get_speed_table_index())` |
+| `print(cam.gain)`              | `print(self.pyvcam.get_gain())`              |
+
 
 #### Changing Settings Example
 This is an example of how to change some of the settings on the cameras.
-```
-# A camera object named cam has already been created
-cam.clear_mode = "Never"
-cam.exp_mode = "Ext Trig Trig First"
-cam.readout_port = 0
-cam.speed_table_index = 0
-cam.gain = 1
-```
+* Given that a camera object cam/self.pyvcam has already been created:
 
-<<<<<<< HEAD
-More information on how to use this wrapper and how it works can be found [here](https://github.com/Photometrics/PyVCAM/blob/master/docs/PyVCAM%20Wrapper.md).
-=======
 | Bare PyVCAM Class                   | Driver Wrapper                                 |
 |-------------------------------------|------------------------------------------------|
 | `cam.exp_mode = "Internal Trigger"` | `self.pyvcam.set_exp_mode("Internal Trigger")` |
@@ -120,4 +103,3 @@ More information on how to use this wrapper and how it works can be found [here]
 1. Ensure the PyVCAM Package is already installed in your environment as shown in the [Initial Setup](#initial-setup). This is important as the Sphinx configuration will read directly from the installation.
 2. Navigate to the `docs/` folder.
 3. Run the command `make html`. This reads the `.rst` files in `docs/source/` and automatically generates documentation in `html` format in `docs/build/`.
->>>>>>> f078cf0b6f249618d314a15bb498640c467f508b
