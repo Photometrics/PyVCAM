@@ -125,7 +125,7 @@ class PyVCAM:
         :return: Value of specified parameter.
         :rtype: int or float
         :raise ValueError: If invalid parameters are supplied.
-        :raise AttributeError: If camera does not support the specified paramter.
+        :raise AttributeError: If camera does not support the specified parameter.
         """
         return self.cam.get_param(param_id, param_attr)
 
@@ -144,9 +144,21 @@ class PyVCAM:
         :return: None
         :raise RuntimeError: If the camera setting cannot be applied.
         :raise ValueError: If the supplied arguments are invalid for the specific parameter.
-        :raise AttributeError: If camera does not support the specified paramter.
+        :raise AttributeError: If camera does not support the specified parameter.
         """
         self.cam.set_param(param_id, value)
+
+    def check_param(self, param_id: int) -> bool:
+        """
+        Checks if a specified setting of a camera is available to read/modify.
+
+        :param param_id: An int that corresponds to a camera setting. Refer to constants.py for valid parameter values.
+        :type param_id: int
+
+        :return: True if available, False if unavailable.
+        :rtype: bool
+        """
+        return self.cam.check_param(param_id)
 
     def bit_depth(self) -> int:
         """
@@ -176,7 +188,9 @@ class PyVCAM:
 
     def get_exp_mode(self) -> str:
         """
-        Refer to :func:`exp_modes` for the available exposure modes.
+        Refer to :func:`set_exp_mode` for the available exposure modes.
+
+        For a description of exposure modes (Trigger Modes), refer to Prime BSI User Manual page 22.
 
         :return: Current exposure mode of the camera.
         :rtype: str
@@ -185,7 +199,9 @@ class PyVCAM:
 
     def set_exp_mode(self, key_or_value: int | str) -> None:
         """
-        Changes exposure mode. Refer to :func:`exp_modes` for the available exposure modes. Exact case matching is **required**.
+        Changes exposure mode. Exact case matching is **required**.
+
+        For a description of exposure modes (Trigger Modes), refer to Prime BSI User Manual page 22.
 
         Default exposure modes:
 
@@ -204,6 +220,8 @@ class PyVCAM:
 
     def exp_modes(self) -> dict[str, int]:
         """
+        For a description of exposure modes (Trigger Modes), refer to Prime BSI User Manual page 22.
+
         :return: A dictionary containing exposure modes supported by the camera.
         :rtype: dict[str, int]
         """
@@ -211,7 +229,7 @@ class PyVCAM:
 
     def get_exp_res(self) -> str:
         """
-        Refer to :func:`exp_resolutions` for the available exposure resolutions.
+        Refer to :func:`set_exp_res` for the available exposure resolutions.
 
         :return: Current exposure resolution of a camera.
         :rtype: str
@@ -220,8 +238,7 @@ class PyVCAM:
 
     def set_exp_res(self, key_or_value: int | str) -> None:
         """
-        Changes exposure resolution. Refer to :func:`exp_resolutions` for the available exposure resolutions.
-        Exact case matching is **required**.
+        Changes exposure resolution. Exact case matching is **required**.
 
         Default exposure resolutions:
 
@@ -366,6 +383,29 @@ class PyVCAM:
         """
         return self.cam.get_sequence(num_frames, exp_time, timeout, interval)
 
+    def get_vtm_sequence(self, time_list: list[int], exp_res: int, num_frames: int, timeout: int | None = WAIT_FOREVER, interval: int | None = None) -> list[list[list[int]]]:
+        """
+        A modified :func:`get_sequence` function to be used for Variable Timed Mode. Before calling it, set the camera's exposure mode to "Variable Timed".
+        The timings will always start at the first given and keep looping around until its captured the number of frames given. Multiple ROIs are not supported.
+
+        :param time_list: The timings to be used by the camera in Variable Timed Mode.
+        :param exp_res: The exposure time resolution. Currently only supports milliseconds (0) and microseconds (1).
+        :param num_frames: The number of frames to be captured in the sequence.
+        :param timeout: Duration to wait for new frames in milliseconds. Default set to :const:`WAIT_FOREVER`.
+        :param interval: The time to wait between each sequence frame in milliseconds. Default set to 0.
+        :type time_list: list[int]
+        :type exp_res: int
+        :type num_frames: int
+        :type timeout: int or None
+        :type interval: int or None
+
+        :return: A 3D Numpy array containing the pixel data from the captured sequence.
+        :rtype: list[list[list[int]]]
+        :raise ValueError: If invalid parameters are supplied.
+        :raise MemoryError: If unable to allocate memory for the camera frame(s).
+        """
+        return self.cam.get_vtm_sequence(time_list, exp_res, num_frames, timeout, interval)
+
     def start_live(self, exp_time: int | None = None, buffer_frame_count: int | None = 16, stream_to_disk_path: str | None = None) -> None:
         """
         Sets up a circular buffer acquisition.
@@ -426,6 +466,8 @@ class PyVCAM:
         """
         Resets the ROI list to default, which is full frame.
 
+        For a description of ROIs, refer to Prime BSI User Manual page 18.
+
         :return: None
         """
         self.cam.reset_rois()
@@ -435,6 +477,8 @@ class PyVCAM:
         Configures a ROI for the camera. The default ROI is the full frame. If the default is
         set or only a single ROI is supported, this function will over-write that ROI. Otherwise,
         this function will attempt to append this ROI to the list.
+
+        For a description of ROIs, refer to Prime BSI User Manual page 18.
 
         :param s1: Serial coordinate 1.
         :param p1: Paralled coordinate 1.
@@ -586,3 +630,362 @@ class PyVCAM:
         :rtype: dict[str, str]
         """
         return self.cam.trigger_table
+
+    def reset_pp(self) -> None:
+        """
+        Resets the post-processing settings to default.
+
+        :return: None
+        """
+        self.cam.reset_pp()
+
+    def sw_trigger(self) -> None:
+        """
+        Performs a software trigger. This trigger behaves analogously to an external (hardware) trigger.
+
+        :return: None
+        """
+        self.cam.sw_trigger()
+
+    def get_post_processing_param(self, feature_name: str, param_name: str) -> int:
+        """
+        Gets the current value of a post processing parameter.
+
+        :param feature_name: A string name for the post-processing feature using this parameter. Use :func:`post_processing_table` for feature names.
+        :param param_name: A string name for the post-processing parameter. Use :func:`post_processing_table` for parameter names.
+        :type feature_name: str
+        :type param_name: str
+
+        :return: Value of specified post processing parameter.
+        :rtype: int
+        """
+        return self.cam.get_post_processing_param(feature_name, param_name)
+
+    def set_post_processing_param(self, feature_name: str, param_name: str, value: int) -> None:
+        """
+        Sets the value of a specified post-processing parameter.
+
+        :param feature_name: A string name for the post-processing feature using this parameter. Use :func:`post_processing_table` for feature names.
+        :param param_name: A string name for the post-processing parameter. Use :func:`post_processing_table` for parameter names.
+        :param value: The value to be assigned to the post-processing parameter. Value must fall within the range provided by :func:`post_processing_table`.
+        :type feature_name: str
+        :type param_name: str
+        :type value: str
+
+        :return: None
+        """
+        self.cam.set_post_processing_param(feature_name, param_name, value)
+
+    def handle(self) -> int:
+        """
+        Returns the camera's handle. Note that this is a read only variable, meaning it should never be changed or set.
+        PVCAM will handle the updating of this attribute when the camera is opened or closed.
+
+        :return: The camera's handle.
+        :rtype: int
+        """
+        return self.cam.handle
+
+    def is_open(self) -> bool:
+        """
+        Returns if the camera is open. Note that this is a read only variable, meaning it should never be changed or set.
+        PVCAM will handle the updating of this attribute when the camera is opened or closed.
+
+        :return: True if the camera is currently open, False otherwise.
+        :rtype: bool
+        """
+        return self.cam.is_open
+
+    def name(self) -> str:
+        """
+        Returns the camera's name. Note that this is a read only variable, meaning it should never be changed or set.
+        PVCAM will handle the updating of this attribute when the camera is opened or closed.
+
+        :return: The camera's name.
+        :rtype: str
+        """
+        return self.cam.name
+
+    def post_processing_table(self) -> dict:
+        """
+        :return: A dictionary of the post-processing parameters and their current values of the camera.
+        :rtype: dict
+        """
+        return self.cam.post_processing_table
+
+    def centroids_modes(self) -> dict[str, int]:
+        """
+        :return: A dictionary containing centroid modes supported by the camera.
+        :rtype: dict[str, int]
+        """
+        return dict(self.cam.centroids_modes)
+
+    def get_centroids_mode(self) -> AttributeError:
+        """
+        Attempts to read the current centroid mode, which is not supported by the Prime BSI Camera.
+
+        :raise AttributeError: This function is not supported by the Prime BSI Camera.
+        """
+        return self.cam.centroids_mode
+
+    def set_centroids_mode(self, key_or_value: int | str) -> AttributeError:
+        """
+        Attempts to modify the current centroid mode, which is not supported by the Prime BSI Camera.
+
+        :raise AttributeError: This function is not supported by the Prime BSI Camera.
+        """
+        self.cam.centroids_mode = key_or_value
+
+    def clear_modes(self) -> dict[str, int]:
+        """
+        For a description of clear modes, refer to Prime BSI User Manual page 18.
+
+        :return: A dictionary containing clear modes supported by the camera.
+        :rtype: dict[str, int]
+        """
+        return dict(self.cam.clear_modes)
+
+    def get_clear_mode(self) -> str:
+        """
+        Refer to :func:`set_clear_mode` for the available clear modes.
+
+        For a description of clear modes, refer to Prime BSI User Manual page 18.
+
+        :return: Current clear mode of a camera.
+        :rtype: str
+        """
+        return list(self.clear_modes().keys())[list(self.clear_modes().values()).index(self.cam.clear_mode)]
+
+    def set_clear_mode(self, key_or_value: int | str) -> None:
+        """
+        Changes clear mode. Exact case matching is **required**.
+
+        For a description of clear modes, refer to Prime BSI User Manual page 18.
+
+        Default clear modes:
+
+        Keys:
+            | 0 - Auto
+
+        :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
+
+        :return: None
+        :raise ValueError: If provided with an unrecognized key or value.
+        """
+        self.cam.clear_mode = key_or_value
+
+    def exp_out_modes(self) -> dict[str, int]:
+        """
+        For a description of Expose Out modes, refer to Prime BSI User Manual page 23.
+
+        :return: A dictionary containing exposure out modes supported by the camera.
+        :rtype: dict[str, int]
+        """
+        return dict(self.cam.exp_out_modes)
+
+    def get_exp_out_mode(self) -> str:
+        """
+        Refer to :func:`set_exp_out_mode` for the available exposure out modes.
+
+        For a description of Expose Out modes, refer to Prime BSI User Manual page 23.
+
+        :return: Current exposure out mode of a camera.
+        :rtype: str
+        """
+        return list(self.exp_out_modes().keys())[list(self.exp_out_modes().values()).index(self.cam.exp_out_mode)]
+
+    def set_exp_out_mode(self, key_or_value: int | str) -> None:
+        """
+        Changes exposure out mode. Exact case matching is **required**.
+
+        For a description of Expose Out modes, refer to Prime BSI User Manual page 23.
+
+        Default exposure out modes:
+
+        Keys:
+            | 0 - First Row
+            | 2 - Any Row
+            | 3 - Rolling Shutter
+            | 4 - Line Output
+
+        :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
+
+        :return: None
+        :raise ValueError: If provided with an unrecognized key or value.
+        """
+        self.cam.exp_out_mode = key_or_value
+
+    def prog_scan_modes(self) -> dict[str, int]:
+        """
+        For a description of Programmable Scan Modes, refer to Prime BSI User Manual page 19.
+
+        :return: A dictionary containing programmable scan modes supported by the camera.
+        :rtype: dict[str, int]
+        """
+        return dict(self.cam.prog_scan_modes)
+
+    def get_prog_scan_mode(self) -> str:
+        """
+        Refer to :func:`set_prog_scan_mode` for the available programmable scan modes.
+
+        For a description of Programmable Scan Modes, refer to Prime BSI User Manual page 19.
+
+        :return: Current programmable scan mode of a camera.
+        :rtype: str
+        """
+        return list(self.prog_scan_modes().keys())[list(self.prog_scan_modes().values()).index(self.cam.prog_scan_mode)]
+
+    def set_prog_scan_mode(self, key_or_value: int | str) -> None:
+        """
+        Changes programmable scan mode. Exact case matching is **required**.
+
+        For a description of Programmable Scan Modes, refer to Prime BSI User Manual page 19.
+
+        Default programmable scan modes:
+
+        Keys:
+            | 0 - Auto
+            | 1 - Line Delay
+            | 2 - Scan Width
+
+        :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
+
+        :return: None
+        :raise ValueError: If provided with an unrecognized key or value.
+        """
+        self.cam.prog_scan_mode = key_or_value
+
+    def prog_scan_dirs(self) -> dict[str, int]:
+        """
+        :return: A dictionary containing programmable scan directions supported by the camera.
+        :rtype: dict[str, int]
+        """
+        return dict(self.cam.prog_scan_dirs)
+
+    def get_prog_scan_dir(self) -> str:
+        """
+        Refer to :func:`set_prog_scan_dir` for the available programmable scan directions.
+
+        :return: Current programmable scan direction of a camera.
+        :rtype: str
+        """
+        return list(self.prog_scan_dirs().keys())[list(self.prog_scan_dirs().values()).index(self.cam.prog_scan_dir)]
+
+    def set_prog_scan_dir(self, key_or_value: int | str) -> None:
+        """
+        Changes programmable scan mode. Exact case matching is **required**.
+
+        Default programmable scan directions:
+
+        Keys:
+            | 0 - Down
+            | 1 - Up
+            | 2 - Down/Up Alternate
+
+        :param key_or_value: Key or value to change.
+        :type key_or_value: int or str
+
+        :return: None
+        :raise ValueError: If provided with an unrecognized key or value.
+        """
+        self.cam.prog_scan_dir = key_or_value
+
+    def get_prog_scan_dir_reset(self) -> bool:
+        """
+        :return: The scan direction reset state of camera. The parameter is used with alternate scan directions (down-up) to reset the direction with every acquisition.
+        :rtype: bool
+        """
+        return self.cam.prog_scan_dir_reset
+
+    def set_prog_scan_dir_reset(self, value: bool) -> None:
+        """
+        Changes scan direction reset state of camera. The parameter is used with alternate scan directions (down-up) to reset the direction with every acquisition.
+
+        :return: None
+        """
+        self.cam.prog_scan_dir_reset = value
+
+    def get_prog_scan_line_delay(self) -> int:
+        """
+        :return: The scan line delay. The parameter access mode depends on the current programmable scan mode returned by :func:`get_prog_scan_mode`.
+        :rtype: int
+        """
+        return self.cam.prog_scan_line_delay
+
+    def set_prog_scan_line_delay(self, value: int) -> None:
+        """
+        Changes the scan line delay. The parameter access mode depends on the current programmable scan mode returned by :func:`get_prog_scan_mode`.
+
+        :return: None
+        """
+        self.cam.prog_scan_line_delay = value
+
+    def get_prog_scan_width(self) -> int:
+        """
+        :return: The scan width. The parameter access mode depends on the current programmable scan mode returned by :func:`get_prog_scan_mode`.
+        :rtype: int
+        """
+        return self.cam.prog_scan_width
+
+    def set_prog_scan_width(self, value: int) -> None:
+        """
+        Changes the scan width. The parameter access mode depends on the current programmable scan mode returned by :func:`get_prog_scan_mode`.
+
+        :return: None
+        """
+        self.cam.prog_scan_width = value
+
+    def adc_offset(self) -> int:
+        """
+        :return: The camera's current ADC offset value. Only CCD camera's have ADCs (analog-to-digital converters).
+        :rtype: int
+        """
+        return self.cam.adc_offset
+
+    def get_vtm_exp_time(self) -> int:
+        """
+        :return: The variable timed exposure time the camera uses for the "Variable Timed" exposure mode.
+        :rtype: int
+        """
+        return self.cam.vtm_exp_time
+
+    def set_vtm_exp_time(self, value: int) -> None:
+        """
+        Changes the variable timed exposure time the camera uses for the "Variable Timed" exposure mode.
+
+        :return: None
+        """
+        self.cam.vtm_exp_time = value
+
+    def readout_time(self) -> int:
+        """
+        :return: The last acquisition's readout time as reported by the camera in microseconds.
+        :rtype: int
+        """
+        return self.cam.readout_time
+
+    def clear_time(self) -> int:
+        """
+        :return: The last acquisition's clearing time as reported by the camera in microseconds.
+        :rtype: int
+        :raise RuntimeError: If acquisition setup is not done before calling this function.
+        """
+        return self.cam.clear_time
+
+    def get_meta_data_enabled(self) -> bool:
+        """
+        :return: True if meta data is enabled, False otherwise.
+        :rtype: bool
+        """
+        return self.cam.meta_data_enabled
+
+    def set_meta_data_enabled(self, value: bool) -> None:
+        """
+        Changes meta data setting.
+
+        :return: None
+        """
+        self.cam.meta_data_enabled = value
