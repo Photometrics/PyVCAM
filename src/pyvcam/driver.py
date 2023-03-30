@@ -10,7 +10,7 @@ QuantumIon
 University of Waterloo
 """
 
-from pyvcam import pvc
+from pyvcam import pvc  # type: ignore
 from pyvcam.camera import Camera
 from pyvcam import constants as const
 
