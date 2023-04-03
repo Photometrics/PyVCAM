@@ -1,8 +1,7 @@
-import os, platform
-from setuptools import setup, find_packages
+import os
+import platform
+from setuptools import setup
 from setuptools.extension import Extension
-import pip
-import shutil
 
 is_windows = 'win' in platform.system().lower()
 is_linux = 'lin' in platform.system().lower()
