@@ -631,7 +631,7 @@ class PyVCAM:
 
     def get_temp_setpoint(self) -> float:
         """
-        The temperature setpoint is the temperature at which a camera will attempt to stabilize its temperature at.
+        The temperature setpoint is the temperature at which a camera will attempt to stabilize its temperature.
 
         :return: The camera's temperature setpoint in Celsius.
         :rtype: float
