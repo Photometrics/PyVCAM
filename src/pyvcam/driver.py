@@ -13,6 +13,7 @@ University of Waterloo
 from pyvcam import pvc  # type: ignore
 from pyvcam.camera import Camera
 from pyvcam import constants as const
+from typing import NoReturn
 
 
 class PyVCAM:
@@ -36,7 +37,7 @@ class PyVCAM:
         """
         pvc.uninit_pvcam()
 
-    def detect_camera(self) -> NotImplementedError:
+    def detect_camera(self) -> NoReturn:
         """
         Generator that yields a Camera object for a camera connected to the system.
 
@@ -751,15 +752,15 @@ class PyVCAM:
         """
         return dict(self.cam.centroids_modes)
 
-    def get_centroids_mode(self) -> AttributeError:
+    def get_centroids_mode(self) -> str:
         """
         Attempts to read the current centroid mode, which is not supported by the Prime BSI Camera.
 
         :raise AttributeError: This function is not supported by the Prime BSI Camera.
         """
-        return self.cam.centroids_mode
+        return list(self.centroids_modes().keys())[list(self.centroids_modes().values()).index(self.cam.centroids_mode)]
 
-    def set_centroids_mode(self, key_or_value: int | str) -> AttributeError:
+    def set_centroids_mode(self, key_or_value: int | str) -> None:
         """
         Attempts to modify the current centroid mode, which is not supported by the Prime BSI Camera.
 
