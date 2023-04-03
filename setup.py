@@ -2,6 +2,7 @@ import os
 import platform
 from setuptools import setup
 from setuptools.extension import Extension
+from setuptools.command.build_ext import build_ext as _build_ext
 
 is_windows = 'win' in platform.system().lower()
 is_linux = 'lin' in platform.system().lower()
@@ -53,8 +54,17 @@ elif is_windows:
     print('************************************************************\n')
 
 pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
-import numpy
-include_dirs = [numpy.get_include()]
+include_dirs = []
+
+
+class build_ext(_build_ext):
+    def finalize_options(self) -> None:
+        _build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        include_dirs.append(numpy.get_include())
+
 
 if is_linux:
     extra_compile_args = ['-std=c++11']
@@ -96,6 +106,7 @@ setup(name='pyvcam',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
+      cmdclass={'build_ext': build_ext},
       setup_requires=['numpy'],
       install_requires=['sipyco@git+https://github.com/m-labs/sipyco.git', 'numpy'],
       python_requires=">=3.10",
