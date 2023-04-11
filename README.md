@@ -1,13 +1,10 @@
-# [ARTIQ](http://m-labs.hk/experiment-control/artiq/) [Network Device Support Package (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html)
+# [ARTIQ](http://m-labs.hk/experiment-control/artiq/) [Network Device Support Package (NDSP)](https://m-labs.hk/artiq/manual/developing_a_ndsp.html) Integration for the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM)
 
-Integration for the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM)
-
-PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK.
+PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK. This project is a fork of the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM) developed by the [Teledyne Photometrics](https://github.com/Photometrics) team and is dependent on PyVCAM v2.1.5.
 
 ## Getting Started
 
 Follow the instructions below to get PyVCAM up and running on your machine for development and testing.
-
 
 ### Prerequisites
 
@@ -127,16 +124,14 @@ TODO
 ## Contributors
 
 [Steve Bellinger](https://github.com/stevebellinger)  
-[David Giese](https://github.com/johndgiese)
-[Lubomír Walder](https://github.com/lwalder)
+[David Giese](https://github.com/johndgiese)  
+[Lubomír Walder](https://github.com/lwalder)  
 [Zhengqi Hao](https://github.com/ZhengqiHao313)  
 [HerrZiffer](https://github.com/HerrZiffer)  
 [Kevin Chen](https://github.com/CKevin9)  
 [Collin Epstein](https://github.com/collineps)  
 
-## License
-
-??
+## [MIT License](LICENSE)
 
 ## Acknowledgements
 
