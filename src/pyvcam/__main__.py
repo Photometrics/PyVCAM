@@ -12,7 +12,6 @@ QuantumIon
 
 from sipyco.pc_rpc import simple_server_loop
 from sipyco import common_args
-from sipyco import remote_exec
 import argparse
 import logging
 from pyvcam.driver import PyVCAM
