@@ -1156,7 +1156,7 @@ pvc_set_exp_modes(PyObject *self, PyObject *args)
          return NULL;
      }
      /* Struct that contains the frame size and binning information. */
-     rgn_type frame = {0, 0, 1, 0, 0, 1};
+     rgn_type frame = {0, 1, 1, 0, 1, 1};
      uns32 exposureBytes;
 
      /* Setup the acquisition. */
