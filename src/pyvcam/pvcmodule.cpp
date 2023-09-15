@@ -68,6 +68,7 @@ public:
         , hFileStreamToDisk_(cInvalidFileHandle)
         , readIndex_(0)
         , frameResidual_(0)
+        , buffer_frame_count_(0)
     {
     }
 
@@ -223,6 +224,7 @@ public:
     bool abortData_;
     bool newData_;
     bool seqMode_;
+    uns16 buffer_frame_count_;
     std::mutex frameMutex_;
     std::condition_variable conditionalVariable_;
 
@@ -287,8 +289,9 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
 
             // Pop from queue once maximal size is reached. No resets.
             if (!camInstance.seqMode_){
-                if ((int)camInstance.frameQueue_.size() >= 400) {
+                if ((int)camInstance.frameQueue_.size() >= camInstance.buffer_frame_count_) {
                     //printf("Queue size: %zd",camInstance.frameQueue_.size());
+                    //printf("Buffer size: %zd",camInstance.buffer_frame_count_);
                     camInstance.frameQueue_.pop();
                     printf("Lost frame\n");
                 }
@@ -714,7 +717,7 @@ pvc_start_live(PyObject *self, PyObject *args)
             PyErr_SetString(PyExc_RuntimeError, g_msg);
             return NULL;
         }
-
+        camInstance.buffer_frame_count_ = buffer_frame_count;
         camInstance.setAcquisitiontMode(false);
     }
     catch (const std::out_of_range& oor) {
