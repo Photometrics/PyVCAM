@@ -281,8 +281,17 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
         }
         else {
             // Add frame to queue. Reset the queue in live mode so that returned frame is the latest
-            if (!camInstance.seqMode_) {
-                camInstance.resetQueue();
+            //if (!camInstance.seqMode_) {
+              //  camInstance.resetQueue();
+            //}
+
+            // Pop from queue once maximal size is reached. No resets.
+            if (!camInstance.seqMode_){
+                if ((int)camInstance.frameQueue_.size() >= 400) {
+                    //printf("Queue size: %zd",camInstance.frameQueue_.size());
+                    camInstance.frameQueue_.pop();
+                    printf("Lost frame\n");
+                }
             }
 
             frame.count = camInstance.frameCnt_;
