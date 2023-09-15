@@ -960,7 +960,9 @@ pvc_get_frame(PyObject *self, PyObject *args)
         //printf("New Data FPS: %f Cnt: %d\r\n", camInstance.fps_, frame.count);
 
         // Toggle newData_ flag unless we are in sequence mode and another frame is available
-        camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
+        //camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
+        // Toggle newData_ flag unless another frame is available
+        camInstance.newData_ = !camInstance.frameQueue_.empty();
         
         PyObject *frameDict = PyDict_New();
         PyObject* roiDataList = PyList_New(0);
