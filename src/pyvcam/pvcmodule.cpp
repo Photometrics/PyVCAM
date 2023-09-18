@@ -292,8 +292,12 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
                 if ((int)camInstance.frameQueue_.size() >= camInstance.buffer_frame_count_) {
                     //printf("Queue size: %zd",camInstance.frameQueue_.size());
                     //printf("Buffer size: %zd",camInstance.buffer_frame_count_);
-                    camInstance.frameQueue_.pop();
-                    printf("Lost frame\n");
+                    int n_dropped = 0;
+                    while ((int)camInstance.frameQueue_.size() >= camInstance.buffer_frame_count_) {
+                        camInstance.frameQueue_.pop();
+                        n_dropped++;
+                    }
+                    printf("Dropped %d frame(s)\n", n_dropped);
                 }
             }
 
