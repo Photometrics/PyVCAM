@@ -695,6 +695,8 @@ pvc_start_live(PyObject *self, PyObject *args)
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
+        camInstance.buffer_frame_count_ = buffer_frame_count;
+        camInstance.setAcquisitiontMode(false);
 
         if (!check_meta_data_enabled(hCam, camInstance.metaDataEnabled_)) {
             PyErr_SetString(PyExc_MemoryError, "Unable to query meta data enabled.");
@@ -721,8 +723,6 @@ pvc_start_live(PyObject *self, PyObject *args)
             PyErr_SetString(PyExc_RuntimeError, g_msg);
             return NULL;
         }
-        camInstance.buffer_frame_count_ = buffer_frame_count;
-        camInstance.setAcquisitiontMode(false);
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
