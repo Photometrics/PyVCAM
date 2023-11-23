@@ -203,6 +203,16 @@ public:
     {
         if (hFileStreamToDisk_ != cInvalidFileHandle)
         {
+            void* alignedFrameData = &(reinterpret_cast<uns8*>(frameBuffer_)[readIndex_]);
+            uns32 bytesWritten = 0;
+#ifdef _WIN32
+            WriteFile(hFileStreamToDisk_, alignedFrameData, (DWORD)ALIGNMENT_BOUNDARY, (LPDWORD)&bytesWritten, NULL);
+#else
+            bytesWritten += write(hFileStreamToDisk_, alignedFrameData, ALIGNMENT_BOUNDARY);
+#endif
+            if (bytesWritten != ALIGNMENT_BOUNDARY) {
+                printf("Stream to disk error: Not all bytes written. Corrupted frames written to disk. Expected: %d Written: %d\n", ALIGNMENT_BOUNDARY, bytesWritten);
+            }
 #ifdef _WIN32
             CloseHandle(hFileStreamToDisk_);
 #else
