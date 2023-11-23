@@ -203,15 +203,18 @@ public:
     {
         if (hFileStreamToDisk_ != cInvalidFileHandle)
         {
-            void* alignedFrameData = &(reinterpret_cast<uns8*>(frameBuffer_)[readIndex_]);
-            uns32 bytesWritten = 0;
+            if (frameResidual_ != 0)
+            {
+                void* alignedFrameData = &(reinterpret_cast<uns8*>(frameBuffer_)[readIndex_]);
+                uns32 bytesWritten = 0;
 #ifdef _WIN32
-            WriteFile(hFileStreamToDisk_, alignedFrameData, (DWORD)ALIGNMENT_BOUNDARY, (LPDWORD)&bytesWritten, NULL);
+                WriteFile(hFileStreamToDisk_, alignedFrameData, (DWORD)ALIGNMENT_BOUNDARY, (LPDWORD)&bytesWritten, NULL);
 #else
-            bytesWritten += write(hFileStreamToDisk_, alignedFrameData, ALIGNMENT_BOUNDARY);
+                bytesWritten += write(hFileStreamToDisk_, alignedFrameData, ALIGNMENT_BOUNDARY);
 #endif
-            if (bytesWritten != ALIGNMENT_BOUNDARY) {
-                printf("Stream to disk error: Not all bytes written. Corrupted frames written to disk. Expected: %d Written: %d\n", ALIGNMENT_BOUNDARY, bytesWritten);
+                if (bytesWritten != ALIGNMENT_BOUNDARY) {
+                    printf("Stream to disk error: Not all bytes written. Corrupted frames written to disk. Expected: %d Written: %d\n", ALIGNMENT_BOUNDARY, bytesWritten);
+                }
             }
 #ifdef _WIN32
             CloseHandle(hFileStreamToDisk_);
@@ -1048,8 +1051,8 @@ pvc_stop_live(PyObject *self, PyObject *args)
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
-        camInstance.cleanUpFrameBuffer();
         camInstance.unsetStreamToDisk();
+        camInstance.cleanUpFrameBuffer();        
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
@@ -1130,8 +1133,9 @@ pvc_abort(PyObject *self, PyObject *args)
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
-        camInstance.cleanUpFrameBuffer();
         camInstance.unsetStreamToDisk();
+        camInstance.cleanUpFrameBuffer();        
+        
 
         camInstance.abortData_ = true;
         camInstance.conditionalVariable_.notify_all();
