@@ -95,7 +95,7 @@ setup(name='pyvcam',
       url='https://github.com/Photometrics/PyVCAM',
       description='Python wrapper for PVCAM functionality.',
       packages=['pyvcam'],
-      package_dir={'pyvcam': 'src/pyvcam'},
+      package_dir={'': 'src'},
       py_modules=['pyvcam.constants'],
       ext_modules=ext_modules)
 
