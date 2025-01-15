@@ -1,8 +1,7 @@
 import os, platform
-from setuptools import setup, find_packages
+from setuptools import setup
 from setuptools.extension import Extension
-import pip
-import shutil
+from setuptools.command.build_ext import build_ext as _build_ext
 
 is_windows = 'win' in platform.system().lower()
 is_linux = 'lin' in platform.system().lower()
@@ -54,8 +53,22 @@ elif is_windows:
     print('************************************************************\n')
 
 pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
-import numpy
-include_dirs = [numpy.get_include()]
+include_dirs = []
+
+class build_ext(_build_ext):
+    def finalize_options(self) -> None:
+        # Prevent numpy from thinking it is still in its setup process
+        # https://github.com/singingwolfboy/nose-progressive/commit/d8dce093910724beff86081327565b11ea28dfbc#diff-fa26a70e79ad69caf5b4f938fcd73179afaf4c05229b19acb326ab89e4759fbfR25
+        def _set_builtin(name, value):
+            if isinstance(__builtins__, dict):
+                __builtins__[name] = value
+            else:
+                setattr(__builtins__, name, value)
+
+        _build_ext.finalize_options(self)
+        _set_builtin('__NUMPY_SETUP__', False)
+        import numpy
+        include_dirs.append(numpy.get_include())
 
 if is_linux:
     extra_compile_args = ['-std=c++11']
@@ -97,13 +110,9 @@ setup(name='pyvcam',
       packages=['pyvcam'],
       package_dir={'pyvcam': 'src/pyvcam'},
       py_modules=['pyvcam.constants'],
+      cmdclass={'build_ext': build_ext},
+      setup_requires=['numpy'],
+      install_requires=['numpy'],
       ext_modules=ext_modules)
-
-# TODO add checks for if a package is already installed and if so don't install it, if it is installed and up to date give option to update or not
-# pip.main(['install', 'wxPython'])
-# pip.main(['install', 'pyserial'])
-# pip.main(['install', 'opencv-python'])
-# pip.main(['install', 'git+https://github.com/pearu/pylibtiff.git'])
-# os.system('conda install -y -c conda-forge opencv=3.2.0')
 
 print('\n\n*************** Finished ***************\n')
