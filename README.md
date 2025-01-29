@@ -16,7 +16,7 @@ Follow the instructions below to get PyVCAM up and running on your machine for d
 
 ### Installing
 When you are ready to install the wrapper use your command prompt to navigate into the directory that contains 
-setup.py and run ```python setup.py install``` 
+setup.py and run ```pip install .``` 
 
 
 ### How to use the wrapper
