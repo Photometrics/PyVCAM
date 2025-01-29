@@ -32,24 +32,19 @@ elif is_windows:
 
 if is_linux:
     print('************************************************************\n')
-    print('Pre-install necessary packages  \n')
-    print('   sudo apt-get install python3-pip  \n')
-    print('   sudo pip3 install numpy  \n')
+    print('Pre-install necessary packages\n')
+    print('   sudo apt install python3-pip python3-dev\n')
     print('************************************************************\n')
-    print('Build package:     sudo -E python3 setup.py build  \n')
-    print('Install package:   sudo -E python3 setup.py install  \n')
-    print('Create Wheel dist: sudo -E python3 setup.py sdist bdist_wheel  \n')
-    print('Uninstall package: sudo pip3 uninstall pyvcam  \n')
+    print('Install package:   pip install .\n')
+    print('Uninstall package: pip uninstall pyvcam\n')
     print('************************************************************\n')
 elif is_windows:
     print('************************************************************\n')
-    print('Pre-install necessary packages as admin  \n')
-    print('   python -m pip install --upgrade pip setuptools wheel numpy  \n')
+    print('Pre-install necessary packages as admin\n')
+    print('   python -m pip install --upgrade pip\n')
     print('************************************************************\n')
-    print('Build package:     python setup.py build  \n')
-    print('Install package:   python setup.py install  \n')
-    print('Create Wheel dist: python setup.py sdist bdist_wheel  \n')
-    print('Uninstall package: pip uninstall pyvcam  \n')
+    print('Install package:   pip install .\n')
+    print('Uninstall package: pip uninstall pyvcam\n')
     print('************************************************************\n')
 
 pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
