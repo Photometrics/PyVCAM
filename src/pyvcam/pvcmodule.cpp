@@ -68,6 +68,7 @@ public:
         , hFileStreamToDisk_(cInvalidFileHandle)
         , readIndex_(0)
         , frameResidual_(0)
+        , buffer_frame_count_(0)
     {
     }
 
@@ -236,6 +237,7 @@ public:
     bool abortData_;
     bool newData_;
     bool seqMode_;
+    uns16 buffer_frame_count_;
     std::mutex frameMutex_;
     std::condition_variable conditionalVariable_;
 
@@ -294,8 +296,22 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
         }
         else {
             // Add frame to queue. Reset the queue in live mode so that returned frame is the latest
-            if (!camInstance.seqMode_) {
-                camInstance.resetQueue();
+            //if (!camInstance.seqMode_) {
+              //  camInstance.resetQueue();
+            //}
+
+            // Pop from queue once maximal size is reached. No resets.
+            if (!camInstance.seqMode_){
+                if ((int)camInstance.frameQueue_.size() >= camInstance.buffer_frame_count_) {
+                    //printf("Queue size: %zd",camInstance.frameQueue_.size());
+                    //printf("Buffer size: %zd",camInstance.buffer_frame_count_);
+                    int n_dropped = 0;
+                    while ((int)camInstance.frameQueue_.size() >= camInstance.buffer_frame_count_) {
+                        camInstance.frameQueue_.pop();
+                        n_dropped++;
+                    }
+                    printf("Dropped %d frame(s)\n", n_dropped);
+                }
             }
 
             frame.count = camInstance.frameCnt_;
@@ -692,6 +708,8 @@ pvc_start_live(PyObject *self, PyObject *args)
     std::lock_guard<std::mutex> lock(g_camInstanceMutex);
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
+        camInstance.buffer_frame_count_ = buffer_frame_count;
+        camInstance.setAcquisitiontMode(false);
 
         if (!check_meta_data_enabled(hCam, camInstance.metaDataEnabled_)) {
             PyErr_SetString(PyExc_MemoryError, "Unable to query meta data enabled.");
@@ -718,8 +736,6 @@ pvc_start_live(PyObject *self, PyObject *args)
             PyErr_SetString(PyExc_RuntimeError, g_msg);
             return NULL;
         }
-
-        camInstance.setAcquisitiontMode(false);
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
@@ -961,7 +977,9 @@ pvc_get_frame(PyObject *self, PyObject *args)
         //printf("New Data FPS: %f Cnt: %d\r\n", camInstance.fps_, frame.count);
 
         // Toggle newData_ flag unless we are in sequence mode and another frame is available
-        camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
+        //camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
+        // Toggle newData_ flag unless another frame is available
+        camInstance.newData_ = !camInstance.frameQueue_.empty();
         
         PyObject *frameDict = PyDict_New();
         PyObject* roiDataList = PyList_New(0);
