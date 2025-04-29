@@ -853,7 +853,10 @@ class Camera:
     @bin_x.setter
     def bin_x(self, value):
         # Will raise ValueError if incompatible binning is set
-        if value in self.read_enum(const.PARAM_BINNING_SER).values():
+        if (
+            not self.check_param(const.PARAM_BINNING_SER) or
+            value in self.read_enum(const.PARAM_BINNING_SER).values()
+        ):
             for roi in self.__rois:
                 roi.sbin = value
             return
@@ -868,7 +871,10 @@ class Camera:
     @bin_y.setter
     def bin_y(self, value):
         # Will raise ValueError if incompatible binning is set
-        if value in self.read_enum(const.PARAM_BINNING_PAR).values():
+        if (
+            not self.check_param(const.PARAM_BINNING_PAR) or 
+            value in self.read_enum(const.PARAM_BINNING_PAR).values()
+        ):
             for roi in self.__rois:
                 roi.pbin = value
             return
