@@ -191,31 +191,53 @@ class Camera:
 
         # Learn ports, speeds and gains
         self.__port_speed_gain_table = {}
+        supports_speed_name = self.check_param(const.PARAM_SPDTAB_NAME)
+        supports_gain_name = self.check_param(const.PARAM_GAIN_NAME)
         for port_name, port_value in self.read_enum(const.PARAM_READOUT_PORT).items():
-            self.__port_speed_gain_table[port_name] = {'port_value': port_value}
             self.readout_port = port_value
+
+            self.__port_speed_gain_table[port_name] = {
+                'port_value': port_value,
+            }
+
             num_speeds = self.get_param(const.PARAM_SPDTAB_INDEX, const.ATTR_COUNT)
             for speed_index in range(num_speeds):
-                speed_name = 'Speed_' + str(speed_index)
                 self.speed_table_index = speed_index
+
+                speed_name = 'Speed_' + str(speed_index)
+                if supports_speed_name:
+                    try:
+                        speed_name = self.get_param(const.PARAM_SPDTAB_NAME, const.ATTR_CURRENT)
+                    except AttributeError:
+                        pass
 
                 gain_min = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MIN)
                 gain_max = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MAX)
                 gain_increment = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_INCREMENT)
 
-                numGains = int((gain_max - gain_min) / gain_increment + 1)
-                gains = [(gain_min + i * gain_increment) for i in range(numGains)]
+                num_gains = int((gain_max - gain_min) / gain_increment + 1)
+                gains = [(gain_min + i * gain_increment) for i in range(num_gains)]
 
-                self.__port_speed_gain_table[port_name].update({speed_name: {'speed_index': speed_index, 'pixel_time': self.pix_time, 'bit_depth': self.bit_depth, 'gain_range': gains}})
+                self.__port_speed_gain_table[port_name][speed_name] = {
+                    'speed_index': speed_index,
+                    'pixel_time': self.pix_time,
+                    'bit_depth': self.bit_depth,
+                    'gain_range': gains,
+                }
 
                 for gain_index in gains:
                     self.gain = gain_index
-                    try:
-                        gain_name = self.get_param(const.PARAM_GAIN_NAME, const.ATTR_CURRENT)
-                    except:
-                        gain_name = 'Gain_' + str(gain_index)
 
-                    self.__port_speed_gain_table[port_name][speed_name][gain_name] = {'gain_index': gain_index}
+                    gain_name = 'Gain_' + str(gain_index)
+                    if supports_gain_name:
+                        try:
+                            gain_name = self.get_param(const.PARAM_GAIN_NAME, const.ATTR_CURRENT)
+                        except AttributeError:
+                            pass
+
+                    self.__port_speed_gain_table[port_name][speed_name][gain_name] = {
+                        'gain_index': gain_index,
+                    }
 
         # Reset speed table back to default
         self.readout_port = 0
@@ -228,8 +250,8 @@ class Camera:
         try:
             featureCount = self.get_param(const.PARAM_PP_INDEX, const.ATTR_COUNT)
             for featureIndex in range(featureCount):
-
                 self.set_param(const.PARAM_PP_INDEX, featureIndex)
+
                 featureId = self.get_param(const.PARAM_PP_FEAT_ID)
                 featureName = self.get_param(const.PARAM_PP_FEAT_NAME)
                 self.__post_processing_table[featureName] = {}
@@ -237,11 +259,19 @@ class Camera:
                 paramCount = self.get_param(const.PARAM_PP_PARAM_INDEX, const.ATTR_COUNT)
                 for paramIndex in range(paramCount):
                     self.set_param(const.PARAM_PP_PARAM_INDEX, paramIndex)
+
                     paramId = self.get_param(const.PARAM_PP_PARAM_ID)
                     paramName = self.get_param(const.PARAM_PP_PARAM_NAME)
                     paramMin = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MIN)
                     paramMax = self.get_param(const.PARAM_PP_PARAM, const.ATTR_MAX)
-                    self.__post_processing_table[featureName][paramName] = {'feature_index': featureIndex, 'feature_id': featureId, 'param_index': paramIndex, 'param_id': paramId, 'param_min': paramMin, 'param_max': paramMax}
+                    self.__post_processing_table[featureName][paramName] = {
+                        'feature_index': featureIndex,
+                        'feature_id': featureId,
+                        'param_index': paramIndex,
+                        'param_id': paramId,
+                        'param_min': paramMin,
+                        'param_max': paramMax,
+                    }
 
         except AttributeError:
             pass
@@ -440,7 +470,6 @@ class Camera:
         Returns:
             A dictionary with the frame containing available meta data and 2D np.array pixel data, frames per second and frame count.
         """
-
         frame, fps, frame_count = pvc.get_frame(self.__handle, self.__rois, self.__dtype.num, timeout_ms, oldestFrame)
 
         num_rois = len(frame['pixel_data'])
@@ -485,7 +514,6 @@ class Camera:
         Returns:
             A 3D np.array containing the pixel data from the captured frames.
         """
-
         if len(self.__rois) > 1:
             raise ValueError('get_sequence does not support multi-roi captures')
 
