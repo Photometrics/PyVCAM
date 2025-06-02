@@ -101,7 +101,7 @@ public:
         frameSize_ = frameSize;
         return frameBuffer_ != NULL;
     }
-    
+
     void cleanUpFrameBuffer()
     {
 #ifdef _WIN32
@@ -273,7 +273,7 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
         Cam_Instance_T& camInstance = g_camInstanceMap.at(pFrameInfo->hCam);
         camInstance.frameCnt_++;
 
-        //printf("Called back. Frame count %d\n", camInstance.frameCnt_);
+        //printf("Called back. Frame count %u\n", camInstance.frameCnt_);
 
         // Re-compute FPS every 5 frames
         const int FPS_FRAME_COUNT = 5;
@@ -285,7 +285,7 @@ void NewFrameHandler(FRAME_INFO *pFrameInfo, void *context)
           camInstance.fps_ = (double) FPS_FRAME_COUNT / (double) timeDelta_us * 1e6;
           camInstance.prevTime_ = curTime;
 
-          //printf("fps: %lf timeDelta_us: %lld\n", g_FPS, timeDelta_us);
+          //printf("fps: %.1f timeDelta_us: %lld\n", camInstance.fps_, timeDelta_us);
         }
 
         Frame_T frame;
@@ -962,7 +962,7 @@ pvc_get_frame(PyObject *self, PyObject *args)
 
         // Toggle newData_ flag unless we are in sequence mode and another frame is available
         camInstance.newData_ = camInstance.seqMode_ && !camInstance.frameQueue_.empty();
-        
+
         PyObject *frameDict = PyDict_New();
         PyObject* roiDataList = PyList_New(0);
         const int NUM_DIMS = 2;
@@ -1052,7 +1052,7 @@ pvc_stop_live(PyObject *self, PyObject *args)
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
         camInstance.unsetStreamToDisk();
-        camInstance.cleanUpFrameBuffer();        
+        camInstance.cleanUpFrameBuffer();
     }
     catch (const std::out_of_range& oor) {
         PyErr_SetString(PyExc_KeyError, oor.what());
@@ -1134,8 +1134,7 @@ pvc_abort(PyObject *self, PyObject *args)
     try {
         Cam_Instance_T& camInstance = g_camInstanceMap.at(hCam);
         camInstance.unsetStreamToDisk();
-        camInstance.cleanUpFrameBuffer();        
-        
+        camInstance.cleanUpFrameBuffer();
 
         camInstance.abortData_ = true;
         camInstance.conditionalVariable_.notify_all();
