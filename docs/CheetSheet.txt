@@ -1,5 +1,5 @@
 [[Installation]]
-python setup.py install
+pip install .
 
 [[Camera Class]]
 
