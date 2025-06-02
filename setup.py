@@ -97,7 +97,7 @@ ext_modules = [Extension('pyvcam.pvc',
                          libraries=libs)]
 
 setup(name='pyvcam',
-      version='2.1.6',
+      version='2.1.7',
       author='Teledyne Photometrics',
       author_email='Steve.Bellinger@Teledyne.com',
       url='https://github.com/Photometrics/PyVCAM',

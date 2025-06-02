@@ -221,6 +221,8 @@ class Camera:
         self.readout_port = 0
         self.speed_table_index = 0
 
+        self._set_dtype()
+
         # Learn post processing features
         self.__post_processing_table = {}
         try:
@@ -541,8 +543,6 @@ class Camera:
         Returns:
             None
         """
-        self._set_dtype()
-
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
 
@@ -568,8 +568,6 @@ class Camera:
         Returns:
             None
         """
-        self._set_dtype()
-
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
 
@@ -630,6 +628,8 @@ class Camera:
                     self.set_param(const.PARAM_PP_INDEX, pp_param['feature_index'])
                     self.set_param(const.PARAM_PP_PARAM_INDEX, pp_param['param_index'])
                     self.set_param(const.PARAM_PP_PARAM, value)
+
+                    self._set_dtype()
                 else:
                     raise AttributeError('Could not set post processing param. Value ' + str(value) + ' out of range (' + str(pp_param['param_min']) + ', ' + str(pp_param['param_max']) + ')')
             else:
@@ -658,7 +658,10 @@ class Camera:
             raise AttributeError('Could not set post processing param. feature_name not found')
 
     def _set_dtype(self):
-        bit_depth = self.bit_depth
+        if self.check_param(const.PARAM_BIT_DEPTH_HOST):
+            bit_depth = self.get_param(const.PARAM_BIT_DEPTH_HOST)
+        else:
+            bit_depth = self.get_param(const.PARAM_BIT_DEPTH)
         bytes_per_pixel = int(np.ceil(bit_depth / 8))
         dtypeKind = 'u{}'.format(bytes_per_pixel)
         self.__dtype = np.dtype(dtypeKind)
@@ -771,6 +774,8 @@ class Camera:
                              '{} readout ports.'.format(self, num_ports))
         self.set_param(const.PARAM_READOUT_PORT, value)
 
+        self._set_dtype()
+
     @property
     def speed_table_index(self):
         return self.get_param(const.PARAM_SPDTAB_INDEX)
@@ -783,6 +788,8 @@ class Camera:
             raise ValueError('{} only supports '
                              '{} speed entries'.format(self, num_entries))
         self.set_param(const.PARAM_SPDTAB_INDEX, value)
+
+        self._set_dtype()
 
     @property
     def trigger_table(self):
@@ -833,6 +840,8 @@ class Camera:
             raise ValueError("Invalid value: {} - {} only supports gain "
                              "indicies from {} - {}.".format(value, self, min_gain, max_gain))
         self.set_param(const.PARAM_GAIN_INDEX, value)
+
+        self._set_dtype()
 
     @property
     def binning(self):
