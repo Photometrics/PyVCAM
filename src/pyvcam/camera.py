@@ -506,7 +506,7 @@ class Camera:
 
         Parameter:
             time_list (list of ints): List of vtm timings
-            exp_res (int): vtm exposure time resolution (0:mili, 1:micro)
+            exp_res (int): vtm exposure time resolution (0:mili, 1:micro, 2:seconds, use constants.EXP_RES_ONE_*SEC)
             num_frames (int): Number of frames to capture in the sequence
             interval (int): The time in milliseconds to wait between captures
         Returns:
@@ -796,10 +796,21 @@ class Camera:
         # Returns a dictionary containing information about the last capture.
         # Note some features are camera specific.
 
-        if self.exp_res == 1:
-            exp = str(self.last_exp_time) + ' μs'
-        else:
-            exp = str(self.last_exp_time) + ' ms'
+        # Default resolution is const.EXP_RES_ONE_MILLISEC
+        # even if the parameter isn't available
+        exp_unit = ' ms'
+        try:
+            exp_res = self.exp_res
+            if exp_res == const.EXP_RES_ONE_SEC:
+                exp_unit = ' s'
+            elif exp_res == const.EXP_RES_ONE_MICROSEC:
+                exp_unit = ' μs'
+        except AttributeError:
+            pass
+        try:
+            exp = str(self.last_exp_time) + exp_unit
+        except AttributeError:
+            exp = 'N/A'
 
         try:
             read = str(self.readout_time) + ' μs'
