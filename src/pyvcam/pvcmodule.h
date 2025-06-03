@@ -15,9 +15,6 @@
  */
 char g_msg[ERROR_MSG_LEN]; // Global Error Message Variable.
 bool DEBUG = false;
-extern FRAME_INFO *g_pFrameInfo;
-uns16 *frameAddress2;
-int16 hcam2;
 
 /*
  * Documentation Strings
@@ -35,8 +32,8 @@ static char get_param_docstring[] = "Returns the value of a camera associated wi
 static char set_param_docstring[] = "Sets a specified parameter to a specified value.";
 static char check_param_docstring[] = "Checks if a specified setting of a camera is available.";
 static char get_enum_param_docstring[] = "Returns the enumerated value of the specified parameter at `index`.";
-static char start_live_docstring[] = "Starts live mode acquisiton";
-static char start_seq_docstring[] = "Starts sequence mode acquisiton";
+static char start_live_docstring[] = "Starts live mode acquisition";
+static char start_seq_docstring[] = "Starts sequence mode acquisition";
 static char check_frame_status_docstring[] = "Checks status of frame transfer";
 static char get_frame_docstring[] = "Gets latest frame";
 static char stop_live_docstring[] = "Stops live acquisition";
