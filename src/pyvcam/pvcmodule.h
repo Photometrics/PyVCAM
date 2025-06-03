@@ -48,30 +48,30 @@ static char sw_trigger_docstring[] = "Triggers exposure using current camera set
 /*
  * Functions
  */
-static PyObject *pvc_init_pvcam(PyObject *self, PyObject* args);
-static PyObject *pvc_uninit_pvcam(PyObject *self, PyObject* args);
-static PyObject *pvc_get_pvcam_version(PyObject *self, PyObject* args);
-static PyObject *pvc_get_cam_fw_version(PyObject *self, PyObject* args);
+static PyObject* pvc_init_pvcam(PyObject* self, PyObject* args);
+static PyObject* pvc_uninit_pvcam(PyObject* self, PyObject* args);
+static PyObject* pvc_get_pvcam_version(PyObject* self, PyObject* args);
+static PyObject* pvc_get_cam_fw_version(PyObject* self, PyObject* args);
 
-static PyObject *pvc_get_cam_total(PyObject *self, PyObject* args);
-static PyObject *pvc_get_cam_name(PyObject *self, PyObject *args);
-static PyObject *pvc_open_camera(PyObject *self, PyObject *args);
-static PyObject *pvc_close_camera(PyObject *self, PyObject *args);
+static PyObject* pvc_get_cam_total(PyObject* self, PyObject* args);
+static PyObject* pvc_get_cam_name(PyObject* self, PyObject* args);
+static PyObject* pvc_open_camera(PyObject* self, PyObject* args);
+static PyObject* pvc_close_camera(PyObject* self, PyObject* args);
 
-static PyObject *pvc_get_param(PyObject *self, PyObject *args);
-static PyObject *pvc_set_param(PyObject *self, PyObject *args);
-static PyObject *pvc_check_param(PyObject *self, PyObject *args);
+static PyObject* pvc_get_param(PyObject* self, PyObject* args);
+static PyObject* pvc_set_param(PyObject* self, PyObject* args);
+static PyObject* pvc_check_param(PyObject* self, PyObject* args);
 
-static PyObject *pvc_start_live(PyObject *self, PyObject *args);
-static PyObject *pvc_start_seq(PyObject *self, PyObject *args);
-static PyObject *pvc_check_frame_status(PyObject *self, PyObject *args);
-static PyObject *pvc_get_frame(PyObject *self, PyObject *args);
-static PyObject *pvc_stop_live(PyObject *self, PyObject *args);
-static PyObject *pvc_finish_seq(PyObject *self, PyObject *args);
-static PyObject *pvc_abort(PyObject *self, PyObject *args);
+static PyObject* pvc_start_live(PyObject* self, PyObject* args);
+static PyObject* pvc_start_seq(PyObject* self, PyObject* args);
+static PyObject* pvc_check_frame_status(PyObject* self, PyObject* args);
+static PyObject* pvc_get_frame(PyObject* self, PyObject* args);
+static PyObject* pvc_stop_live(PyObject* self, PyObject* args);
+static PyObject* pvc_finish_seq(PyObject* self, PyObject* args);
+static PyObject* pvc_abort(PyObject* self, PyObject* args);
 
-static PyObject *pvc_set_exp_modes(PyObject *self, PyObject *args);
-static PyObject *pvc_reset_pp(PyObject *self, PyObject *args);
-static PyObject *pvc_sw_trigger(PyObject *self, PyObject *args);
+static PyObject* pvc_set_exp_modes(PyObject* self, PyObject* args);
+static PyObject* pvc_reset_pp(PyObject* self, PyObject* args);
+static PyObject* pvc_sw_trigger(PyObject* self, PyObject* args);
 
 #endif // PVC_MODULE_H_
