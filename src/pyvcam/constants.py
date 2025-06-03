@@ -1,7 +1,7 @@
 ###############################################################################
 # File: constants.py
 # Author: Cameron Smith
-# Date of Last Edit: 2024-04-25
+# Date of Last Edit: 2025-06-03
 #
 # Purpose: To maintain the naming conventions used with PVCAM.h for Python
 #          scripts.
@@ -13,8 +13,10 @@
 #
 # Bugs: [See constants_generator.py]
 ###############################################################################
-import ctypes,os
+import ctypes
+
 ### DEFINES ###
+
 MAX_CAM = 16
 CAM_NAME_LEN = 32
 PARAM_NAME_LEN = 32
@@ -557,6 +559,7 @@ PL_MD_EXT_TAG_PARTICLE_M2 = PL_MD_EXT_TAG_PARTICLE_M0 + 1
 PL_MD_EXT_TAG_MAX = PL_MD_EXT_TAG_PARTICLE_M2 + 1
 
 ### STRUCTS ###
+
 class PVCAM_FRAME_INFO_GUID(ctypes.Structure):
     _fields_ = [
                 ('f1', ctypes.c_uint32),
@@ -725,4 +728,3 @@ class md_frame(ctypes.Structure):
                 ('roiCapacity', ctypes.c_uint16),
                 ('roiCount', ctypes.c_uint16),
                ]
-
