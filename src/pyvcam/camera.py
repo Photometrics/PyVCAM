@@ -44,9 +44,9 @@ class Camera:
         # Helper class to populate enumerated parameter dictionaries and ease conversion
         # of keys and values. The param_id must support enum attribute.
         # This dictionary will accept both keys and values to the __getitem__ operator,
-        # rather than just keys like regular dictionaries.
-        # If a value is provided, the matching key is returned.
-        # The camera can be None only to initialize the empty enum with name in Camera c'tor.
+        # rather than just keys like regular dictionaries. If a value is provided,
+        # the matching key is returned. The camera can be None only to initialize
+        # the empty enum with name in Camera constructor.
         def __init__(self, name, camera=None, param_id=0):
             enum_dict = {}
             if camera is not None and param_id != 0:
@@ -77,6 +77,14 @@ class Camera:
 
         # pylint: disable=too-many-positional-arguments
         def __init__(self, s1, s2, sbin, p1, p2, pbin):
+            if s1 < 0 or s2 < 0 or p1 < 0 or p2 < 0:
+                raise ValueError('Coordinates must be >= 0')
+            if s1 > s2:
+                raise ValueError('Coordinates must be s1 <= s2')
+            if p1 > p2:
+                raise ValueError('Coordinates must be p1 <= p2')
+            if sbin <= 0 or pbin <= 0:
+                raise ValueError('Binning must be >= 1')
             # TODO: s1 & p1 could be also aligned to binning factors
             self.s1 = s1
             self.s2 = s2 - ((s2 - s1 + 1) % sbin)  # Clip partially binned pixels
@@ -96,9 +104,9 @@ class Camera:
                 self.p1 == other.p1 and
                 self.p2 == other.p2)
 
-        def checkOverlap(self, other):
-            return (self.s1 <= other.s1 <= self.s1 and self.p1 <= other.p1 <= self.p1) or \
-                   (self.s2 <= other.s2 <= self.s2 and self.p2 <= other.p2 <= self.p2)
+        def check_overlap(self, other):
+            return not (self.s2 < other.s1 or other.s2 < self.s1 or
+                        self.p2 < other.p1 or other.p2 < self.p1)
 
         @property
         def shape(self):
@@ -115,6 +123,9 @@ class Camera:
         self.__handle = -1
         self.__is_open = False
 
+        # Cached values update upon camera open
+        self.__sensor_size: Tuple[int, int] = (0, 0)
+
         self.__acquisition_mode = None
 
         # Memory for live circular buffer
@@ -127,7 +138,7 @@ class Camera:
         self.__exp_time = 0
 
         # Regions of interest
-        self.__default_roi = None  # The default RegionOfInterest object
+        self.__default_roi: Camera.RegionOfInterest = Camera.RegionOfInterest(0, 0, 1, 0, 0, 1)
         self.__rois: List[Camera.RegionOfInterest] = []
 
         # Binning factors if the camera doesn't support arbitrary binning
@@ -227,10 +238,14 @@ class Camera:
         except AttributeError:
             self.set_param(const.PARAM_PMODE, const.PMODE_NORMAL)
 
+        # Cache static values
+        self.__sensor_size = (self.get_param(const.PARAM_SER_SIZE),
+                              self.get_param(const.PARAM_PAR_SIZE))
+
         # Set ROI to full frame with no binning
         self.__default_roi = Camera.RegionOfInterest(
-            s1=0, s2=self.sensor_size[0] - 1, sbin=1,
-            p1=0, p2=self.sensor_size[1] - 1, pbin=1)
+            s1=0, s2=self.__sensor_size[0] - 1, sbin=1,
+            p1=0, p2=self.__sensor_size[1] - 1, pbin=1)
         self.reset_rois()
 
         # Cache extended binning factors if supported
@@ -374,10 +389,11 @@ class Camera:
             self.__is_open = False
 
             # Cleanup internal state
+            self.__sensor_size = (0, 0)
             self.__acquisition_mode = None
             self.__exposure_bytes = None
             self.__mode = None
-            self.__default_roi = None
+            self.__default_roi = Camera.RegionOfInterest(0, 0, 1, 0, 0, 1)
             self.__rois = []
             self.__limited_binnings = None
             self.__centroids_modes = Camera.ReversibleEnumDict('centroids_modes')
@@ -491,10 +507,7 @@ class Camera:
             None
         """
 
-        try:
-            pvc.reset_pp(self.__handle)
-        except RuntimeError as ex:
-            raise RuntimeError('Failed to reset post-processing settings.') from ex
+        pvc.reset_pp(self.__handle)
 
     def _update_mode(self):
         """Updates the mode of the camera.
@@ -523,6 +536,9 @@ class Camera:
             None
         """
 
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
+
         self.__rois = [self.__default_roi]
 
     def set_roi(self, s1, p1, w, h):
@@ -536,6 +552,9 @@ class Camera:
             None
         """
 
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
+
         if w < 1 or h < 1:
             raise ValueError('Width and height must be >= 1')
 
@@ -544,36 +563,34 @@ class Camera:
 
         # Check if new ROI is in bounds
         in_bounds = (
-            0 <= s1 <= self.sensor_size[0] and
-            0 <= s2 <= self.sensor_size[0] and
-            0 <= p1 <= self.sensor_size[1] and
-            0 <= p2 <= self.sensor_size[1])
-
+            0 <= s1 < self.__sensor_size[0] and
+            0 <= s2 < self.__sensor_size[0] and
+            0 <= p1 < self.__sensor_size[1] and
+            0 <= p2 < self.__sensor_size[1])
         if not in_bounds:
-            raise ValueError('Could not add ROI. ROI extends beyond limits of frame')
-
-        # Get the total supported ROIs
-        roi_count = self.get_param(const.PARAM_ROI_COUNT, const.ATTR_MAX)
+            raise ValueError('Could not add ROI. ROI extends beyond limits of sensor')
 
         # Check if current ROI list only contains the default
         using_default_roi = False
         if len(self.__rois) == 1:
             using_default_roi = self.__rois[0] == self.__default_roi
 
-        new_roi = Camera.RegionOfInterest(s1, s2, self.bin_x, p1, p2, self.bin_y)
-        if roi_count == 1 or using_default_roi:
+        # Get the total supported ROIs
+        max_roi_count = self.get_param(const.PARAM_ROI_COUNT, const.ATTR_MAX)
+
+        sbin = self.__rois[0].sbin
+        pbin = self.__rois[0].pbin
+        new_roi = Camera.RegionOfInterest(s1, s2, sbin, p1, p2, pbin)
+        if max_roi_count == 1 or using_default_roi:
             self.__rois = [new_roi]
-
-        elif len(self.__rois) < roi_count:
-
+        elif len(self.__rois) < max_roi_count:
             # Check that new ROI doesn't overlap with existing ROIs
             for roi in self.__rois:
-                if roi.checkOverlap(new_roi):
+                if roi.check_overlap(new_roi):
                     raise ValueError('Could not add ROI. New ROI overlaps existing ROI')
-
             self.__rois.append(new_roi)
         else:
-            raise ValueError(f'Could not add ROI. Camera only supports {roi_count} rois')
+            raise ValueError(f'Could not add ROI. Camera only supports {max_roi_count} rois')
 
     def poll_frame(self, timeout_ms=WAIT_FOREVER, oldestFrame=True, copyData=True):
         """Calls the pvc.get_frame function with the current camera settings.
@@ -724,7 +741,8 @@ class Camera:
         """Calls the pvc.start_seq function to set up a non-circular buffer acquisition.
 
         Parameter:
-            exp_time (int): The exposure time        Returns:
+            exp_time (int): The exposure time
+        Returns:
             None
         """
 
@@ -902,8 +920,9 @@ class Camera:
 
     @property
     def sensor_size(self):
-        return (self.get_param(const.PARAM_SER_SIZE),
-                self.get_param(const.PARAM_PAR_SIZE))
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
+        return self.__sensor_size
 
     @property
     def serial_no(self):
@@ -1019,18 +1038,28 @@ class Camera:
 
     @property
     def binnings(self):
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
         return self.__limited_binnings
 
     @property
     def binning(self):
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
         return self.__rois[0].sbin, self.__rois[0].pbin
 
     @binning.setter
     def binning(self, value):
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
+
         if isinstance(value, tuple):
             bin_x, bin_y = value
         else:
             bin_x = bin_y = value
+
+        if bin_x <= 0 or bin_y <= 0:
+            raise ValueError('Binning must be >= 1')
 
         # Validate the combination if the binning is not arbitrary
         if self.__limited_binnings is not None:
@@ -1050,7 +1079,7 @@ class Camera:
     @bin_x.setter
     @deprecated("Use 'binning' property instead")
     def bin_x(self, value):
-        self.binning = (value, self.binning[1])
+        self.binning = (value, self.__rois[0].pbin)
 
     @property
     @deprecated("Use 'binning' property instead")
@@ -1060,9 +1089,17 @@ class Camera:
     @bin_y.setter
     @deprecated("Use 'binning' property instead")
     def bin_y(self, value):
-        self.binning = (self.binning[0], value)
+        self.binning = (self.__rois[0].sbin, value)
+
+    @property
+    def rois(self):
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
+        return self.__rois
 
     def shape(self, roi_index=0):
+        if not self.__is_open:
+            raise RuntimeError(f'Camera is not open')
         return self.__rois[roi_index].shape
 
     @property
@@ -1184,12 +1221,12 @@ class Camera:
         # Camera specific setting: will raise AttributeError if called with a
         # camera that does not support this setting.
         try:
-            self.set_param(const.PARAM_TEMP_SETPOINT, value * 100)
+            self.set_param(const.PARAM_TEMP_SETPOINT, int(value * 100.0))
         except RuntimeError as ex:
             min_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MIN)
             max_temp = self.get_param(const.PARAM_TEMP_SETPOINT, const.ATTR_MAX)
             raise ValueError(f'Invalid temp {value} : Valid temps are in the range '
-                             f'{min_temp / 100} - {max_temp / 100}.') from ex
+                             f'{min_temp / 100.0} - {max_temp / 100.0}.') from ex
 
     @property
     def readout_time(self):
