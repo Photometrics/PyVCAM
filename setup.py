@@ -1,43 +1,12 @@
-import os, platform
-from setuptools import setup
-from setuptools.extension import Extension
+import os
+import platform
+import sys
+from setuptools import setup, Extension
+# from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 
-is_windows = 'win' in platform.system().lower()
-is_linux = 'lin' in platform.system().lower()
 
-#print('Operating system: ' + platform.system())
-#print('Machine architecture: ' + platform.machine())
-
-if not is_linux and not is_windows:
-    print('Operating systems other than Windows or Linux are not supported.')
-    quit()
-
-elif is_linux:
-    is_arch_aarch64 = 'aarch64' in platform.machine().lower()
-    is_arch_x86_64 = 'x86_64' in platform.machine().lower()
-    is_arch_i686 = 'i686' in platform.machine().lower()
-
-    if not is_arch_aarch64 and not is_arch_x86_64 and not is_arch_i686:
-        print('Machine architecture is not supported, it must be aarch64, x86_64 or i686.')
-        quit()
-
-elif is_windows:
-    is_arch_x86_64 = 'amd64' in platform.machine().lower()
-    is_32bit = 'x86' in platform.machine().lower()
-
-    if not is_arch_x86_64 and not is_32bit:
-        print('Machine architecture is not supported, it must be amd64 or x86 32bit.')
-        quit()
-
-pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
-include_dirs = []
-lib_dirs = []
-libs = []
-extra_compile_args = []
-sources = []
-
-class build_ext(_build_ext):
+class BuildExt(_build_ext):
     def finalize_options(self) -> None:
         # Prevent numpy from thinking it is still in its setup process
         # https://github.com/singingwolfboy/nose-progressive/commit/d8dce093910724beff86081327565b11ea28dfbc#diff-fa26a70e79ad69caf5b4f938fcd73179afaf4c05229b19acb326ab89e4759fbfR25
@@ -49,49 +18,75 @@ class build_ext(_build_ext):
 
         _build_ext.finalize_options(self)
         _set_builtin('__NUMPY_SETUP__', False)
+        # pylint: disable=import-outside-toplevel
         import numpy
         include_dirs.append(numpy.get_include())
 
+
+# print(f'Operating system: {platform.system()}')
+# print(f'Machine architecture: {platform.machine()}')
+
+is_windows = 'win' in platform.system().lower()
+is_linux = 'lin' in platform.system().lower()
+
+current_arch = platform.machine().lower()
+supported_archs = []
+
 if is_linux:
+    supported_archs = ['x86_64', 'i686', 'aarch64']
+elif is_windows:
+    supported_archs = ['amd64', 'x86']
+else:
+    sys.exit('Operating systems other than Windows or Linux are not supported.')
+if current_arch not in supported_archs:
+    sys.exit(f'Machine architecture is not supported, it must be one of {supported_archs}.')
+
+pvcam_sdk_path = os.environ['PVCAM_SDK_PATH']
+include_dirs = []
+library_dirs = []
+libraries = []
+extra_compile_args = []
+sources = []
+depends = []
+
+if is_linux:
+    include_dirs.append(f'{pvcam_sdk_path}/include')
+    library_dirs.append(f'{pvcam_sdk_path}/library/{current_arch}')
+    libraries.append('pvcam')
     extra_compile_args.append('-std=c++11')
-    include_dirs.append('{}/include'.format(pvcam_sdk_path))
-    if is_arch_aarch64:
-        lib_dirs.append('{}/library/aarch64'.format(pvcam_sdk_path))
-    elif is_arch_x86_64:
-        lib_dirs.append('{}/library/x86_64'.format(pvcam_sdk_path))
-    elif is_arch_i686:
-        lib_dirs.append('{}/library/i686'.format(pvcam_sdk_path))
-    libs.append('pvcam')
 
 elif is_windows:
-    include_dirs.append('{}/inc'.format(pvcam_sdk_path))
-    if is_arch_x86_64:
-        lib_dirs.append('{}/Lib/amd64'.format(pvcam_sdk_path))
-        libs.append('pvcam64')
-    elif is_32bit:
-        lib_dirs.append('{}/Lib/i386'.format(pvcam_sdk_path))
-        libs.append('pvcam32')
+    include_dirs.append(f'{pvcam_sdk_path}/inc')
+    if current_arch == 'x86':
+        library_dirs.append(f'{pvcam_sdk_path}/lib/i386')
+        libraries.append('pvcam32')
+    else:
+        library_dirs.append(f'{pvcam_sdk_path}/lib/{current_arch}')
+        libraries.append('pvcam64')
 
 include_dirs.append('src/pyvcam')
 sources.append('src/pyvcam/pvcmodule.cpp')
+depends.append('src/pyvcam/pvcmodule.h')
 
-ext_modules = [Extension('pyvcam.pvc',
-                         sources=sources,
-                         extra_compile_args=extra_compile_args,
-                         include_dirs=include_dirs,
-                         library_dirs=lib_dirs,
-                         libraries=libs)]
+ext_modules = [
+    Extension(
+        name='pyvcam.pvc',
+        sources=sources,
+        depends=depends,
+        include_dirs=include_dirs,
+        library_dirs=library_dirs,
+        libraries=libraries,
+        extra_compile_args=extra_compile_args,
+    )
+]
 
-setup(name='pyvcam',
-      version='2.1.9',
-      author='Teledyne Photometrics',
-      author_email='Steve.Bellinger@Teledyne.com',
-      url='https://github.com/Photometrics/PyVCAM',
-      description='Python wrapper for PVCAM functionality.',
-      packages=['pyvcam'],
-      package_dir={'pyvcam': 'src/pyvcam'},
-      py_modules=['pyvcam.constants'],
-      cmdclass={'build_ext': build_ext},
-      setup_requires=['numpy'],
-      install_requires=['numpy'],
-      ext_modules=ext_modules)
+setup(
+    cmdclass={'build_ext': BuildExt},
+    setup_requires=['numpy'],
+    ext_modules=ext_modules,
+
+    # Workaround: Home page doesn't show up with 'pip show' when set in pyproject.toml
+    url='https://github.com/Photometrics/PyVCAM',
+
+    # Everything else set in pyproject.toml
+)

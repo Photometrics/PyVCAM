@@ -1,0 +1,99 @@
+[project]
+name = "PyVCAM"
+version = "2.1.10"
+description = "Python wrapper for PVCAM functionality"
+authors = [
+    {name = "Teledyne Photometrics", email = "photometrics.support@teledyne.com"},
+    {name = "Steve Bellinger"},
+    {name = "Cameron Smith"},
+    {name = "Lubomír Walder"},
+    {name = "Vojtěch Ondřej"},
+    {name = "Tomáš Hanák"},
+]
+keywords = ["microscopy"]
+readme = "README.md"
+license = {text = "MIT"}  # Deprecated
+#license = "MIT"  # Should be used since setuptools 77.0
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.6"
+
+dependencies = [
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "validate-pyproject[all]",
+    "Flake8-pyproject",
+    "flake8-typing-imports",
+    "pylint",
+]
+
+[project.urls]
+# Home page doesn't show up with 'pip show', used a workaround via setup.cfg or setup.py
+homepage = "https://github.com/Photometrics/PyVCAM"
+source = "https://github.com/Photometrics/PyVCAM"
+#download = "https://pypi.org/project/PyVCAM/"
+tracker = "https://github.com/Photometrics/PyVCAM/issues"
+
+[build-system]
+requires = ["setuptools >= 64.0", "wheel >= 0.38"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = [
+    "pyvcam",
+]
+exclude = []
+
+# Thanks to Flake8-pyproject, we can configure flake8 here
+[tool.flake8]
+max-line-length = 100
+#max-complexity = 7
+exclude = [
+    "src/pyvcam/constants.py",
+]
+
+[tool.pylint.MASTER]
+ignore-paths = [
+    "src/pyvcam/constants.py",
+]
+[tool.pylint."MESSAGES CONTROL"]
+disable = [
+    "fixme",
+    #"cyclic-import",
+    #"duplicate-code",
+    "missing-docstring",
+    #"broad-exception-caught",
+    #"too-few-public-methods",
+]
+[tool.pylint.FORMAT]
+max-args=10
+max-attributes=30
+max-branches=30
+max-line-length=100
+max-locals=50
+max-statements=100
+
+# During development install optional dependencies:
+#   python -m pip install .[dev]
+# Before every commit check the code:
+#   python -m validate_pyproject pyproject.toml
+#   python -m flake8 src tests --count --statistics
+#   python -m pylint src
