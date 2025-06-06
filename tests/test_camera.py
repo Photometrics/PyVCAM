@@ -30,10 +30,10 @@ class CameraConstructionTests(unittest.TestCase):
         dd_ver = pvc.get_param(self.test_cam.handle,
                                const.PARAM_DD_VERSION,
                                const.ATTR_CURRENT)
-        dd_ver = '{}.{}.{}'.format(dd_ver & 0xff00 >> 8,
-                                   dd_ver & 0x00f0 >> 4,
-                                   dd_ver & 0x000f)
-        self.assertEqual(dd_ver, self.test_cam.driver_version)
+        dd_ver_str = f'{(dd_ver >> 8) & 0xFF}.'\
+                     f'{(dd_ver >> 4) & 0x0F}.'\
+                     f'{(dd_ver >> 0) & 0x0F}'
+        self.assertEqual(dd_ver_str, self.test_cam.driver_version)
 
     def test_get_dd_version_fail(self):
         with self.assertRaises(RuntimeError):
@@ -249,12 +249,11 @@ class CameraConstructionTests(unittest.TestCase):
                           "clear_mode", -1)
 
     def test_set_clear_mode_no_open_fail(self):
-        self.assertRaises(AttributeError, setattr, self.test_cam,
+        self.assertRaises(RuntimeError, setattr, self.test_cam,
                           "clear_mode", 0)
 
-    # TODO: All setters should raise Runtime if not open
     def test_set_clear_mode_no_open_bad_value_fail(self):
-        self.assertRaises(AttributeError, setattr, self.test_cam,
+        self.assertRaises(RuntimeError, setattr, self.test_cam,
                           "clear_mode", -1)
 
     def test_get_temp(self):
@@ -299,10 +298,10 @@ class CameraConstructionTests(unittest.TestCase):
 
     def test_set_temp_to_low_fail(self):
         self.test_cam.open()
-        one_below_max_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
+        one_below_min_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
                                                      const.ATTR_MIN) - 1
         self.assertRaises(ValueError, setattr, self.test_cam,
-                          "temp_setpoint", one_below_max_temp)
+                          "temp_setpoint", one_below_min_temp)
 
     def test_set_temp_no_open_fail(self):
         self.assertRaises(RuntimeError, setattr, self.test_cam,
@@ -335,7 +334,7 @@ class CameraConstructionTests(unittest.TestCase):
                           "exp_res", -1)
 
     def test_set_exp_res_no_open_fail(self):
-        self.assertRaises(AttributeError, setattr, self.test_cam,
+        self.assertRaises(RuntimeError, setattr, self.test_cam,
                           "exp_res", 0)
 
     def test_get_sensor_size(self):
