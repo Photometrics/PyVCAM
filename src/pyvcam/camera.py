@@ -341,8 +341,26 @@ class Camera:
 
         try:
             pvc.close_camera(self.__handle)
+
             self.__handle = -1
             self.__is_open = False
+
+            # Cleanup internal state
+            self.__acquisition_mode = None
+            self.__exposure_bytes = None
+            self.__mode = None
+            self.__default_roi = None
+            self.__rois = []
+            self.__centroids_modes = Camera.ReversibleEnumDict('centroids_modes')
+            self.__clear_modes = Camera.ReversibleEnumDict('clear_modes')
+            self.__exp_modes = Camera.ReversibleEnumDict('exp_modes')
+            self.__exp_out_modes = Camera.ReversibleEnumDict('exp_out_modes')
+            self.__exp_resolutions = Camera.ReversibleEnumDict('exp_resolutions')
+            self.__prog_scan_modes = Camera.ReversibleEnumDict('prog_scan_modes')
+            self.__prog_scan_dirs = Camera.ReversibleEnumDict('prog_scan_dirs')
+            self.__port_speed_gain_table = {}
+            self.__post_processing_table = {}
+
         except RuntimeError as ex:
             raise RuntimeError('Failed to close camera.') from ex
 
