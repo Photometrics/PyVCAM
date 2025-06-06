@@ -1,6 +1,9 @@
 [[Installation]]
 pip install .
 
+[[Uninstallation]]
+pip uninstall PyVCAM
+
 [[Camera Class]]
 
 [Camera Selection]
