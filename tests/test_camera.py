@@ -1,3 +1,5 @@
+# pylint: disable=c-extension-no-member,too-many-public-methods
+
 import unittest
 from pyvcam import pvc
 from pyvcam import camera
@@ -10,8 +12,8 @@ class CameraConstructionTests(unittest.TestCase):
         pvc.init_pvcam()
         try:
             self.test_cam = next(camera.Camera.detect_camera())
-        except:
-            raise unittest.SkipTest('No available camera found')
+        except Exception as ex:
+            raise unittest.SkipTest('No available camera found') from ex
 
     def tearDown(self):
         # if self.test_cam.is_open():
@@ -23,7 +25,7 @@ class CameraConstructionTests(unittest.TestCase):
         test_cam = camera.Camera(test_cam_name)
         self.assertEqual(test_cam.name, test_cam_name)
         self.assertEqual(test_cam.handle, -1)
-        self.assertEqual(test_cam._Camera__is_open, False)
+        self.assertEqual(test_cam.is_open, False)
 
     def test_get_dd_version(self):
         self.test_cam.open()
@@ -35,25 +37,35 @@ class CameraConstructionTests(unittest.TestCase):
                      f'{(dd_ver >> 0) & 0x0F}'
         self.assertEqual(dd_ver_str, self.test_cam.driver_version)
 
-    def test_get_dd_version_fail(self):
+    def test_get_dd_version_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.driver_version
+            _ = self.test_cam.driver_version
 
-    def test_get_bin_x(self):
+    def test_get_binning(self):
         self.test_cam.open()
-        try:
-            self.assertEqual(self.test_cam.bin_x, 1) # Defaults to 1
-        except AttributeError:
-            self.skipTest("test_get_bin_x: This camera does not "
-                          "support binning.")
+        self.assertEqual(self.test_cam.binning, (1, 1))  # Defaults to 1
 
-    def test_get_bin_y(self):
+    def test_get_binning_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.binning
+
+    def test_set_binning_tuple(self):
         self.test_cam.open()
-        try:
-            self.assertEqual(self.test_cam.bin_y, 1)  # Defaults to 1
-        except AttributeError:
-            self.skipTest("test_get_bin_y: This camera does not "
-                          "support binning.")
+        self.test_cam.binning = (1, 1)
+        self.assertEqual(self.test_cam.binning, (1, 1))  # Defaults to 1
+
+    def test_set_binning_int(self):
+        self.test_cam.open()
+        self.test_cam.binning = 1
+        self.assertEqual(self.test_cam.binning, (1, 1))  # Defaults to 1
+
+    def test_set_binning_tuple_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            self.test_cam.binning = (1, 1)
+
+    def test_set_binning_int_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            self.test_cam.binning = 1
 
     def test_get_chip_name(self):
         self.test_cam.open()
@@ -62,9 +74,9 @@ class CameraConstructionTests(unittest.TestCase):
                                   const.ATTR_CURRENT)
         self.assertEqual(chip_name, self.test_cam.chip_name)
 
-    def test_get_chip_name_fail(self):
+    def test_get_chip_name_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.chip_name
+            _ = self.test_cam.chip_name
 
     def test_get_serial_no(self):
         self.test_cam.open()
@@ -80,9 +92,9 @@ class CameraConstructionTests(unittest.TestCase):
                                      const.ATTR_CURRENT)
         self.assertEqual(spdtab_index, self.test_cam.speed_table_index)
 
-    def test_get_speed_table_index_fail(self):
+    def test_get_speed_table_index_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.speed_table_index
+            _ = self.test_cam.speed_table_index
 
     def test_set_speed_table_index(self):
         self.test_cam.open()
@@ -102,16 +114,17 @@ class CameraConstructionTests(unittest.TestCase):
     def test_set_speed_table_index_no_open_fail(self):
         with self.assertRaises(RuntimeError):
             self.test_cam.speed_table_index = 0
-        
+
     def test_get_readout_port(self):
         self.test_cam.open()
-        readout_port = pvc.get_param(self.test_cam.handle, const.PARAM_READOUT_PORT,
+        readout_port = pvc.get_param(self.test_cam.handle,
+                                     const.PARAM_READOUT_PORT,
                                      const.ATTR_CURRENT)
         self.assertEqual(readout_port, self.test_cam.readout_port)
 
-    def test_get_readout_port_fail(self):
+    def test_get_readout_port_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.readout_port
+            _ = self.test_cam.readout_port
 
     def test_set_readout_port_index(self):
         self.test_cam.open()
@@ -124,7 +137,7 @@ class CameraConstructionTests(unittest.TestCase):
     def test_set_readout_port_out_of_bounds(self):
         self.test_cam.open()
         num_entries = self.test_cam.get_param(const.PARAM_READOUT_PORT,
-                                         const.ATTR_COUNT)
+                                              const.ATTR_COUNT)
         with self.assertRaises(ValueError):
             self.test_cam.readout_port = num_entries
 
@@ -139,9 +152,9 @@ class CameraConstructionTests(unittest.TestCase):
                                        const.ATTR_CURRENT)
         self.assertEqual(curr_bit_depth, self.test_cam.bit_depth)
 
-    def test_get_bit_depth_fail(self):
+    def test_get_bit_depth_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.bit_depth
+            _ = self.test_cam.bit_depth
 
     def test_get_pix_time(self):
         self.test_cam.open()
@@ -150,9 +163,9 @@ class CameraConstructionTests(unittest.TestCase):
                                       const.ATTR_CURRENT)
         self.assertEqual(curr_pix_time, self.test_cam.pix_time)
 
-    def test_get_pix_time_fail(self):
+    def test_get_pix_time_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.pix_time
+            _ = self.test_cam.pix_time
 
     def test_get_gain(self):
         self.test_cam.open()
@@ -161,9 +174,9 @@ class CameraConstructionTests(unittest.TestCase):
                                         const.ATTR_CURRENT)
         self.assertEqual(curr_gain_index, self.test_cam.gain)
 
-    def test_get_gain_fail(self):
+    def test_get_gain_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.gain
+            _ = self.test_cam.gain
 
     def test_set_gain(self):
         self.test_cam.open()
@@ -177,12 +190,12 @@ class CameraConstructionTests(unittest.TestCase):
                                             const.ATTR_CURRENT)
             self.assertEqual(curr_gain_index, self.test_cam.gain)
 
-    def test_set_gain_less_than_zero(self):
+    def test_set_gain_less_than_zero_fail(self):
         self.test_cam.open()
         with self.assertRaises(ValueError):
             self.test_cam.gain = -1
 
-    def test_set_gain_more_than_max(self):
+    def test_set_gain_more_than_max_fail(self):
         self.test_cam.open()
         max_gain = pvc.get_param(self.test_cam.handle,
                                  const.PARAM_GAIN_INDEX,
@@ -190,9 +203,9 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.test_cam.gain = max_gain + 1
 
-    def test_set_gain_no_open(self):
+    def test_set_gain_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.gain = 1 
+            self.test_cam.gain = 1
 
     def test_adc_offset(self):
         self.test_cam.open()
@@ -201,29 +214,28 @@ class CameraConstructionTests(unittest.TestCase):
                                         const.ATTR_CURRENT)
         self.assertEqual(curr_adc_offset, self.test_cam.adc_offset)
 
-    def test_adc_offset_no_open(self):
-        # self.assertRaises(RuntimeError, getattr, self.test_cam, "adc_offset")
+    def test_adc_offset_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.adc_offset
+            _ = self.test_cam.adc_offset
 
     def test_get_clear_mode(self):
         self.test_cam.open()
         curr_clear_mode = pvc.get_param(self.test_cam.handle,
-                                         const.PARAM_CLEAR_MODE,
-                                         const.ATTR_CURRENT)
+                                        const.PARAM_CLEAR_MODE,
+                                        const.ATTR_CURRENT)
         self.assertEqual(curr_clear_mode, self.test_cam.clear_mode)
         # reversed_dict = {val: key for key, val in const.clear_modes.items()}
         # self.assertEqual(reversed_dict[curr_clear_mode],
         #                  self.test_cam.clear_mode)
 
-    def test_get_clear_mode_no_open(self):
+    def test_get_clear_mode_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.clear_mode
+            _ = self.test_cam.clear_mode
 
     def test_set_clear_mode_by_name(self):
         self.test_cam.open()
-        for mode in self.test_cam.clear_modes.values():
-            self.test_cam.clear_mode = mode
+        for name, _ in self.test_cam.clear_modes.items():
+            self.test_cam.clear_mode = name
             curr_clear_mode = pvc.get_param(self.test_cam.handle,
                                             const.PARAM_CLEAR_MODE,
                                             const.ATTR_CURRENT)
@@ -231,8 +243,8 @@ class CameraConstructionTests(unittest.TestCase):
 
     def test_set_clear_mode_by_value(self):
         self.test_cam.open()
-        for mode in self.test_cam.clear_modes.values():
-            self.test_cam.clear_mode = mode
+        for _, value in self.test_cam.clear_modes.items():
+            self.test_cam.clear_mode = value
             curr_clear_mode = pvc.get_param(self.test_cam.handle,
                                             const.PARAM_CLEAR_MODE,
                                             const.ATTR_CURRENT)
@@ -240,42 +252,45 @@ class CameraConstructionTests(unittest.TestCase):
 
     def test_set_clear_mode_bad_name_fail(self):
         self.test_cam.open()
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "clear_mode", "")
+        with self.assertRaises(ValueError):
+            self.test_cam.clear_mode = ''
 
     def test_set_clear_mode_bad_value_fail(self):
         self.test_cam.open()
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "clear_mode", -1)
+        with self.assertRaises(ValueError):
+            self.test_cam.clear_mode = -1
 
     def test_set_clear_mode_no_open_fail(self):
-        self.assertRaises(RuntimeError, setattr, self.test_cam,
-                          "clear_mode", 0)
+        with self.assertRaises(RuntimeError):
+            self.test_cam.clear_mode = 0
 
     def test_set_clear_mode_no_open_bad_value_fail(self):
-        self.assertRaises(RuntimeError, setattr, self.test_cam,
-                          "clear_mode", -1)
+        with self.assertRaises(RuntimeError):
+            self.test_cam.clear_mode = -1
 
     def test_get_temp(self):
         self.test_cam.open()
-        curr_temp = pvc.get_param(self.test_cam.handle, const.PARAM_TEMP,
+        curr_temp = pvc.get_param(self.test_cam.handle,
+                                  const.PARAM_TEMP,
                                   const.ATTR_CURRENT)
         new_temp = self.test_cam.temp
-        # Less than +/-20% variation of temperature between calls.
-        self.assertLessEqual((abs(curr_temp/100 -new_temp) / new_temp), 0.98)
+        # Less than +/- 0.5 deg C variation of temperature between calls
+        self.assertLessEqual(abs(curr_temp / 100.0 - new_temp), 0.5)
 
     def test_get_temp_no_open_fail(self):
-        self.assertRaises(RuntimeError, getattr, self.test_cam, "temp")
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.temp
 
     def test_get_temp_setpoint(self):
         self.test_cam.open()
         curr_temp_setpoint = pvc.get_param(self.test_cam.handle,
                                            const.PARAM_TEMP_SETPOINT,
                                            const.ATTR_CURRENT)
-        self.assertEqual(curr_temp_setpoint/100, self.test_cam.temp_setpoint)
+        self.assertEqual(curr_temp_setpoint / 100.0, self.test_cam.temp_setpoint)
 
     def test_get_temp_setpoint_no_open_fail(self):
-        self.assertRaises(RuntimeError, getattr, self.test_cam, "temp_setpoint")
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.temp_setpoint
 
     def test_set_temp_setpoint(self):
         self.test_cam.open()
@@ -283,29 +298,29 @@ class CameraConstructionTests(unittest.TestCase):
                                            const.ATTR_MIN)
         max_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
                                            const.ATTR_MAX)
-        min_temp_divid100 = (int)(min_temp/100)
-        max_temp_divid100 = (int)(max_temp/100)
-        for i in range(max_temp_divid100, min_temp_divid100-1, -1):
+        min_temp_deg_c = int(min_temp / 100.0)
+        max_temp_deg_c = int(max_temp / 100.0)
+        for i in range(max_temp_deg_c, min_temp_deg_c - 1, -1):
             self.test_cam.temp_setpoint = i
-            self.assertEqual(i, self.test_cam.temp_setpoint)
+            self.assertEqual(self.test_cam.temp_setpoint, i)
 
-    def test_set_temp_to_high_fail(self):
+    def test_set_temp_too_high_fail(self):
         self.test_cam.open()
-        one_over_max_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
-                                                    const.ATTR_MAX) + 1
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "temp_setpoint", one_over_max_temp)
+        max_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
+                                           const.ATTR_MAX)
+        with self.assertRaises(ValueError):
+            self.test_cam.temp_setpoint = (max_temp + 1) / 100.0
 
-    def test_set_temp_to_low_fail(self):
+    def test_set_temp_too_low_fail(self):
         self.test_cam.open()
-        one_below_min_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
-                                                     const.ATTR_MIN) - 1
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "temp_setpoint", one_below_min_temp)
+        min_temp = self.test_cam.get_param(const.PARAM_TEMP_SETPOINT,
+                                           const.ATTR_MIN)
+        with self.assertRaises(ValueError):
+            self.test_cam.temp_setpoint = (min_temp - 1) / 100.0
 
     def test_set_temp_no_open_fail(self):
-        self.assertRaises(RuntimeError, setattr, self.test_cam,
-                          "temp_setpoint", 0)
+        with self.assertRaises(RuntimeError):
+            self.test_cam.temp_setpoint = 0
 
     def test_get_exp_res(self):
         self.test_cam.open()
@@ -313,6 +328,10 @@ class CameraConstructionTests(unittest.TestCase):
                                            const.PARAM_EXP_RES_INDEX,
                                            const.ATTR_CURRENT)
         self.assertEqual(curr_exp_res_index, self.test_cam.exp_res_index)
+
+    def test_get_exp_res_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.exp_res
 
     def test_set_exp_res_by_name(self):
         self.test_cam.open()
@@ -325,28 +344,31 @@ class CameraConstructionTests(unittest.TestCase):
 
     def test_set_exp_res_bad_name_fail(self):
         self.test_cam.open()
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "exp_res", "")
+        with self.assertRaises(ValueError):
+            self.test_cam.exp_res = ""
 
     def test_set_exp_res_bad_value_fail(self):
         self.test_cam.open()
-        self.assertRaises(ValueError, setattr, self.test_cam,
-                          "exp_res", -1)
+        with self.assertRaises(ValueError):
+            self.test_cam.exp_res = -1
 
     def test_set_exp_res_no_open_fail(self):
-        self.assertRaises(RuntimeError, setattr, self.test_cam,
-                          "exp_res", 0)
+        with self.assertRaises(RuntimeError):
+            self.test_cam.exp_res = 0
 
     def test_get_sensor_size(self):
         self.test_cam.open()
-        rows = pvc.get_param(self.test_cam.handle, const.PARAM_SER_SIZE,
+        rows = pvc.get_param(self.test_cam.handle,
+                             const.PARAM_SER_SIZE,
                              const.ATTR_CURRENT)
-        cols = pvc.get_param(self.test_cam.handle, const.PARAM_PAR_SIZE,
+        cols = pvc.get_param(self.test_cam.handle,
+                             const.PARAM_PAR_SIZE,
                              const.ATTR_CURRENT)
         self.assertEqual((rows, cols), self.test_cam.sensor_size)
 
     def test_get_sensor_no_open_fail(self):
-        self.assertRaises(RuntimeError, getattr, self.test_cam, "sensor_size")
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.sensor_size
 
     def test_get_exp_mode(self):
         self.test_cam.open()
@@ -355,11 +377,14 @@ class CameraConstructionTests(unittest.TestCase):
                                       const.ATTR_CURRENT)
         self.assertEqual(curr_exp_mode, self.test_cam.exp_mode)
 
-    def test_get_exp_mode_no_open(self):
-        self.assertRaises(RuntimeError, getattr, self.test_cam, "exp_mode")
+    def test_get_exp_mode_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.exp_mode
+
 
 def main():
     unittest.main()
+
 
 if __name__ == '__main__':
     main()
