@@ -4,12 +4,25 @@ from copy import deepcopy
 import functools
 import os
 import time
+from typing import List, Optional, Tuple
 import warnings
 
 import numpy as np
 
 from pyvcam import pvc  # pylint: disable=no-name-in-module
 from pyvcam import constants as const
+
+
+def deprecated(reason='This function is deprecated.'):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            warnings.warn(f'Deprecated: {func.__name__} - {reason}',
+                          category=DeprecationWarning,
+                          stacklevel=2)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # pylint: disable=too-many-public-methods
@@ -101,6 +114,7 @@ class Camera:
         self.__name = name
         self.__handle = -1
         self.__is_open = False
+
         self.__acquisition_mode = None
 
         # Memory for live circular buffer
@@ -114,7 +128,10 @@ class Camera:
 
         # Regions of interest
         self.__default_roi = None  # The default RegionOfInterest object
-        self.__rois = []  # A list of RegionOfInterest objects
+        self.__rois: List[Camera.RegionOfInterest] = []
+
+        # Binning factors if the camera doesn't support arbitrary binning
+        self.__limited_binnings: Optional[List[Tuple[int, int]]] = None
 
         # Enumeration parameters
         self.__centroids_modes = Camera.ReversibleEnumDict('centroids_modes')
@@ -215,6 +232,17 @@ class Camera:
             s1=0, s2=self.sensor_size[0] - 1, sbin=1,
             p1=0, p2=self.sensor_size[1] - 1, pbin=1)
         self.reset_rois()
+
+        # Cache extended binning factors if supported
+        supports_bin_x = self.check_param(const.PARAM_BINNING_SER)
+        supports_bin_y = self.check_param(const.PARAM_BINNING_PAR)
+        if supports_bin_x and supports_bin_y:
+            try:
+                bin_xs = self.read_enum(const.PARAM_BINNING_SER).values()
+                bin_ys = self.read_enum(const.PARAM_BINNING_PAR).values()
+                self.__limited_binnings = list(zip(bin_xs, bin_ys))
+            except AttributeError:
+                self.__limited_binnings = None
 
         # Setup correct mode
         self.__exp_mode = self.get_param(const.PARAM_EXPOSURE_MODE)
@@ -351,6 +379,7 @@ class Camera:
             self.__mode = None
             self.__default_roi = None
             self.__rois = []
+            self.__limited_binnings = None
             self.__centroids_modes = Camera.ReversibleEnumDict('centroids_modes')
             self.__clear_modes = Camera.ReversibleEnumDict('clear_modes')
             self.__exp_modes = Camera.ReversibleEnumDict('exp_modes')
@@ -989,52 +1018,49 @@ class Camera:
         self._set_dtype()
 
     @property
+    def binnings(self):
+        return self.__limited_binnings
+
+    @property
     def binning(self):
-        return self.bin_x, self.bin_y
+        return self.__rois[0].sbin, self.__rois[0].pbin
 
     @binning.setter
     def binning(self, value):
         if isinstance(value, tuple):
-            self.bin_x = value[0]
-            self.bin_y = value[1]
+            bin_x, bin_y = value
         else:
-            self.binning = (value, value)
+            bin_x = bin_y = value
+
+        # Validate the combination if the binning is not arbitrary
+        if self.__limited_binnings is not None:
+            if (bin_x, bin_y) not in self.__limited_binnings:
+                raise ValueError(f'{self} only supports {self.__limited_binnings} binnings')
+
+        # Update all ROIs to be ready for next acq. setup
+        for roi in self.__rois:
+            roi.sbin = bin_x
+            roi.pbin = bin_y
 
     @property
+    @deprecated("Use 'binning' property instead")
     def bin_x(self):
-        return self.__rois[0].sbin
+        return self.binning[0]
 
     @bin_x.setter
+    @deprecated("Use 'binning' property instead")
     def bin_x(self, value):
-        # Will raise ValueError if incompatible binning is set
-        if (
-            not self.check_param(const.PARAM_BINNING_SER) or
-            value in self.read_enum(const.PARAM_BINNING_SER).values()
-        ):
-            for roi in self.__rois:
-                roi.sbin = value
-            return
-
-        raise ValueError(f'{self} only supports '
-                         f'{self.read_enum(const.PARAM_BINNING_SER).items()} binnings')
+        self.binning = (value, self.binning[1])
 
     @property
+    @deprecated("Use 'binning' property instead")
     def bin_y(self):
-        return self.__rois[0].pbin
+        return self.binning[1]
 
     @bin_y.setter
+    @deprecated("Use 'binning' property instead")
     def bin_y(self, value):
-        # Will raise ValueError if incompatible binning is set
-        if (
-            not self.check_param(const.PARAM_BINNING_PAR) or
-            value in self.read_enum(const.PARAM_BINNING_PAR).values()
-        ):
-            for roi in self.__rois:
-                roi.pbin = value
-            return
-
-        raise ValueError(f'{self} only supports '
-                         f'{self.read_enum(const.PARAM_BINNING_PAR).items()} binnings')
+        self.binning = (self.binning[0], value)
 
     def shape(self, roi_index=0):
         return self.__rois[roi_index].shape
