@@ -567,19 +567,18 @@ class Camera:
         frame, fps, frame_count = pvc.get_frame(
             self.__handle, self.__rois, self.__dtype.num, timeout_ms, oldestFrame)
 
-        num_rois = len(frame['pixel_data'])
         if copyData:
-            frame_tmp = {'pixel_data': [None] * num_rois}
-            for roi_index in range(num_rois):
-                frame_tmp['pixel_data'][roi_index] = np.copy(frame['pixel_data'][roi_index])
-
+            # Shallow copy of the dict
+            frame_tmp = frame.copy()
+            # Deep copy the data
+            frame_tmp['pixel_data'] = [np.copy(arr) for arr in frame['pixel_data']]
             if 'meta_data' in frame.keys():
                 frame_tmp['meta_data'] = deepcopy(frame['meta_data'])
 
             frame = frame_tmp
 
         # If using a single ROI, remove list container
-        if num_rois == 1:
+        if len(frame['pixel_data']) == 1:
             frame['pixel_data'] = frame['pixel_data'][0]
 
         return frame, fps, frame_count
