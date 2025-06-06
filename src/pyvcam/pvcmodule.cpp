@@ -1,5 +1,6 @@
 #include "pvcmodule.h"
 
+#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <numpy/arrayobject.h>
 
 #include <chrono>
@@ -27,8 +28,6 @@
     using FileHandle = int;
     constexpr auto cInvalidFileHandle = (FileHandle)-1;
 #endif
-
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 static const int MAX_ROIS = 15;
 
