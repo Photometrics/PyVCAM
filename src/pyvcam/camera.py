@@ -31,18 +31,24 @@ class Camera:
         # Helper class to populate enumerated parameter dictionaries and ease conversion
         # of keys and values. The param_id must support enum attribute.
         # This dictionary will accept both keys and values to the __getitem__ operator,
-        # rather than just keys like regular dictionaries. If a value is provided,
-        # the matching key is returned.
-        def __init__(self, name, camera_instance, param_id):
-            try:
-                enum_dict = camera_instance.read_enum(param_id)
-            except AttributeError:
-                enum_dict = {}
+        # rather than just keys like regular dictionaries.
+        # If a value is provided, the matching key is returned.
+        # The camera can be None only to initialize the empty enum with name in Camera c'tor.
+        def __init__(self, name, camera=None, param_id=0):
+            enum_dict = {}
+            if camera is not None and param_id != 0:
+                try:
+                    enum_dict = camera.read_enum(param_id)
+                except AttributeError:
+                    pass
 
             super(Camera.ReversibleEnumDict, self).__init__(enum_dict)
             self.name = name
+            self.__camera = camera
 
         def __getitem__(self, key_or_value):
+            if self.__camera is None or not self.__camera.is_open:
+                raise RuntimeError(f'Failed to access {self.name} enum, camera is not open')
             try:
                 if isinstance(key_or_value, str):
                     return super(Camera.ReversibleEnumDict, self).__getitem__(key_or_value)
@@ -111,13 +117,13 @@ class Camera:
         self.__rois = []  # A list of RegionOfInterest objects
 
         # Enumeration parameters
-        self.__centroids_modes = {}
-        self.__clear_modes = {}
-        self.__exp_modes = {}
-        self.__exp_out_modes = {}
-        self.__exp_resolutions = {}
-        self.__prog_scan_modes = {}
-        self.__prog_scan_dirs = {}
+        self.__centroids_modes = Camera.ReversibleEnumDict('centroids_modes')
+        self.__clear_modes = Camera.ReversibleEnumDict('clear_modes')
+        self.__exp_modes = Camera.ReversibleEnumDict('exp_modes')
+        self.__exp_out_modes = Camera.ReversibleEnumDict('exp_out_modes')
+        self.__exp_resolutions = Camera.ReversibleEnumDict('exp_resolutions')
+        self.__prog_scan_modes = Camera.ReversibleEnumDict('prog_scan_modes')
+        self.__prog_scan_dirs = Camera.ReversibleEnumDict('prog_scan_dirs')
 
         self.__port_speed_gain_table = {}
         self.__post_processing_table = {}
