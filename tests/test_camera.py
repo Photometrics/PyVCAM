@@ -85,6 +85,49 @@ class CameraConstructionTests(unittest.TestCase):
                                const.ATTR_CURRENT)
         self.assertEqual(ser_no, self.test_cam.serial_no)
 
+    def test_get_readout_port(self):
+        self.test_cam.open()
+        readout_port = pvc.get_param(self.test_cam.handle,
+                                     const.PARAM_READOUT_PORT,
+                                     const.ATTR_CURRENT)
+        self.assertEqual(readout_port, self.test_cam.readout_port)
+
+    def test_get_readout_port_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.readout_port
+
+    def test_set_readout_port_by_name(self):
+        self.test_cam.open()
+        for name, _ in self.test_cam.readout_ports.items():
+            self.test_cam.readout_port = name
+            curr_readout_port = pvc.get_param(self.test_cam.handle,
+                                              const.PARAM_READOUT_PORT,
+                                              const.ATTR_CURRENT)
+            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
+
+    def test_set_readout_port_by_value(self):
+        self.test_cam.open()
+        for _, value in self.test_cam.readout_ports.items():
+            self.test_cam.readout_port = value
+            curr_readout_port = pvc.get_param(self.test_cam.handle,
+                                              const.PARAM_READOUT_PORT,
+                                              const.ATTR_CURRENT)
+            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
+
+    def test_set_readout_port_bad_name_fail(self):
+        self.test_cam.open()
+        with self.assertRaises(ValueError):
+            self.test_cam.readout_port = ''
+
+    def test_set_readout_port_bad_value_fail(self):
+        self.test_cam.open()
+        with self.assertRaises(ValueError):
+            self.test_cam.readout_port = -1
+
+    def test_set_readout_port_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            self.test_cam.readout_port = 0
+
     def test_get_speed_table_index(self):
         self.test_cam.open()
         spdtab_index = pvc.get_param(self.test_cam.handle,
@@ -115,48 +158,22 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.test_cam.speed_table_index = 0
 
-    def test_get_readout_port(self):
+    def test_get_speed_name(self):
         self.test_cam.open()
-        readout_port = pvc.get_param(self.test_cam.handle,
-                                     const.PARAM_READOUT_PORT,
-                                     const.ATTR_CURRENT)
-        self.assertEqual(readout_port, self.test_cam.readout_port)
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SPDTAB_NAME):
+            speed_name = pvc.get_param(self.test_cam.handle,
+                                       const.PARAM_SPDTAB_NAME,
+                                       const.ATTR_CURRENT)
+        else:
+            spdtab_index = pvc.get_param(self.test_cam.handle,
+                                         const.PARAM_SPDTAB_INDEX,
+                                         const.ATTR_CURRENT)
+            speed_name = f'Speed_{spdtab_index}'
+        self.assertEqual(speed_name, self.test_cam.speed_name)
 
-    def test_get_readout_port_no_open_fail(self):
+    def test_get_speed_name_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            _ = self.test_cam.readout_port
-
-    def test_set_readout_port_by_name(self):
-        self.test_cam.open()
-        for name, _ in self.test_cam.port_speed_gain_table.items():
-            self.test_cam.readout_port = name
-            curr_readout_port = pvc.get_param(self.test_cam.handle,
-                                              const.PARAM_READOUT_PORT,
-                                              const.ATTR_CURRENT)
-            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
-
-    def test_set_readout_port_by_value(self):
-        self.test_cam.open()
-        for _, value in self.test_cam.port_speed_gain_table.items():
-            self.test_cam.readout_port = value['port_value']
-            curr_readout_port = pvc.get_param(self.test_cam.handle,
-                                              const.PARAM_READOUT_PORT,
-                                              const.ATTR_CURRENT)
-            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
-
-    def test_set_readout_port_bad_name_fail(self):
-        self.test_cam.open()
-        with self.assertRaises(ValueError):
-            self.test_cam.readout_port = ''
-
-    def test_set_readout_port_bad_value_fail(self):
-        self.test_cam.open()
-        with self.assertRaises(ValueError):
-            self.test_cam.readout_port = -1
-
-    def test_set_readout_port_no_open_fail(self):
-        with self.assertRaises(RuntimeError):
-            self.test_cam.readout_port = 0
+            _ = self.test_cam.speed_name
 
     def test_get_bit_depth(self):
         self.test_cam.open()
@@ -219,6 +236,23 @@ class CameraConstructionTests(unittest.TestCase):
     def test_set_gain_no_open_fail(self):
         with self.assertRaises(RuntimeError):
             self.test_cam.gain = 1
+
+    def test_get_gain_name(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_GAIN_NAME):
+            gain_name = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_GAIN_NAME,
+                                      const.ATTR_CURRENT)
+        else:
+            gain_index = pvc.get_param(self.test_cam.handle,
+                                       const.PARAM_GAIN_INDEX,
+                                       const.ATTR_CURRENT)
+            gain_name = f'Gain_{gain_index}'
+        self.assertEqual(gain_name, self.test_cam.gain_name)
+
+    def test_get_gain_name_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.gain_name
 
     def test_adc_offset(self):
         self.test_cam.open()

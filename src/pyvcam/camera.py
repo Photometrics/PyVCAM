@@ -124,6 +124,8 @@ class Camera:
         # Cached values update upon camera open
         self.__sensor_size: Tuple[int, int] = (0, 0)
         self.__has_bit_depth_host: bool = False
+        self.__has_speed_name: bool = False
+        self.__has_gain_name: bool = False
 
         # TODO: Define an enum for acquisition mode
         self.__acquisition_mode: Optional[str] = None  # 'Live', 'Sequence' or None
@@ -249,6 +251,8 @@ class Camera:
         self.__sensor_size = (self.get_param(const.PARAM_SER_SIZE),
                               self.get_param(const.PARAM_PAR_SIZE))
         self.__has_bit_depth_host = self.check_param(const.PARAM_BIT_DEPTH_HOST)
+        self.__has_speed_name = self.check_param(const.PARAM_SPDTAB_NAME)
+        self.__has_gain_name = self.check_param(const.PARAM_GAIN_NAME)
 
         # Set ROI to full frame with no binning
         self.__default_roi = Camera.RegionOfInterest(
@@ -295,8 +299,6 @@ class Camera:
 
         # Learn ports, speeds and gains
         self.__port_speed_gain_table = {}
-        supports_speed_name = self.check_param(const.PARAM_SPDTAB_NAME)
-        supports_gain_name = self.check_param(const.PARAM_GAIN_NAME)
         for port_name, port_value in self.read_enum(const.PARAM_READOUT_PORT).items():
             self.readout_port = port_value
 
@@ -308,12 +310,7 @@ class Camera:
             for speed_index in range(num_speeds):
                 self.speed_table_index = speed_index
 
-                speed_name = 'Speed_' + str(speed_index)
-                if supports_speed_name:
-                    try:
-                        speed_name = self.get_param(const.PARAM_SPDTAB_NAME)
-                    except AttributeError:
-                        pass
+                speed_name = self.speed_name
 
                 gain_min = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MIN)
                 gain_max = self.get_param(const.PARAM_GAIN_INDEX, const.ATTR_MAX)
@@ -332,12 +329,7 @@ class Camera:
                 for gain_index in gains:
                     self.gain = gain_index
 
-                    gain_name = 'Gain_' + str(gain_index)
-                    if supports_gain_name:
-                        try:
-                            gain_name = self.get_param(const.PARAM_GAIN_NAME)
-                        except AttributeError:
-                            pass
+                    gain_name = self.gain_name
 
                     self.__port_speed_gain_table[port_name][speed_name][gain_name] = {
                         'gain_index': gain_index,
@@ -399,6 +391,9 @@ class Camera:
 
             # Cleanup internal state
             self.__sensor_size = (0, 0)
+            self.__has_bit_depth_host = False
+            self.__has_speed_name = False
+            self.__has_gain_name = False
             self.__acquisition_mode = None
             self.__mode = 0
             self.__default_roi = Camera.RegionOfInterest(0, 0, 1, 0, 0, 1)
@@ -879,6 +874,10 @@ class Camera:
         return self.__port_speed_gain_table
 
     @property
+    def readout_ports(self):
+        return self.__readout_ports
+
+    @property
     def centroids_modes(self):
         return self.__centroids_modes
 
@@ -983,6 +982,13 @@ class Camera:
         self._set_dtype()
 
     @property
+    def speed_name(self):
+        if self.__has_speed_name:
+            return self.get_param(const.PARAM_SPDTAB_NAME)
+        else:
+            return f'Speed_{self.speed_table_index}'
+
+    @property
     def trigger_table(self):
         # Returns a dictionary containing information about the last capture.
         # Note some features are camera specific.
@@ -1044,6 +1050,13 @@ class Camera:
         self.set_param(const.PARAM_GAIN_INDEX, value)
 
         self._set_dtype()
+
+    @property
+    def gain_name(self):
+        if self.__has_gain_name:
+            return self.get_param(const.PARAM_GAIN_NAME)
+        else:
+            return f'Gain_{self.gain}'
 
     @property
     def binnings(self):
