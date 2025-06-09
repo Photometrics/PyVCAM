@@ -3,15 +3,17 @@ import numpy as np
 
 from pyvcam import pvc
 from pyvcam.camera import Camera
-from pyvcam import constants
+from pyvcam import constants as const
+
+NUM_FRAMES = 10
+
 
 def main():
     pvc.init_pvcam()
     cam = next(Camera.detect_camera())
     cam.open()
-    print('Camera: {}'.format(cam.name))
+    print(f'Camera: {cam.name}')
 
-    NUM_FRAMES = 10
     cnt = 0
 
     print('\nUsing start_seq+poll_frame:')
@@ -21,9 +23,9 @@ def main():
         cnt += 1
         low = np.amin(frame['pixel_data'])
         high = np.amax(frame['pixel_data'])
-        average = np.average(frame['pixel_data'])
-        print('Min: {}\tMax: {}\tAverage: {:.0f}\tFrames: {:.0f}\tFrame Rate: {:.1f}'
-            .format(low, high, average, frame_count, fps))
+        avg = np.average(frame['pixel_data'])
+        print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}\tFrames: {frame_count}'
+              f'\tFrame Rate: {fps:.1f}')
         time.sleep(0.05)
     cam.finish()
 
@@ -33,27 +35,26 @@ def main():
         cnt += 1
         low = np.amin(frame)
         high = np.amax(frame)
-        average = np.average(frame)
-        print('Min: {}\tMax: {}\tAverage: {:.0f}\tFrames: {:.0f}'
-            .format(low, high, average, cnt))
+        avg = np.average(frame)
+        print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}\tFrames: {cnt}')
 
     print('\nUsing get_vtm_sequence:')
-    time_list = [i*10 for i in range(1, NUM_FRAMES+1)]
-    frames = cam.get_vtm_sequence(time_list, constants.EXP_RES_ONE_MILLISEC, NUM_FRAMES)
+    time_list = [i * 10 for i in range(1, NUM_FRAMES + 1)]
+    frames = cam.get_vtm_sequence(time_list, const.EXP_RES_ONE_MILLISEC, NUM_FRAMES)
     i = 0
     for frame in frames:
         cnt += 1
         low = np.amin(frame)
         high = np.amax(frame)
-        average = np.average(frame)
-        print('Min: {}\tMax: {}\tAverage: {:.0f}\tFrames: {:.0f}\tExp. time: {}'
-            .format(low, high, average, cnt, time_list[i]))
+        avg = np.average(frame)
+        print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}\tFrames: {cnt}'
+              f'\tExp. time: {time_list[i]}')
         i += 1
 
     cam.close()
     pvc.uninit_pvcam()
 
-    print('\nTotal frames: {}'.format(cnt))
+    print(f'\nTotal frames: {cnt}')
 
 
 if __name__ == "__main__":
