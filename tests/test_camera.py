@@ -126,20 +126,33 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _ = self.test_cam.readout_port
 
-    def test_set_readout_port_index(self):
+    def test_set_readout_port_by_name(self):
         self.test_cam.open()
-        num_entries = self.test_cam.get_param(const.PARAM_READOUT_PORT,
-                                              const.ATTR_COUNT)
-        for i in range(num_entries):
-            self.test_cam.readout_port = i
-            self.assertEqual(i, self.test_cam.readout_port)
+        for name, _ in self.test_cam.port_speed_gain_table.items():
+            self.test_cam.readout_port = name
+            curr_readout_port = pvc.get_param(self.test_cam.handle,
+                                              const.PARAM_READOUT_PORT,
+                                              const.ATTR_CURRENT)
+            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
 
-    def test_set_readout_port_out_of_bounds(self):
+    def test_set_readout_port_by_value(self):
         self.test_cam.open()
-        num_entries = self.test_cam.get_param(const.PARAM_READOUT_PORT,
-                                              const.ATTR_COUNT)
+        for _, value in self.test_cam.port_speed_gain_table.items():
+            self.test_cam.readout_port = value['port_value']
+            curr_readout_port = pvc.get_param(self.test_cam.handle,
+                                              const.PARAM_READOUT_PORT,
+                                              const.ATTR_CURRENT)
+            self.assertEqual(curr_readout_port, self.test_cam.readout_port)
+
+    def test_set_readout_port_bad_name_fail(self):
+        self.test_cam.open()
         with self.assertRaises(ValueError):
-            self.test_cam.readout_port = num_entries
+            self.test_cam.readout_port = ''
+
+    def test_set_readout_port_bad_value_fail(self):
+        self.test_cam.open()
+        with self.assertRaises(ValueError):
+            self.test_cam.readout_port = -1
 
     def test_set_readout_port_no_open_fail(self):
         with self.assertRaises(RuntimeError):
