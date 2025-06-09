@@ -25,7 +25,6 @@ def deprecated(reason='This function is deprecated.'):
     return decorator
 
 
-# pylint: disable=too-many-public-methods
 class Camera:
     """Models a class currently connected to the system.
 
@@ -338,8 +337,7 @@ class Camera:
         # Reset speed table back to default
         self.readout_port = 0
         self.speed_table_index = 0
-
-        self._set_dtype()
+        self.gain = 1
 
         # Learn post-processing features
         self.__post_processing_table = {}
@@ -395,7 +393,10 @@ class Camera:
             self.__has_speed_name = False
             self.__has_gain_name = False
             self.__acquisition_mode = None
-            self.__mode = 0
+            self.__exp_mode = const.TIMED_MODE
+            self.__exp_out_mode = const.EXPOSE_OUT_FIRST_ROW
+            self.__mode = self.__exp_mode | self.__exp_out_mode
+            self.__exp_time = 0
             self.__default_roi = Camera.RegionOfInterest(0, 0, 1, 0, 0, 1)
             self.__rois = []
             self.__limited_binnings = None
