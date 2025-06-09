@@ -675,6 +675,7 @@ pvc_check_param(PyObject* self, PyObject* args)
     through to the pl_set_param call, where the error message will be set and
     the appropriate error will be raised.*/
     rs_bool avail;
+    // TODO: Verify! This should rather return False if pl_get_param failed.
     /* Do not return falsy if a failed call to pl_get_param is made.
        Only return falsy if avail is falsy. */
     if (!pl_get_param(hCam, param_id, ATTR_AVAIL, (void*)&avail))
@@ -693,6 +694,7 @@ pvc_start_live(PyObject* self, PyObject* args)
     PyObject* roiListObj;       /* the list of ROIs */
     uns32 expTime;              /* Exposure time. */
     int16 expMode;              /* Exposure mode. */
+    // TODO: buffer_frame_count shouldn't be limited to uns16
     uns16 buffer_frame_count;   /* Number of frames in the circular frame buffer. */
     char* stream_to_disk_path;  /* Path and filename to store frames */
 
@@ -763,6 +765,8 @@ pvc_start_live(PyObject* self, PyObject* args)
         return NULL;
     }
 
+    /* TODO: This should use PyLong_FromUnsignedLong()
+             But one frame size will hardly ever be over 2GB */
     return PyLong_FromLong(exposureBytes);
 }
 
@@ -838,6 +842,8 @@ pvc_start_seq(PyObject* self, PyObject* args)
         return NULL;
     }
 
+    /* TODO: This should use PyLong_FromUnsignedLong()
+             But one frame size will hardly ever be over 2GB */
     return PyLong_FromLong(exposureBytesPerFrame);
 }
 
