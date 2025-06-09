@@ -3,7 +3,6 @@
 Note: Written for Prime 2020; some settings may not be valid for other cameras!
 Change settings in the `camera_settings.py` file.
 """
-# pylint: disable=c-extension-no-member
 
 from camera_settings import apply_settings
 
