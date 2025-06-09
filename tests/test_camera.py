@@ -1,8 +1,7 @@
-# pylint: disable=c-extension-no-member,too-many-public-methods
-
 import unittest
+
 from pyvcam import pvc
-from pyvcam import camera
+from pyvcam.camera import Camera
 from pyvcam import constants as const
 
 
@@ -11,7 +10,7 @@ class CameraConstructionTests(unittest.TestCase):
     def setUp(self):
         pvc.init_pvcam()
         try:
-            self.test_cam = next(camera.Camera.detect_camera())
+            self.test_cam = next(Camera.detect_camera())
         except Exception as ex:
             raise unittest.SkipTest('No available camera found') from ex
 
@@ -22,7 +21,7 @@ class CameraConstructionTests(unittest.TestCase):
 
     def test_init(self):
         test_cam_name = 'test'
-        test_cam = camera.Camera(test_cam_name)
+        test_cam = Camera(test_cam_name)
         self.assertEqual(test_cam.name, test_cam_name)
         self.assertEqual(test_cam.handle, -1)
         self.assertEqual(test_cam.is_open, False)
