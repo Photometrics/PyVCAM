@@ -77,11 +77,9 @@ ignore-paths = [
 [tool.pylint."MESSAGES CONTROL"]
 disable = [
     "fixme",
-    #"cyclic-import",
-    #"duplicate-code",
     "missing-docstring",
-    #"broad-exception-caught",
-    #"too-few-public-methods",
+    "c-extension-no-member",
+    "too-many-public-methods",
 ]
 [tool.pylint.FORMAT]
 max-args=10
