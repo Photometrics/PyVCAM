@@ -948,8 +948,7 @@ class Camera:
     def bit_depth_host(self):
         if self.__has_bit_depth_host:
             return self.get_param(const.PARAM_BIT_DEPTH_HOST)
-        else:
-            return self.get_param(const.PARAM_BIT_DEPTH)
+        return self.get_param(const.PARAM_BIT_DEPTH)
 
     @property
     def pix_time(self):
@@ -993,8 +992,7 @@ class Camera:
     def speed_name(self):
         if self.__has_speed_name:
             return self.get_param(const.PARAM_SPDTAB_NAME)
-        else:
-            return f'Speed_{self.speed_table_index}'
+        return f'Speed_{self.speed_table_index}'
 
     @property
     def trigger_table(self):
@@ -1063,8 +1061,7 @@ class Camera:
     def gain_name(self):
         if self.__has_gain_name:
             return self.get_param(const.PARAM_GAIN_NAME)
-        else:
-            return f'Gain_{self.gain}'
+        return f'Gain_{self.gain}'
 
     @property
     def binnings(self):
@@ -1157,6 +1154,8 @@ class Camera:
     @property
     def exp_time(self):
         # TODO: Testing
+        if not self.__is_open:
+            raise RuntimeError('Camera is not open')
         return self.__exp_time
 
     @exp_time.setter
@@ -1358,9 +1357,19 @@ class Camera:
         self.set_param(const.PARAM_SCAN_WIDTH, value)
 
     @property
-    def meta_data_enabled(self):
+    def metadata_enabled(self):
         return self.get_param(const.PARAM_METADATA_ENABLED)
 
-    @meta_data_enabled.setter
-    def meta_data_enabled(self, value):
+    @metadata_enabled.setter
+    def metadata_enabled(self, value):
         self.set_param(const.PARAM_METADATA_ENABLED, value)
+
+    @property
+    @deprecated("Use 'metadata_enabled' property instead")
+    def meta_data_enabled(self):
+        return self.metadata_enabled
+
+    @meta_data_enabled.setter
+    @deprecated("Use 'metadata_enabled' property instead")
+    def meta_data_enabled(self, value):
+        self.metadata_enabled = value

@@ -14,7 +14,7 @@ def main():
     cam.open()
     print(f'Camera: {cam.name}')
 
-    cam.meta_data_enabled = True
+    cam.metadata_enabled = True
 
     # Kinetix supports multiple ROIs on HDR port only
     # cam.readout_port = 'Dynamic Range'
