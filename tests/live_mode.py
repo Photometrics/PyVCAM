@@ -13,7 +13,17 @@ def main():
     cam.open()
     print(f'Camera: {cam.name}')
 
-    cam.start_live(exp_time=20)
+    # The 'bit_depth_host' provides a bit-depth of the pixels returned by PVCAM.
+    # The 'bit_depth' is a bit-depth from the sensor. In most cases both values
+    # are same. But for example when a frame summing feature is active, the
+    # sensors still reads 12-bit pixels internally, while PVCAM returns 16-bit
+    # or even 32-bit pixels to the application.
+    # Ideally, max_pix_value should be based on PARAM_IMAGE_FORMAT_HOST.
+    bit_depth = cam.bit_depth_host
+    bytes_per_pixel = int((bit_depth + 7) / 8)
+    max_pix_value = 2 ** (bytes_per_pixel * 8) - 1
+
+    cam.start_live(exp_time=5)
 
     width = 800
     height = int(cam.sensor_size[1] * width / cam.sensor_size[0])
@@ -25,20 +35,23 @@ def main():
     while True:
         frame, fps, frame_count = cam.poll_frame()
         cnt += 1
-
-        frame['pixel_data'] = cv2.resize(frame['pixel_data'], dim,
-                                         interpolation=cv2.INTER_AREA)
-        cv2.imshow('Live Mode', frame['pixel_data'])
-
         low = np.amin(frame['pixel_data'])
         high = np.amax(frame['pixel_data'])
         avg = np.average(frame['pixel_data'])
+        print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}'
+              f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}')
+
+        # Shrink to smaller window
+        disp_img = cv2.resize(frame['pixel_data'], dim,
+                              interpolation=cv2.INTER_AREA)
+        # Normalize to min-max range to make even background noise visible
+        disp_img = cv2.normalize(disp_img, dst=None,
+                                 alpha=0, beta=max_pix_value,
+                                 norm_type=cv2.NORM_MINMAX)
+        cv2.imshow('Live Mode', disp_img)
 
         if cv2.waitKey(10) == 27:
             break
-
-        print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}'
-              f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}')
 
     t_end = time.time()
     fps_avg = cnt / (t_end - t_start)
