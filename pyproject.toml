@@ -37,6 +37,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+    "opencv-python",
+    "matplotlib",
+]
 dev = [
     "validate-pyproject[all]",
     "Flake8-pyproject",
@@ -81,6 +85,8 @@ disable = [
     "c-extension-no-member",
     "too-many-public-methods",
 ]
+[tool.pylint.typecheck]
+generated-members = "cv2"
 [tool.pylint.FORMAT]
 max-args=10
 max-attributes=30
