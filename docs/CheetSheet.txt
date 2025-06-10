@@ -41,6 +41,7 @@ set_post_processing_param
 read_enum
 
 [Camera Object Data]
+binnings
 centroids_modes
 clear_modes
 exp_modes
@@ -53,15 +54,15 @@ port_speed_gain_table
 post_processing_table
 prog_scan_modes
 prog_scan_dirs
+readout_ports
 rois
 shape
 
 [Camera Properties]
 adc_offset           get
-bin_x                get|set
-bin_y                get|set
 binning              get|set
 bit_depth            get
+bit_depth_host       get
 cam_fw               get
 centroids_mode       get|set
 chip_name            get
@@ -74,8 +75,9 @@ exp_res              get|set
 exp_res_index        get
 exp_time             get|set
 gain                 get|set
+gain_name            get
 last_exp_time        get
-meta_data_enabled    get|set
+metadata_enabled     get|set
 pix_time             get
 post_trigger_delay   get
 pre_trigger_delay    get
@@ -89,6 +91,7 @@ readout_time         get
 scan_line_time       get
 sensor_size          get
 serial_no            get
+speed_name           get
 speed_table_index    get|set
 temp                 get
 temp_setpoint        get|set
