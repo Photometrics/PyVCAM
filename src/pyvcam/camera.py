@@ -670,7 +670,7 @@ class Camera:
         for i in range(num_frames):
             stack[i] = self.get_frame(exp_time=exp_time, timeout_ms=timeout_ms)
 
-            if isinstance(interval, int):
+            if isinstance(interval, int) and i + 1 < num_frames:
                 time.sleep(interval / 1000)
 
         return stack
@@ -708,7 +708,7 @@ class Camera:
             except Exception as ex:
                 raise ValueError('Could not collect vtm frame') from ex
 
-            if isinstance(interval, int):
+            if isinstance(interval, int) and i + 1 < num_frames:
                 time.sleep(interval / 1000)
 
         self.exp_res = old_res
