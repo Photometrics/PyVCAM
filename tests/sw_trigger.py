@@ -6,7 +6,8 @@ from pyvcam.camera import Camera
 
 NUM_FRAMES = 20
 
-class TriggerThreadRun (threading.Thread):
+
+class TriggerThreadRun(threading.Thread):
     def __init__(self, cam):
         threading.Thread.__init__(self)
         self.cam = cam
@@ -18,34 +19,34 @@ class TriggerThreadRun (threading.Thread):
                 self.cam.sw_trigger()
                 print('SW Trigger success')
                 time.sleep(0.05)
-            except Exception as e:
-                pass
+            except ValueError as e:
+                print(str(e))
 
     def stop(self):
         self.end = True
 
-def collectFrames(cam):
-    framesReceived = 0
 
-    while framesReceived < NUM_FRAMES:
-        time.sleep(0.005)
-
+def collect_frames(cam, num_frames):
+    frames_received = 0
+    while frames_received < num_frames:
         try:
             frame, fps, frame_count = cam.poll_frame()
-            print('Count: {} FPS: {} First five pixels of frame: {}'.format(frame_count, round(fps, 2), frame['pixel_data'][0, 0:5]))
-            framesReceived += 1
-        except Exception as e:
+            print(f"Count: {frame_count:2}  FPS: {fps:5.1f}"
+                  f"  First five pixels: {frame['pixel_data'][0, 0:5]}")
+            frames_received += 1
+        except ValueError as e:
             print(str(e))
 
-    return framesReceived
+    return frames_received
+
 
 def main():
     # Initialize PVCAM and find the first available camera.
     pvc.init_pvcam()
-
-    cam = [cam for cam in Camera.detect_camera()][0]
+    cam = next(Camera.detect_camera())
     cam.open()
-    cam.speed_table_index = 0
+    print(f'Camera: {cam.name}')
+
     cam.exp_mode = 'Software Trigger Edge'
 
     # Start a thread for executing the trigger
@@ -54,21 +55,23 @@ def main():
 
     # Collect frames in live mode
     cam.start_live()
-    framesReceived = collectFrames(cam)
-    cam.finish()
-    print('Received live frames: ' + str(framesReceived) + '\n')
+    frames_received = collect_frames(cam, NUM_FRAMES)
+    cam.abort()
+    print(f'Received live frames: {frames_received}\n')
 
     # Collect frames in sequence mode
     cam.start_seq(num_frames=NUM_FRAMES)
-    framesReceived = collectFrames(cam)
+    frames_received = collect_frames(cam, NUM_FRAMES)
     cam.finish()
-    print('Received seq frames: ' + str(framesReceived) + '\n')
+    print(f'Received sequence frames: {frames_received}\n')
 
     t1.stop()
+
     cam.close()
     pvc.uninit_pvcam()
 
     print('Done')
+
 
 if __name__ == "__main__":
     main()
