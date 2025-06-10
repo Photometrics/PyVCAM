@@ -945,6 +945,13 @@ class Camera:
         return self.get_param(const.PARAM_BIT_DEPTH)
 
     @property
+    def bit_depth_host(self):
+        if self.__has_bit_depth_host:
+            return self.get_param(const.PARAM_BIT_DEPTH_HOST)
+        else:
+            return self.get_param(const.PARAM_BIT_DEPTH)
+
+    @property
     def pix_time(self):
         return self.get_param(const.PARAM_PIX_TIME)
 
