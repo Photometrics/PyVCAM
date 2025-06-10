@@ -34,9 +34,9 @@ def main():
         frame, fps, frame_count = cam.poll_frame()
         cnt += 1
 
-        num_rois = len(frame['pixel_data']) if len(cam.regions) > 1 else 1
+        num_rois = len(frame['pixel_data']) if len(cam.rois) > 1 else 1
         for roi_index in range(num_rois):
-            pixel_data = frame['pixel_data'][roi_index] if len(cam.regions) > 1 \
+            pixel_data = frame['pixel_data'][roi_index] if len(cam.rois) > 1 \
                 else frame['pixel_data']
             low = np.amin(pixel_data)
             high = np.amax(pixel_data)

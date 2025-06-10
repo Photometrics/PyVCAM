@@ -1067,12 +1067,6 @@ class Camera:
             return f'Gain_{self.gain}'
 
     @property
-    def regions(self):
-        if not self.__is_open:
-            raise RuntimeError('Camera is not open')
-        return self.__rois
-
-    @property
     def binnings(self):
         if not self.__is_open:
             raise RuntimeError('Camera is not open')
