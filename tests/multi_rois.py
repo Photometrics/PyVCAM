@@ -47,7 +47,7 @@ def main():
             p2 = frame['meta_data']['roi_headers'][roi_index]['roi']['p2']
             print(f'ROI: {roi_index} ({s1:3}, {p1:3}) ({s2:3}, {p2:3})'
                   f'\tMin: {low}\tMax: {high}\tAverage: {avg:.0f}'
-                  f'\tFrame Count: {frame_count}\tFrame Rate: {fps:.1f}')
+                  f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}')
 
             alpha = 2.0  # Contrast control (1.0-3.0)
             beta = 10  # Brightness control (0-100)

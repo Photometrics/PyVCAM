@@ -37,7 +37,7 @@ class TriggerThreadRun(threading.Thread):
             cv2.waitKey(10)
 
             self.append_output(f'Camera: {self.cam.name}\tFrame Rate: {fps:5.1f}'
-                               f'  Frame Count: {frame_count:3}  Returned Count: {cnt:3}')
+                               f'  Frames: {frame_count:3}  Returned Count: {cnt:3}')
 
         self.cam.finish()
         self.cam.close()
