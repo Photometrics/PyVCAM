@@ -83,7 +83,10 @@ disable = [
     "fixme",
     "missing-docstring",
     "c-extension-no-member",
+    "duplicate-code",
+    "no-name-in-module",  # No name 'pvc' in module 'pyvcam'
     "too-many-instance-attributes",
+    "too-many-lines",
     "R0917",  #"too-many-positional-arguments",
     "too-many-public-methods",
 ]

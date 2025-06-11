@@ -1,5 +1,3 @@
-# pylint: disable=too-many-lines
-
 from copy import deepcopy
 import functools
 import os
@@ -9,7 +7,7 @@ import warnings
 
 import numpy as np
 
-from pyvcam import pvc  # pylint: disable=no-name-in-module
+from pyvcam import pvc
 from pyvcam import constants as const
 
 
