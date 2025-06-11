@@ -72,7 +72,6 @@ class Camera:
 
     class RegionOfInterest:
 
-        # pylint: disable=too-many-positional-arguments
         def __init__(self, s1, s2, sbin, p1, p2, pbin):
             if s1 < 0 or s2 < 0 or p1 < 0 or p2 < 0:
                 raise ValueError('Coordinates must be >= 0')
@@ -597,6 +596,9 @@ class Camera:
         else:
             raise ValueError(f'Could not add ROI. Camera only supports {max_roi_count} rois')
 
+    # TODO: Remove this pylint suppression
+    # Disabling CamelCase naming for now to not break existing scripts
+    # pylint: disable=invalid-name
     def poll_frame(self, timeout_ms=WAIT_FOREVER, oldestFrame=True, copyData=True):
         """Calls the pvc.get_frame function with the current camera settings.
 
@@ -675,7 +677,6 @@ class Camera:
 
         return stack
 
-    # pylint: disable=too-many-positional-arguments
     def get_vtm_sequence(self, time_list, exp_res, num_frames, timeout_ms=WAIT_FOREVER,
                          interval=None):
         """Calls the pvc.get_frame function within a loop, setting vtm expTime
