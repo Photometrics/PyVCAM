@@ -84,7 +84,7 @@ disable = [
     "missing-docstring",
     "c-extension-no-member",
     "too-many-instance-attributes",
-    "too-many-positional-arguments",
+    "R0917",  #"too-many-positional-arguments",
     "too-many-public-methods",
 ]
 [tool.pylint.typecheck]
