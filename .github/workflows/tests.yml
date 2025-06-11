@@ -1,0 +1,57 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  check:
+    name: Check code quality - ${{ matrix.os }} - ${{ matrix.python-version }}
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.12']
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Update pip
+        run: python -m pip install --upgrade pip
+
+      # Not installing the package itself to avoid pvc module compilation
+      # Rather installing dependencies manually
+      #- name: Install the package with dependencies
+      #  run: python -m pip install '.[gui,dev]'
+      # Rather installing dependencies manually
+      - name: Install the package dependencies
+        run: python -m pip install setuptools numpy opencv-python matplotlib
+
+      - name: Validate pyproject.toml
+        run: |
+          python -m pip install validate-pyproject[all]
+          python -m validate_pyproject pyproject.toml
+
+      - name: Check the code with flake8
+        run: |
+          python -m pip install Flake8-pyproject flake8-typing-imports
+          python -m flake8 src tests setup.py --count --statistics
+
+      - name: Check the code with pylint
+        run: |
+          python -m pip install pylint
+          python -m pylint src tests setup.py
