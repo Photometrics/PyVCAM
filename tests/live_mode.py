@@ -57,7 +57,7 @@ def main():
     fps_avg = cnt / (t_end - t_start)
     print(f'\nTotal frames: {cnt}, Average fps: {fps_avg:.1f}')
 
-    cam.abort()
+    cam.finish()
 
     cam.close()
     pvc.uninit_pvcam()

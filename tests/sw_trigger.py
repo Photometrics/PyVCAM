@@ -56,7 +56,7 @@ def main():
     # Collect frames in live mode
     cam.start_live()
     frames_received = collect_frames(cam, NUM_FRAMES)
-    cam.abort()
+    cam.finish()
     print(f'Received live frames: {frames_received}\n')
 
     # Collect frames in sequence mode

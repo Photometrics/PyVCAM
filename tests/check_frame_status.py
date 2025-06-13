@@ -66,7 +66,7 @@ def main():
         print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}\tFrames: {frame_count}'
               f'\tFrame Rate: {fps:.1f}')
 
-    cam.abort()
+    cam.finish()
 
     frame_status = cam.check_frame_status()
     print(f'Live frame status after acquisition: {frame_status}')
