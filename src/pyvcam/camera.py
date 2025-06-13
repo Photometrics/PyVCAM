@@ -718,6 +718,8 @@ class Camera:
 
         Parameter:
             exp_time (int): The exposure time.
+            buffer_frame_count (int): The number of frames in circ. buffer.
+            stream_to_disk_path (str): None, or location where to save the data.
         Returns:
             None
         """
@@ -744,7 +746,8 @@ class Camera:
         """Calls the pvc.start_seq function to set up a non-circular buffer acquisition.
 
         Parameter:
-            exp_time (int): The exposure time
+            exp_time (int): The exposure time.
+            num_frames (int): The number of frames in a sequence (max. 65535).
         Returns:
             None
         """
@@ -764,23 +767,23 @@ class Camera:
             None
         """
 
+        # In recent PVCAM pl_exp_abort, pl_exp_stop_cont and pl_exp_finish_seq
+        # do exactly the same thing - abort an ongoing acquisition.
+        # The only difference is that pl_exp_finish_seq doesn't take 'cam_state'
+        # argument that has no meaning anymore and PyVCAM doesn't expose it.
+        # Legacy PVCAM versions used pl_exp_finish_seq to finish frame data
+        # post-processing if there were some PoP/Splice plugins installed.
+        # We keep finish_seq a part of module for now.
         if self.__acquisition_mode == 'Live':
-            pvc.stop_live(self.__handle)
+            pvc.abort(self.__handle)
         elif self.__acquisition_mode == 'Sequence':
             pvc.finish_seq(self.__handle)
 
         self.__acquisition_mode = None
 
+    @deprecated("Use 'finish' function instead")
     def abort(self):
-        """Calls the pvc.abort function that aborts acquisition.
-
-        Parameter:
-            None
-        Returns:
-            None
-        """
-
-        return pvc.abort(self.__handle)
+        return self.finish()
 
     def sw_trigger(self):
         """Performs an SW trigger. This trigger behaves analogously to a HW external trigger.
