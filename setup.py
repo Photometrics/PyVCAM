@@ -66,7 +66,7 @@ elif is_windows:
 
 include_dirs.append('src/pyvcam')
 sources.append('src/pyvcam/pvcmodule.cpp')
-#depends.append('src/pyvcam/some_header.h')
+# depends.append('src/pyvcam/some_header.h')
 
 ext_modules = [
     Extension(
