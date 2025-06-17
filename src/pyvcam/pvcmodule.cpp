@@ -891,8 +891,6 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
                 &typenum, &timeoutMs, &oldestFrame))
         return ParamParseError();
 
-    import_array();  /* Initialize PyArrayObject. */
-
     // WARNING!
     // We are accessing a camera instance below without locking the object so that
     // the new frame handler or abort can take the lock and alter date. Care must be
@@ -1296,5 +1294,7 @@ static struct PyModuleDef pvcModule = {
 PyMODINIT_FUNC
 PyInit_pvc(void)
 {
+    import_array();  // Import numpy API (includes 'return NULL;' on error)
+
     return PyModule_Create(&pvcModule);
 }
