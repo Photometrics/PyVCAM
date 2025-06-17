@@ -700,7 +700,7 @@ class Camera:
         stack = np.empty((num_frames, shape[1], shape[0]), dtype=self.__dtype)
 
         for i in range(num_frames):
-            exp_time = time_list[i]
+            exp_time = time_list[i % len(time_list)]
             try:
                 self.vtm_exp_time = exp_time
                 stack[i] = self.get_frame(exp_time=self.vtm_exp_time, timeout_ms=timeout_ms)
