@@ -1124,6 +1124,12 @@ static PyObject* pvc_abort(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 }
 
+// TODO: Deprecated, remove in next major release.
+static PyObject* pvc_stop_live(PyObject* self, PyObject* args)
+{
+    return pvc_abort(self, args);
+}
+
 /**
  * Used to set the exposure out mode of a camera.
  *
@@ -1269,6 +1275,8 @@ static PyMethodDef pvcMethods[] = {
             "Finishes sequence mode acquisition. Must be called before another start_seq with different configuration."),
     PVC_ADD_METHOD_(abort, METH_VARARGS,
             "Aborts acquisition."),
+    PVC_ADD_METHOD_(stop_live, METH_VARARGS,
+            "Aborts/stops acquisition. Deprecated, use 'abort' function."),
 
     PVC_ADD_METHOD_(set_exp_modes, METH_VARARGS,
             "Sets a camera's exposure mode or expose out mode."),
