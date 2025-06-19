@@ -46,13 +46,14 @@ static constexpr uns32 ALIGNMENT_BOUNDARY = 4096;
 
 // Local types
 
-struct Frame_T
+struct Frame
 {
-    void* address;
-    uns32 count;
+    void* address{ NULL };
+    uns32 count{ 0 }; // Frame number that resets after every setup
+    uns32 nr{ 0 }; // FrameNr from PVCAM's FRAME_INFO structure
 };
 
-typedef union Param_Val_T
+union ParamValue
 {
     char val_str[MAX_PP_NAME_LEN];
     int32 val_enum;
@@ -67,8 +68,7 @@ typedef union Param_Val_T
     flt32 val_flt32;
     flt64 val_flt64;
     rs_bool val_bool;
-}
-Param_Val_T;
+};
 
 class Camera
 {
@@ -81,12 +81,6 @@ public:
     {
         UnsetStreamToDisk();
         ReleaseAcqBuffer();
-    }
-
-    void ResetQueue()
-    {
-        std::lock_guard<std::mutex> lock(m_frameMutex);
-        std::queue<Frame_T>().swap(m_frameQueue);
     }
 
     bool AllocateAcqBuffer(uns32 frameCount, uns32 frameBytes)
@@ -259,25 +253,29 @@ public:
         m_streamFileHandle = cInvalidFileHandle;
     }
 
-    void* m_acqBuffer{ NULL }; // Address of all frames
+public:
+    std::mutex m_mutex{};
+
+    void* m_acqBuffer{ NULL };
     uns32 m_acqBufferBytes{ 0 };
     uns32 m_frameCount{ 0 };
     uns32 m_frameBytes{ 0 };
 
-    std::chrono::time_point<std::chrono::high_resolution_clock> m_prevFpsTime{
+    std::chrono::time_point<std::chrono::high_resolution_clock> m_fpsLastTime{
         std::chrono::high_resolution_clock::now() };
     double m_fps{ 0.0 };
-    uns32 m_frameCnt{ 0 };
+    uns32 m_fpsFrameCnt{ 0 };
 
-    bool m_abortAcq{ false };
-    bool m_newData{ false };
     bool m_isSequence{ false };
 
-    std::mutex m_frameMutex{};
-    std::condition_variable m_frameCond{};
-    std::queue<Frame_T> m_frameQueue{};
+    std::condition_variable m_acqCond{};
+    std::queue<Frame> m_acqQueue{};
+    size_t m_acqQueueCapacity{ 0 };
+    bool m_acqAbort{ false };
+    bool m_acqNewFrame{ false };
+    uns32 m_acqFrameCnt{ 0 };
 
-    // Meta data objects
+    // Metadata objects
     bool m_metadataAvail{ false };
     bool m_metadataEnabled{ false };
     // TODO: Allocate dynamically in camera open or acq. setup
@@ -293,8 +291,8 @@ public:
 
 // Global variables
 
-std::map<int16, Camera> g_camInstanceMap{}; // The key is hcam camera handle
-std::mutex              g_camInstanceMutex{};
+std::map<int16, std::shared_ptr<Camera>> g_cameraMap{}; // The key is hcam
+std::mutex                               g_cameraMapMutex{};
 
 // Local functions
 
@@ -312,6 +310,23 @@ static PyObject* PvcamError()
     pl_error_message(pl_error_code(), errMsg); // Ignore PVCAM error
     PyErr_SetString(PyExc_RuntimeError, errMsg);
     return NULL;
+}
+
+/** Helper that returns Camera instance from global map, or NULL if doesn't exist. */
+static std::shared_ptr<Camera> GetCamera(int16 hcam)
+{
+    std::shared_ptr<Camera> cam;
+    try
+    {
+        std::lock_guard<std::mutex> lock(g_cameraMapMutex);
+        cam = g_cameraMap.at(hcam);
+    }
+    catch (const std::out_of_range& /*ex*/)
+    {
+        PyErr_SetString(PyExc_KeyError, "Invalid camera handle.");
+        return NULL;
+    }
+    return cam;
 }
 
 static void PopulateMetadataFrameHeader(const md_frame_header* pFrameHdr, PyObject* hdrObj)
@@ -394,66 +409,65 @@ static void PopulateRegions(std::vector<rgn_type>& roiArray, PyObject* roiListOb
 
 static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
 {
-    try
+    std::shared_ptr<Camera> cam = GetCamera(pFrameInfo->hCam);
+    if (!cam)
     {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(pFrameInfo->hCam);
+        printf("pvc.NewFrameHandler: Invalid camera instance key.\n");
+        return;
+    }
 
-        cam.m_frameCnt++;
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
 
-        //printf("New frame callback. Frame count %u\n", cam.m_frameCnt);
+    cam->m_acqFrameCnt++;
+    //printf("New frame callback. Frame count %u\n", cam->m_acqFrameCnt);
 
-        // Re-compute FPS every 5 frames
-        constexpr int FPS_FRAME_COUNT = 5;
-        if (cam.m_frameCnt % FPS_FRAME_COUNT == 0)
+    // Re-compute FPS every 5 frames
+    constexpr uns32 FPS_FRAME_COUNT = 5;
+    if (++cam->m_fpsFrameCnt >= FPS_FRAME_COUNT)
+    {
+        const auto now = std::chrono::high_resolution_clock::now();
+        const auto timeDeltaUs =
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                now - cam->m_fpsLastTime).count();
+        if (timeDeltaUs != 0)
         {
-            const auto now = std::chrono::high_resolution_clock::now();
-            const auto timeDeltaUs =
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                    now - cam.m_prevFpsTime).count();
-            if (timeDeltaUs != 0)
-            {
-                cam.m_fps = (double)FPS_FRAME_COUNT / timeDeltaUs * 1e6;
-                cam.m_prevFpsTime = now;
-
-                //printf("fps: %.1f timeDeltaUs: %lld\n", cam.m_fps, timeDeltaUs);
-            }
-        }
-
-        Frame_T frame;
-        if (!pl_exp_get_latest_frame(pFrameInfo->hCam, &frame.address))
-        {
-            PyErr_SetString(PyExc_ValueError, "Failed to get latest frame");
-        }
-        else
-        {
-            // Add frame to queue.
-            // Reset the queue in live mode so that returned frame is the latest.
-            if (!cam.m_isSequence)
-            {
-                cam.ResetQueue();
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(cam.m_frameMutex);
-                frame.count = cam.m_frameCnt;
-                cam.m_frameQueue.push(frame);
-                cam.m_newData = true;
-            }
-
-            if (cam.m_streamFileHandle != cInvalidFileHandle)
-            {
-                cam.StreamFrameToDisk(frame.address);
-            }
-
-            cam.m_frameCond.notify_all();
+            cam->m_fps = (double)cam->m_fpsFrameCnt / timeDeltaUs * 1e6;
+            cam->m_fpsLastTime = now;
+            cam->m_fpsFrameCnt = 0;
+            //printf("FPS: %.1f timeDeltaUs: %lld\n", cam->m_fps, timeDeltaUs);
         }
     }
-    catch (const std::out_of_range& ex)
+
+    void* address;
+    FRAME_INFO fi;
+    if (!pl_exp_get_latest_frame_ex(pFrameInfo->hCam, &address, &fi))
     {
-        // TODO: Change to PyErr_SetString call? Will it be propagated to other threads?
-        printf("New frame handler: Invalid camera instance key. %s\n", ex.what());
+        // TODO: Will it be propagated to other threads?
+        PyErr_SetString(PyExc_RuntimeError, "Failed to get latest frame");
+        return;
     }
+
+    Frame frame;
+    frame.address = address;
+    frame.count = cam->m_acqFrameCnt;
+    frame.nr = (uns32)fi.FrameNr;
+
+    // Add frame to the queue, pop the oldest once the capacity is reached
+    while (cam->m_acqQueue.size() >= cam->m_acqQueueCapacity)
+    {
+        //printf("Dropped frame nr %u in favor of nr %u\n",
+        //        cam->m_acqQueue.front().nr, frame.nr);
+        cam->m_acqQueue.pop();
+    }
+    cam->m_acqQueue.push(frame);
+    cam->m_acqNewFrame = true;
+
+    if (cam->m_streamFileHandle != cInvalidFileHandle)
+    {
+        cam->StreamFrameToDisk(frame.address);
+    }
+
+    cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
 }
 
 // Module functions
@@ -542,15 +556,32 @@ static PyObject* pvc_open_camera(PyObject* self, PyObject* args)
     if (!pl_cam_open(camName, &hcam, OPEN_EXCLUSIVE))
         return PvcamError();
 
-    // Get default-constructed Camera
-    std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-    Camera& cam = g_camInstanceMap[hcam];
+    std::shared_ptr<Camera> cam;
+    try
+    {
+        cam = std::make_shared<Camera>();
+    }
+    catch (const std::bad_alloc& /*ex*/)
+    {
+        pl_cam_close(hcam); // Ignore PVCAM errors
+        PyErr_SetString(PyExc_MemoryError, "Unable to allocate new Camera instance.");
+        return NULL;
+    }
 
     rs_bool avail;
     if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_AVAIL, &avail))
-        return PvcamError();
-    cam.m_metadataAvail = avail != FALSE;
+    {
+        PvcamError();
+        pl_cam_close(hcam); // Ignore PVCAM errors
+        return NULL;
+    }
+    cam->m_metadataAvail = avail != FALSE;
 
+    // Successfully opened, save new Camera instance to global map
+    {
+        std::lock_guard<std::mutex> lock(g_cameraMapMutex);
+        g_cameraMap[hcam] = cam;
+    }
     return PyLong_FromLong(hcam);
 }
 
@@ -561,13 +592,14 @@ static PyObject* pvc_close_camera(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "h", &hcam))
         return ParamParseError();
 
-    // Clear instance data
-    std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-    g_camInstanceMap.erase(hcam);
-
     if (!pl_cam_close(hcam))
         return PvcamError();
 
+    // Successfully closed, remove Camera instance from global map
+    {
+        std::lock_guard<std::mutex> lock(g_cameraMapMutex);
+        g_cameraMap.erase(hcam);
+    }
     Py_RETURN_NONE;
 }
 
@@ -593,7 +625,7 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
         return PvcamError();
 
-    Param_Val_T paramValue;
+    ParamValue paramValue;
     if (!pl_get_param(hcam, paramId, paramAttr, &paramValue))
         return PvcamError();
 
@@ -693,9 +725,6 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
                 &expTime, &expMode, &bufferFrameCount, &streamToDiskPath))
         return ParamParseError();
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
-        return PvcamError();
-
     /* Construct ROI list */
     const Py_ssize_t roiCount = PyList_Size(roiListObj);
     if (roiCount <= 0 || roiCount > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
@@ -706,50 +735,50 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     std::vector<rgn_type> roiArray(roiCount);
     PopulateRegions(roiArray, roiListObj);
 
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
+        return PvcamError();
+
     uns32 frameBytes;
     if (!pl_exp_setup_cont(hcam, (uns16)roiArray.size(), roiArray.data(),
                 expMode, expTime, &frameBytes, CIRC_OVERWRITE))
         return PvcamError();
 
-    try
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+    if (cam->m_metadataAvail)
     {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
-
-        if (cam.m_metadataAvail)
-        {
-            rs_bool cur;
-            if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
-                return PvcamError();
-            cam.m_metadataEnabled = cur != FALSE;
-        }
-
-        if (!cam.AllocateAcqBuffer(bufferFrameCount, frameBytes))
-        {
-            PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition.");
-            return NULL;
-        }
-
-        if (!cam.SetStreamToDisk(streamToDiskPath))
-        {
-            PyErr_SetString(PyExc_MemoryError, "Unable to set stream to disk. Check file path.");
-            return NULL;
-        }
-
-        cam.ResetQueue();
-        cam.m_isSequence = false;
-        cam.m_abortAcq = false;
-        cam.m_newData = false;;
-        cam.m_prevFpsTime = std::chrono::high_resolution_clock::now();
-
-        if (!pl_exp_start_cont(hcam, cam.m_acqBuffer, cam.m_acqBufferBytes))
+        rs_bool cur;
+        if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
             return PvcamError();
+        cam->m_metadataEnabled = cur != FALSE;
     }
-    catch (const std::out_of_range& ex)
+
+    if (!cam->AllocateAcqBuffer(bufferFrameCount, frameBytes))
     {
-        PyErr_SetString(PyExc_KeyError, ex.what());
+        PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition.");
         return NULL;
     }
+
+    if (!cam->SetStreamToDisk(streamToDiskPath))
+    {
+        PyErr_SetString(PyExc_MemoryError, "Unable to set stream to disk. Check file path.");
+        return NULL;
+    }
+
+    cam->m_acqQueue.swap(std::queue<Frame>());
+    cam->m_acqQueueCapacity = bufferFrameCount;
+    cam->m_acqAbort = false;
+    cam->m_acqNewFrame = false;;
+    cam->m_isSequence = false;
+    cam->m_fpsFrameCnt = 0;
+    cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
+
+    if (!pl_exp_start_cont(hcam, cam->m_acqBuffer, cam->m_acqBufferBytes))
+        return PvcamError();
 
     return PyLong_FromUnsignedLong(frameBytes);
 }
@@ -766,9 +795,6 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
                 &expTime, &expMode, &expTotal))
         return ParamParseError();
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
-        return PvcamError();
-
     /* Construct ROI list */
     const Py_ssize_t roiCount = PyList_Size(roiListObj);
     if (roiCount <= 0 || roiCount > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
@@ -779,45 +805,45 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     std::vector<rgn_type> roiArray(roiCount);
     PopulateRegions(roiArray, roiListObj);
 
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
+        return PvcamError();
+
     uns32 acqBufferBytes;
     if (!pl_exp_setup_seq(hcam, expTotal, (uns16)roiArray.size(), roiArray.data(),
                 expMode, expTime, &acqBufferBytes))
         return PvcamError();
     const uns32 frameBytes = acqBufferBytes / expTotal;
 
-    try
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+    if (cam->m_metadataAvail)
     {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
-
-        if (cam.m_metadataAvail)
-        {
-            rs_bool cur;
-            if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
-                return PvcamError();
-            cam.m_metadataEnabled = cur != FALSE;
-        }
-
-        if (!cam.AllocateAcqBuffer(expTotal, frameBytes))
-        {
-            PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition buffer.");
-            return NULL;
-        }
-
-        cam.ResetQueue();
-        cam.m_isSequence = true;
-        cam.m_abortAcq = false;
-        cam.m_newData = false;;
-        cam.m_prevFpsTime = std::chrono::high_resolution_clock::now();
-
-        if (!pl_exp_start_seq(hcam, cam.m_acqBuffer))
+        rs_bool cur;
+        if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
             return PvcamError();
+        cam->m_metadataEnabled = cur != FALSE;
     }
-    catch (const std::out_of_range& ex)
+
+    if (!cam->AllocateAcqBuffer(expTotal, frameBytes))
     {
-        PyErr_SetString(PyExc_KeyError, ex.what());
+        PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition buffer.");
         return NULL;
     }
+
+    cam->m_acqQueue.swap(std::queue<Frame>());
+    cam->m_acqQueueCapacity = expTotal;
+    cam->m_acqAbort = false;
+    cam->m_acqNewFrame = false;
+    cam->m_isSequence = true;
+    cam->m_fpsFrameCnt = 0;
+    cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
+
+    if (!pl_exp_start_seq(hcam, cam->m_acqBuffer))
+        return PvcamError();
 
     return PyLong_FromUnsignedLong(frameBytes);
 }
@@ -829,55 +855,43 @@ static PyObject* pvc_check_frame_status(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "h", &hcam))
         return ParamParseError();
 
-    char* statusStr = "";
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
 
-    try
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+    int16 status;
+    uns32 dummy;
+    if (cam->m_isSequence)
     {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
-
-        int16 status;
-        uns32 dummy;
-        if (cam.m_isSequence)
-        {
-            if (!pl_exp_check_status(hcam, &status, &dummy))
-                return PvcamError();
-        }
-        else
-        {
-            if (!pl_exp_check_cont_status(hcam, &status, &dummy, &dummy))
-                return PvcamError();
-        }
-
-        switch (status)
-        {
-        case READOUT_NOT_ACTIVE:
-            statusStr = "READOUT_NOT_ACTIVE";
-            break;
-        case EXPOSURE_IN_PROGRESS:
-            statusStr = "EXPOSURE_IN_PROGRESS";
-            break;
-        case READOUT_IN_PROGRESS:
-            statusStr = "READOUT_IN_PROGRESS";
-            break;
-        case FRAME_AVAILABLE:
-            statusStr = (cam.m_isSequence) ? "READOUT_COMPLETE" : "FRAME_AVAILABLE";
-            break;
-        case READOUT_FAILED:
-            statusStr = "READOUT_FAILED";
-            break;
-        default:
-            PyErr_SetString(PyExc_ValueError, "Unrecognized frame status.");
-            return NULL;
-        }
+        if (!pl_exp_check_status(hcam, &status, &dummy))
+            return PvcamError();
     }
-    catch (const std::out_of_range& ex)
+    else
     {
-        PyErr_SetString(PyExc_KeyError, ex.what());
+        if (!pl_exp_check_cont_status(hcam, &status, &dummy, &dummy))
+            return PvcamError();
+    }
+
+    switch (status)
+    {
+    case READOUT_NOT_ACTIVE:
+        return PyUnicode_FromString("READOUT_NOT_ACTIVE");
+    case EXPOSURE_IN_PROGRESS:
+        return PyUnicode_FromString("EXPOSURE_IN_PROGRESS");
+    case READOUT_IN_PROGRESS:
+        return PyUnicode_FromString("READOUT_IN_PROGRESS");
+    case FRAME_AVAILABLE:
+        return (cam->m_isSequence)
+            ? PyUnicode_FromString("READOUT_COMPLETE")
+            : PyUnicode_FromString("FRAME_AVAILABLE");
+    case READOUT_FAILED:
+        return PyUnicode_FromString("READOUT_FAILED");
+    default:
+        PyErr_SetString(PyExc_ValueError, "Unrecognized frame status.");
         return NULL;
     }
-
-    return PyUnicode_FromString(statusStr);
 }
 
 static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
@@ -891,172 +905,162 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
                 &typenum, &timeoutMs, &oldestFrame))
         return ParamParseError();
 
-    // WARNING!
-    // We are accessing a camera instance below without locking the object so that
-    // the new frame handler or abort can take the lock and alter date. Care must be
-    // taken to not alter the camera instance until the lock is obtained
-    try
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    std::unique_lock<std::mutex> lock(cam->m_mutex);
+
+    int16 status;
+    uns32 dummy;
+    rs_bool checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
+
+    if (timeoutMs != 0)
     {
-        //std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
+        // Wait for a new frame, but every so often check if readout failed
+        constexpr auto timeStep = std::chrono::milliseconds(5000);
+        const auto timeEnd = std::chrono::high_resolution_clock::now()
+            + ((timeoutMs > 0)
+                ? std::chrono::milliseconds(timeoutMs)
+                : std::chrono::hours(24 * 365 * 100)); // WAIT_FOREVER ~ 100 years
 
-        int16 status;
-        uns32 dummy;
-        rs_bool checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
+        /* Release the GIL to allow other Python threads to run */
+        /* This macro has an open brace and must be paired */
+        Py_BEGIN_ALLOW_THREADS
 
-        if (timeoutMs != 0)
+        // Exit loop if readout finished or failed, new data available,
+        // abort occurred or timeout expired
+        while (checkStatusResult && !cam->m_acqNewFrame && !cam->m_acqAbort
+                && (status == EXPOSURE_IN_PROGRESS || status == READOUT_IN_PROGRESS))
         {
-            // Wait for a new frame, but every so often check if readout failed
-            constexpr auto timeStep = std::chrono::milliseconds(5000);
-            const auto timeEnd = std::chrono::high_resolution_clock::now()
-                + ((timeoutMs > 0)
-                    ? std::chrono::milliseconds(timeoutMs)
-                    : std::chrono::hours(24 * 365 * 100)); // WAIT_FOREVER ~ 100 years
+            const auto now = std::chrono::high_resolution_clock::now();
+            if (now >= timeEnd)
+                break;
 
-            std::unique_lock<std::mutex> lock(cam.m_frameMutex);
-            /* Release the GIL to allow other Python threads to run */
-            /* This macro has an open brace and must be paired */
-            Py_BEGIN_ALLOW_THREADS
+            auto timeNext = (std::min)(now + timeStep, timeEnd);
+            cam->m_acqCond.wait_until(lock, timeNext);
 
-            // Exit loop if readout finished or failed, new data available,
-            // abort occurred or timeout expired
-            while (checkStatusResult && !cam.m_newData && !cam.m_abortAcq
-                    && (status == EXPOSURE_IN_PROGRESS || status == READOUT_IN_PROGRESS))
-            {
-                const auto now = std::chrono::high_resolution_clock::now();
-                if (now >= timeEnd)
-                    break;
-
-                auto timeNext = (std::min)(now + timeStep, timeEnd);
-                cam.m_frameCond.wait_until(lock, timeNext);
-
-                checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
-            }
-
-            Py_END_ALLOW_THREADS
+            checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
         }
 
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
+        Py_END_ALLOW_THREADS
+    }
 
-        if (!checkStatusResult)
-        {
-            std::lock_guard<std::mutex> lock(cam.m_frameMutex);
-            cam.m_newData = false;
+    if (!checkStatusResult)
+    {
+        cam->m_acqNewFrame = false;
+        return PvcamError();
+    }
+    if (status == READOUT_FAILED)
+    {
+        cam->m_acqNewFrame = false;
+        PyErr_SetString(PyExc_RuntimeError, "Frame readout failed.");
+        return NULL;
+    }
+    if (status == READOUT_NOT_ACTIVE)
+    {
+        cam->m_acqNewFrame = false;
+        PyErr_SetString(PyExc_RuntimeError, "Acquisition not active.");
+        return NULL;
+    }
+    if (cam->m_acqAbort)
+    {
+        cam->m_acqAbort = false;
+        cam->m_acqNewFrame = false;
+        PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted.");
+        return NULL;
+    }
+    if (!cam->m_acqNewFrame)
+    {
+        cam->m_acqAbort = false;
+        PyErr_SetString(PyExc_RuntimeError, "Frame timeout."
+                " Verify the timeout exceeds the exposure time."
+                " If applicable, check external trigger source.");
+        return NULL;
+    }
+
+    Frame frame;
+    if (oldestFrame)
+    {
+        frame = cam->m_acqQueue.front();
+        cam->m_acqQueue.pop();
+    }
+    else
+    {
+        frame = cam->m_acqQueue.back();
+    }
+
+    cam->m_acqNewFrame = !cam->m_acqQueue.empty();
+
+    //printf("New Data - FPS: %.1f, Cnt: %u, Nr: %u\n",
+    //        cam->m_fps, frame.count, frame.nr);
+
+    // Build Python object for new frame
+
+    PyObject* frameDict = PyDict_New();
+    PyObject* roiDataList = PyList_New(0);
+    if (cam->m_metadataEnabled)
+    {
+        PyObject* frameHeader = PyDict_New();
+        PyObject* roiHeaderList = PyList_New(0);
+        PyObject* metaDict = PyDict_New();
+        PyDict_SetItem(metaDict, PyUnicode_FromString("frame_header"), frameHeader);
+        PyDict_SetItem(metaDict, PyUnicode_FromString("roi_headers"), roiHeaderList);
+        PyDict_SetItem(frameDict, PyUnicode_FromString("meta_data"), metaDict);
+
+        cam->InitializeMetadata();
+        if (!pl_md_frame_decode(&cam->m_mdFrame, frame.address, cam->m_frameBytes))
             return PvcamError();
-        }
-        if (status == READOUT_FAILED)
+
+        const md_frame_header* pFrameHdr = cam->m_mdFrame.header;
+
+        PopulateMetadataFrameHeader(pFrameHdr, frameHeader);
+
+        for (uns32 i = 0; i < pFrameHdr->roiCount; i++)
         {
-            std::lock_guard<std::mutex> lock(cam.m_frameMutex);
-            cam.m_newData = false;
-            PyErr_SetString(PyExc_RuntimeError, "Frame readout failed.");
-            return NULL;
-        }
-        if (cam.m_abortAcq)
-        {
-            std::lock_guard<std::mutex> lock(cam.m_frameMutex);
-            cam.m_abortAcq = false;
-            cam.m_newData = false;
-            PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted.");
-            return NULL;
-        }
+            const md_frame_roi_header* pRoiHdr = cam->m_mdFrame.roiArray[i].header;
+            const rgn_type& roi = pRoiHdr->roi;
 
-        Frame_T frame;
-        {
-            std::lock_guard<std::mutex> lock(cam.m_frameMutex);
-
-            if (!cam.m_newData)
-            {
-                cam.m_abortAcq = false;
-                PyErr_SetString(PyExc_RuntimeError, "Frame timeout."
-                        " Verify the timeout exceeds the exposure time."
-                        " If applicable, check external trigger source.");
-                return NULL;
-            }
-
-            if (oldestFrame)
-            {
-                frame = cam.m_frameQueue.front();
-                cam.m_frameQueue.pop();
-            }
-            else
-            {
-                frame = cam.m_frameQueue.back();
-            }
-
-            //printf("New Data - FPS: %.1f Cnt: %u\n", cam.m_fps, frame.count);
-
-            // Toggle m_newData flag unless we are in sequence mode and another frame is available
-            cam.m_newData = cam.m_isSequence && !cam.m_frameQueue.empty();
-        }
-
-        PyObject* frameDict = PyDict_New();
-        PyObject* roiDataList = PyList_New(0);
-        if (cam.m_metadataEnabled)
-        {
-            PyObject* frameHeader = PyDict_New();
-            PyObject* roiHeaderList = PyList_New(0);
-            PyObject* metaDict = PyDict_New();
-            PyDict_SetItem(metaDict, PyUnicode_FromString("frame_header"), frameHeader);
-            PyDict_SetItem(metaDict, PyUnicode_FromString("roi_headers"), roiHeaderList);
-            PyDict_SetItem(frameDict, PyUnicode_FromString("meta_data"), metaDict);
-
-            cam.InitializeMetadata();
-            if (!pl_md_frame_decode(&cam.m_mdFrame, frame.address, cam.m_frameBytes))
-                return PvcamError();
-
-            const md_frame_header* pFrameHdr = cam.m_mdFrame.header;
-
-            PopulateMetadataFrameHeader(pFrameHdr, frameHeader);
-
-            for (uns32 i = 0; i < pFrameHdr->roiCount; i++)
-            {
-                const md_frame_roi_header* pRoiHdr = cam.m_mdFrame.roiArray[i].header;
-                const rgn_type& roi = pRoiHdr->roi;
-
-                PyObject* hdrObj = PyDict_New();
-                PopulateMetadataRoiHeader(pRoiHdr, hdrObj);
-                PyList_Append(roiHeaderList, hdrObj);
-
-                npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
-                npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
-                npy_intp dims[NUM_DIMS] = { h, w };
-                PyObject* numpyFrame = PyArray_SimpleNewFromData(
-                        NUM_DIMS, dims, typenum, cam.m_mdFrame.roiArray[i].data);
-                PyList_Append(roiDataList, numpyFrame);
-            }
-        }
-        else
-        {
-            // Construct ROI list with 1 region only, because metadata is disabled
-            std::vector<rgn_type> roiArray(1);
-            PopulateRegions(roiArray, roiListObj);
-            const rgn_type& roi = roiArray[0];
+            PyObject* hdrObj = PyDict_New();
+            PopulateMetadataRoiHeader(pRoiHdr, hdrObj);
+            PyList_Append(roiHeaderList, hdrObj);
 
             npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
             npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
             npy_intp dims[NUM_DIMS] = { h, w };
             PyObject* numpyFrame = PyArray_SimpleNewFromData(
-                    NUM_DIMS, dims, typenum, frame.address);
+                    NUM_DIMS, dims, typenum, cam->m_mdFrame.roiArray[i].data);
             PyList_Append(roiDataList, numpyFrame);
         }
-
-        PyDict_SetItem(frameDict, PyUnicode_FromString("pixel_data"), roiDataList);
-
-        PyObject* fps = PyFloat_FromDouble(cam.m_fps);
-        PyObject* frameCount = PyLong_FromLong(frame.count);
-
-        PyObject* tup = PyTuple_New(3);
-        PyTuple_SetItem(tup, 0, frameDict);
-        PyTuple_SetItem(tup, 1, fps);
-        PyTuple_SetItem(tup, 2, frameCount);
-
-        return tup;
     }
-    catch (const std::out_of_range& ex)
+    else
     {
-        PyErr_SetString(PyExc_KeyError, ex.what());
-        return NULL;
+        // Construct ROI list with 1 region only, because metadata is disabled
+        std::vector<rgn_type> roiArray(1);
+        PopulateRegions(roiArray, roiListObj);
+        const rgn_type& roi = roiArray[0];
+
+        npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
+        npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
+        npy_intp dims[NUM_DIMS] = { h, w };
+        PyObject* numpyFrame = PyArray_SimpleNewFromData(
+                NUM_DIMS, dims, typenum, frame.address);
+        PyList_Append(roiDataList, numpyFrame);
     }
+
+    PyDict_SetItem(frameDict, PyUnicode_FromString("pixel_data"), roiDataList);
+
+    PyObject* fps = PyFloat_FromDouble(cam->m_fps);
+    PyObject* frameCount = PyLong_FromLong(frame.count);
+    //PyObject* frameNr = PyLong_FromLong(frame.nr);
+
+    PyObject* tup = PyTuple_New(3); //PyTuple_New(4);
+    PyTuple_SetItem(tup, 0, frameDict);
+    PyTuple_SetItem(tup, 1, fps);
+    PyTuple_SetItem(tup, 2, frameCount);
+    //PyTuple_SetItem(tup, 3, frameNr);
+
+    return tup;
 }
 
 static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
@@ -1065,29 +1069,25 @@ static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "h", &hcam))
         return ParamParseError();
 
-    try
-    {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
-
-        // Also internally aborts the acquisition if necessary
-        if (!pl_exp_finish_seq(hcam, cam.m_acqBuffer, NULL))
-            return PvcamError();
-
-        cam.m_abortAcq = true;
-        cam.m_frameCond.notify_all();
-
-        if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
-            return PvcamError();
-
-        cam.UnsetStreamToDisk();
-        cam.ReleaseAcqBuffer();
-}
-    catch (const std::out_of_range& ex)
-    {
-        PyErr_SetString(PyExc_KeyError, ex.what());
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
         return NULL;
-    }
+
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+    // Also internally aborts the acquisition if necessary
+    if (!pl_exp_finish_seq(hcam, cam->m_acqBuffer, NULL))
+        return PvcamError();
+
+    if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
+        return PvcamError();
+
+    cam->m_acqAbort = true;
+
+    cam->UnsetStreamToDisk();
+    cam->ReleaseAcqBuffer();
+
+    cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
 
     Py_RETURN_NONE;
 }
@@ -1098,28 +1098,24 @@ static PyObject* pvc_abort(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "h", &hcam))
         return ParamParseError();
 
-    try
-    {
-        std::lock_guard<std::mutex> lock(g_camInstanceMutex);
-        Camera& cam = g_camInstanceMap.at(hcam);
-
-        if (!pl_exp_abort(hcam, CCS_HALT))
-            return PvcamError();
-
-        cam.m_abortAcq = true;
-        cam.m_frameCond.notify_all();
-
-        if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
-            return PvcamError();
-
-        cam.UnsetStreamToDisk();
-        cam.ReleaseAcqBuffer();
-    }
-    catch (const std::out_of_range& ex)
-    {
-        PyErr_SetString(PyExc_KeyError, ex.what());
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
         return NULL;
-    }
+
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+    if (!pl_exp_abort(hcam, CCS_HALT))
+        return PvcamError();
+
+    if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
+        return PvcamError();
+
+    cam->m_acqAbort = true;
+
+    cam->UnsetStreamToDisk();
+    cam->ReleaseAcqBuffer();
+
+    cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
 
     Py_RETURN_NONE;
 }
