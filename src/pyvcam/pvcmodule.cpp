@@ -1126,6 +1126,24 @@ static PyObject* pvc_stop_live(PyObject* self, PyObject* args)
     return pvc_abort(self, args);
 }
 
+static PyObject* pvc_reset_frame_counter(PyObject* self, PyObject* args)
+{
+    int16 hcam;
+    if (!PyArg_ParseTuple(args, "h", &hcam))
+        return ParamParseError();
+
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    {
+        std::lock_guard<std::mutex> lock(cam->m_mutex);
+        cam->m_acqFrameCnt = 0;
+    }
+
+    Py_RETURN_NONE;
+}
+
 /**
  * Used to set the exposure out mode of a camera.
  *
@@ -1274,6 +1292,8 @@ static PyMethodDef pvcMethods[] = {
     PVC_ADD_METHOD_(stop_live, METH_VARARGS,
             "Aborts/stops acquisition. Deprecated, use 'abort' function."),
 
+    PVC_ADD_METHOD_(reset_frame_counter, METH_VARARGS,
+            "Resets a frame counter returned by get_frame."),
     PVC_ADD_METHOD_(set_exp_modes, METH_VARARGS,
             "Sets a camera's exposure mode or expose out mode."),
     PVC_ADD_METHOD_(read_enum, METH_VARARGS,

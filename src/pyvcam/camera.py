@@ -634,29 +634,35 @@ class Camera:
 
         return frame, fps, frame_count
 
-    def get_frame(self, exp_time=None, timeout_ms=WAIT_FOREVER):
+    def get_frame(self, exp_time=None, timeout_ms=WAIT_FOREVER,
+                  reset_frame_counter=False):
         """Calls the pvc.get_frame function with the current camera settings.
 
         Parameter:
             exp_time (int): The exposure time.
+            timeout_ms (int): Duration to wait for new frames.
+            reset_frame_counter (bool): Reset frame_count returned by poll_frame.
         Returns:
             A 2D np.array containing the pixel data from the captured frame.
         """
 
-        self.start_seq(exp_time=exp_time, num_frames=1)
+        self.start_seq(exp_time=exp_time, reset_frame_counter=reset_frame_counter)
         frame, _, _ = self.poll_frame(timeout_ms=timeout_ms)
         self.finish()
 
         return frame['pixel_data']
 
-    def get_sequence(self, num_frames, exp_time=None, timeout_ms=WAIT_FOREVER, interval=None):
+    def get_sequence(self, num_frames, exp_time=None, timeout_ms=WAIT_FOREVER,
+                     interval=None, reset_frame_counter=False):
         """Calls the pvc.get_frame function with the current camera settings in
             rapid-succession for the specified number of frames.
 
         Parameter:
             num_frames (int): Number of frames to capture in the sequence
             exp_time (int): The exposure time
+            timeout_ms (int): Duration to wait for new frames.
             interval (int): The time in milliseconds to wait between captures
+            reset_frame_counter (bool): Reset frame_count returned by poll_frame.
         Returns:
             A 3D np.array containing the pixel data from the captured frames.
         """
@@ -668,7 +674,9 @@ class Camera:
         stack = np.empty((num_frames, shape[1], shape[0]), dtype=self.__dtype)
 
         for i in range(num_frames):
-            stack[i] = self.get_frame(exp_time=exp_time, timeout_ms=timeout_ms)
+            stack[i] = self.get_frame(exp_time=exp_time, timeout_ms=timeout_ms,
+                                      reset_frame_counter=reset_frame_counter)
+            reset_frame_counter = False
 
             if isinstance(interval, int) and i + 1 < num_frames:
                 time.sleep(interval / 1000)
@@ -676,7 +684,7 @@ class Camera:
         return stack
 
     def get_vtm_sequence(self, time_list, exp_res, num_frames, timeout_ms=WAIT_FOREVER,
-                         interval=None):
+                         interval=None, reset_frame_counter=False):
         """Calls the pvc.get_frame function within a loop, setting vtm expTime
             between each capture.
 
@@ -685,7 +693,9 @@ class Camera:
             exp_res (int): vtm exposure time resolution
                 (0:milli, 1:micro, 2:seconds, use constants.EXP_RES_ONE_*SEC)
             num_frames (int): Number of frames to capture in the sequence
+            timeout_ms (int): Duration to wait for new frames.
             interval (int): The time in milliseconds to wait between captures
+            reset_frame_counter (bool): Reset frame_count returned by poll_frame.
         Returns:
             A 3D np.array containing the pixel data from the captured sequence.
         """
@@ -703,7 +713,10 @@ class Camera:
             exp_time = time_list[i % len(time_list)]
             try:
                 self.vtm_exp_time = exp_time
-                stack[i] = self.get_frame(exp_time=self.vtm_exp_time, timeout_ms=timeout_ms)
+                stack[i] = self.get_frame(exp_time=self.vtm_exp_time,
+                                          timeout_ms=timeout_ms,
+                                          reset_frame_counter=reset_frame_counter)
+                reset_frame_counter = False
             except Exception as ex:
                 raise ValueError('Could not collect vtm frame') from ex
 
@@ -713,13 +726,15 @@ class Camera:
         self.exp_res = old_res
         return stack
 
-    def start_live(self, exp_time=None, buffer_frame_count=16, stream_to_disk_path=None):
+    def start_live(self, exp_time=None, buffer_frame_count=16,
+                   stream_to_disk_path=None, reset_frame_counter=False):
         """Calls the pvc.start_live function to set up a circular buffer acquisition.
 
         Parameter:
             exp_time (int): The exposure time.
             buffer_frame_count (int): The number of frames in circ. buffer.
             stream_to_disk_path (str): None, or location where to save the data.
+            reset_frame_counter (bool): Reset frame_count returned by poll_frame.
         Returns:
             None
         """
@@ -738,22 +753,29 @@ class Camera:
             else:
                 raise ValueError(f'Invalid directory for stream to disk: {directory}')
 
+        if reset_frame_counter:
+            pvc.reset_frame_counter(self.__handle)
+
         self.__acquisition_mode = 'Live'
         pvc.start_live(self.__handle, self.__rois, exp_time, self.__mode,
                        buffer_frame_count, stream_to_disk_path)
 
-    def start_seq(self, exp_time=None, num_frames=1):
+    def start_seq(self, exp_time=None, num_frames=1, reset_frame_counter=False):
         """Calls the pvc.start_seq function to set up a non-circular buffer acquisition.
 
         Parameter:
             exp_time (int): The exposure time.
             num_frames (int): The number of frames in a sequence (max. 65535).
+            reset_frame_counter (bool): Reset frame_count returned by poll_frame.
         Returns:
             None
         """
 
         if not isinstance(exp_time, int):
             exp_time = self.exp_time
+
+        if reset_frame_counter:
+            pvc.reset_frame_counter(self.__handle)
 
         self.__acquisition_mode = 'Sequence'
         pvc.start_seq(self.__handle, self.__rois, exp_time, self.__mode, num_frames)
