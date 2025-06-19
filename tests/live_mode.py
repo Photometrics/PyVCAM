@@ -30,11 +30,19 @@ def main():
     dim = (width, height)
 
     cnt = 0
+    dropped = 0
     t_start = time.time()
 
     while True:
         frame, fps, frame_count = cam.poll_frame()
         cnt += 1
+        if cnt < frame_count:
+            if cnt + 1 == frame_count:
+                print(f'Dropped frame {cnt}')
+            else:
+                print(f'Dropped frames {cnt}-{frame_count - 1}')
+            dropped += frame_count - cnt
+            cnt = frame_count
         low = np.amin(frame['pixel_data'])
         high = np.amax(frame['pixel_data'])
         avg = np.average(frame['pixel_data'])
@@ -55,7 +63,7 @@ def main():
 
     t_end = time.time()
     fps_avg = cnt / (t_end - t_start)
-    print(f'\nTotal frames: {cnt}, Average fps: {fps_avg:.1f}')
+    print(f'\nTotal frames: {cnt}, dropped: {dropped}, average fps: {fps_avg:.1f}')
 
     cam.finish()
 
