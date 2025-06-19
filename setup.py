@@ -53,7 +53,7 @@ if is_linux:
     include_dirs.append(f'{pvcam_sdk_path}/include')
     library_dirs.append(f'{pvcam_sdk_path}/library/{current_arch}')
     libraries.append('pvcam')
-    extra_compile_args.append('-std=c++11')
+    extra_compile_args.append('-std=c++14')
 
 elif is_windows:
     include_dirs.append(f'{pvcam_sdk_path}/inc')
