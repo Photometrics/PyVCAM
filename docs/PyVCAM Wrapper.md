@@ -17,7 +17,6 @@
         * [Acquisition Configuration](#acquisition-configuration)
         * [Acquisition Trigger](#acquisition-trigger)
         * [Parameters](#parameters)
-        * [Internal methods](#internal-methods)
       * [Getters/Setters](#getterssetters)
         * [Using Getters/Setters](#using-getterssetters)
         * [List of Getters/Setters](#list-of-getterssetters)
@@ -57,10 +56,12 @@
 ***
 
 ## Installing the Package 
-When you are ready to install the package, navigate to the directory that contains `pyproject.toml` file and run `python -m pip install .`.
+When you are ready to install the package, navigate to the directory that contains `pyproject.toml`
+file and run `python -m pip install .`.
 
 ## Creating a Wheel Package 
-To create a PyVCAM Wheel package, navigate to the directory that contains `pyproject.toml` file  and run `python -m build`.
+To create a PyVCAM Wheel package, navigate to the directory that contains `pyproject.toml` file
+and run `python -m build`.
 
 ## Uninstalling the Package 
 When you are ready to uninstall the package, run from anywhere `python -m pip uninstall PyVCAM`.
@@ -68,24 +69,30 @@ When you are ready to uninstall the package, run from anywhere `python -m pip un
 ***
 
 ## `src` Folder
-Where the source code of the `pyvcam` module is located. In addition to the code for the module, any additional scripts that are used to help write the module are included as well. The most notable helper script that is not included in the module is `constants_generator.py`, which generates the `constants.py` module by parsing the PVCAM header file `pvcam.h`. 
+Where the source code of the `pyvcam` module is located. In addition to the code for the module,
+any additional scripts that are used to help write the module are included as well. The most notable
+helper script that is not included in the module is `constants_generator.py`, which generates the
+`constants.py` module by parsing the PVCAM header file `pvcam.h`. 
 
 ## `pyvcam` Folder
-The directory that contains the source code to the `pyvcam` module. These are the files installed when users install the module. 
+The directory that contains the source code to the `pyvcam` module. These are the files installed
+when users install the module. 
 
 ### `camera.py`
-The `camera.py` module contains the `Camera` python class which is used to abstract the need to manually maintain, alter, and remember camera settings through PVCAM. 
+The `camera.py` module contains the `Camera` python class which is used to abstract the need to
+manually maintain, alter, and remember camera settings through PVCAM. 
 
 #### Create Camera Example
-This will create a camera object using the first camera found, that can then be used to interact with the camera.
+This will create a camera object using the first camera found, that can then be used to interact
+with the camera.
 
 ```
 from pyvcam import pvc 
 from pyvcam.camera import Camera   
 
-pvc.init_pvcam()                   # Initialize PVCAM 
-cam = next(Camera.detect_camera()) # Use generator to find the first camera 
-cam.open()                         # Open the camera
+pvc.init_pvcam()                    # Initialize PVCAM 
+cam = next(Camera.detect_camera())  # Use generator to find the first camera 
+cam.open()                          # Open the camera
 ```
 
 #### Attributes of `Camera` class
@@ -124,17 +131,17 @@ cam.open()                         # Open the camera
 | `close`                      | Closes the camera. Will set `__handle` to the default value for a closed camera (`-1`) and will set `__is_open` to `False` if a successful call to PVCAM's close camera function is made. A `RuntimeError` will be raised if the call to PVCAM fails. For more information about how Python interacts with the PVCAM library, refer to the `pvcmodule.cpp` section of these notes.	 |
 
 ##### Basic Frame Acquisition
-| Method             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `get_frame`        | Calls the `pvcmodule`'s `get_frame` function with current camera settings to get a 2D numpy array of pixel data from a single snap image. This method can either be called with or without a given exposure time. If given, the method will use the given parameter. Otherwise, if left out, will use the internal `exp_time` attribute.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time to use. </li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `get_sequence`     | Calls the `pvcmodule`'s `get_frame` function with cameras current settings in rapid-succession to get a 3D numpy array of pixel data from a single snap image. Multiple ROIs are not supported.<br><br>**Example:**<br>**Getting a sequence**<br>*# Given that the camera is already opened as `openCam`*<br><br>`stack = openCam.get_sequence(8)  # Getting a sequence of 8 frames`<br><br>`firstFrame = stack[0]  # Accessing 2D frames from 3D stack`<br>`lastFrame = stack[7]`<br><br>**Parameters:**<br><ul><li>`num_frames` (int): The number of frames to be captured in the sequence. </li><li>Optional: `exp_time` (int): The exposure time to use. </li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li></ul>                                                                                                                                                                                       |
-| `get_vtm_sequence` | Modified `get_sequence` to be used for Variable Timed Mode. Before calling it, set the camera's exposure mode to `'Variable Timed'`. The timings will always start at the first given and keep looping around until its captured the number of frames given.  Multiple ROIs are not supported.<br><br>**Parameters:**<br><ul><li>`time_list` (list of integers): The timings to be used by the camera in Variable Timed Mode.</li><li>`exp_res` (int): The exposure time resolution. Supported are milliseconds (`0`), and for selected cameras also microseconds (`1`) and seconds (`2`). Refer to the PVCAM User Manual  `PARAM_EXP_RES` and `PARAM_EXP_RES_INDEX`.</li><li>`num_frames` (int): The number of frames to be captured in the sequence.</li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li><li>Optional: `interval` (int): Time to between each sequence frame (in milliseconds). </li></ul>	 |
+| Method             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `get_frame`        | Calls the `pvcmodule`'s `get_frame` function with current camera settings to get a 2D numpy array of pixel data from a single snap image. This method can either be called with or without a given exposure time. If given, the method will use the given parameter. Otherwise, if left out, will use the internal `exp_time` attribute.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time to use. </li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li><li>Optional: `reset_frame_counter` (bool): Resets `frame_count` returned by `poll_frame`.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `get_sequence`     | Calls the `pvcmodule`'s `get_frame` function with cameras current settings in rapid-succession to get a 3D numpy array of pixel data from a single snap image. Multiple ROIs are not supported.<br><br>**Example:**<br>**Getting a sequence**<br>*# Given that the camera is already opened as `openCam`*<br><br>`stack = openCam.get_sequence(8)  # Getting a sequence of 8 frames`<br><br>`firstFrame = stack[0]  # Accessing 2D frames from 3D stack`<br>`lastFrame = stack[7]`<br><br>**Parameters:**<br><ul><li>`num_frames` (int): The number of frames to be captured in the sequence.</li><li>Optional: `exp_time` (int): The exposure time to use.</li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li><li>Optional: `reset_frame_counter` (bool): Resets `frame_count` returned by `poll_frame`.</li></ul>                                                                                                                                                                                        |
+| `get_vtm_sequence` | Modified `get_sequence` to be used for Variable Timed Mode. Before calling it, set the camera's exposure mode to `'Variable Timed'`. The timings will always start at the first given and keep looping around until its captured the number of frames given.  Multiple ROIs are not supported.<br><br>**Parameters:**<br><ul><li>`time_list` (list of integers): The timings to be used by the camera in Variable Timed Mode.</li><li>`exp_res` (int): The exposure time resolution. Supported are milliseconds (`0`), and for selected cameras also microseconds (`1`) and seconds (`2`). Refer to the PVCAM User Manual  `PARAM_EXP_RES` and `PARAM_EXP_RES_INDEX`.</li><li>`num_frames` (int): The number of frames to be captured in the sequence.</li><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li><li>Optional: `interval` (int): Time to between each sequence frame (in milliseconds).</li><li>Optional: `reset_frame_counter` (bool): Resets `frame_count` returned by `poll_frame`.</li></ul>	 |
 
 ##### Advanced Frame Acquisition
 | Method                | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `start_live`          | Calls `pvc.start_live` to setup a live mode acquisition. This must be called before `poll_frame`.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time for the acquisition. If not provided, the `exp_time` attribute is used.</li><li>Optional: `buffer_frame_count` (int): The number of frames in the circular frame buffer. The default is 16 frames.</li><li>Optional: `stream_to_disk_path` (str): The file path for data written directly to disk by PVCAM. The default is `None` which disables this feature.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `start_seq`           | Calls `pvc.start_seq` to setup a sequence mode acquisition. This must be called before `poll_frame`.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time for the acquisition. If not provided, the `exp_time` attribute is used.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `start_live`          | Calls `pvc.start_live` to setup a live mode acquisition. This must be called before `poll_frame`.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time for the acquisition. If not provided, the `exp_time` attribute is used.</li><li>Optional: `buffer_frame_count` (int): The number of frames in the circular frame buffer. The default is 16 frames.</li><li>Optional: `stream_to_disk_path` (str): The file path for data written directly to disk by PVCAM. The default is `None` which disables this feature.</li><li>Optional: `reset_frame_counter` (bool): Resets `frame_count` returned by `poll_frame`.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `start_seq`           | Calls `pvc.start_seq` to setup a sequence mode acquisition. This must be called before `poll_frame`.<br><br>**Parameters:**<br><ul><li>Optional: `exp_time` (int): The exposure time for the acquisition. If not provided, the `exp_time` attribute is used.</li><li>Optional: `reset_frame_counter` (bool): Resets `frame_count` returned by `poll_frame`.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `check_frame_status`  | Calls `pvc.check_frame_status` to report status of camera. This method can be called regardless of an acquisition being in progress.<br><br>**Parameters:**<br><ul><li>None</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `poll_frame`          | Returns a single frame as a dictionary with optional meta data if available. This method must be called after either `start_live` or `start_seq` and before either `abort` or `finish`. Pixel data can be accessed via the `'pixel_data'` key. Available meta data can be accessed via the `'meta_data'` key.<br><br>If multiple ROIs are set, pixel data will be a list of region pixel data of length number of ROIs. Metadata will also contain information for ech ROI.<br><br>Use `cam.set_param(constants.PARAM_METADATA_ENABLED, True)` or `cam.meta_data_enabled = True` to enable the metadata.</ul><br><br>**Parameters:**<br><ul><li>Optional: `timeout_ms` (int): Duration to wait for new frames. Default is `WAIT_FOREVER`.</li><li>Optional: `oldestFrame` (bool): If `True`, the returned frame will the oldest frame and will be popped off the queue. If `False`, the returned frame will be the newest frame and will not be removed from the queue. Default is `True`.</li><li>Optional: `copyData` (bool): Returned numpy frames will contain a copy of image data. Without this copy, the numpy frame image data will point directly to the underlying frame buffer used by PVCAM. Disabling this copy will improve performance and decrease memory usage, but care must be taken. In live and sequence mode, frame memory is unallocated when calling abort or finish. In live mode, a circular frame buffer is used so frames are continuously overwritten. Default is `True`.</li></ul> |
 | `reset_frame_counter` | Resets `frame_count` returned by `poll_frame` to zero.<br><br>**Parameters:**<br><ul><li>None</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -164,15 +171,26 @@ cam.open()                         # Open the camera
 | `reset_pp`                  | If post-processing is available on the camera, the function will call `pvc.reset_pp` to reset all post-processing features back to their default state.<br><br>**Parameters:**<br><ul><li>None</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `read_enum`                 | (Method) Returns all settings names paired with their values of a specified setting.<br><br>**Parameters:**<br><ul><li>`param_id` (int): The parameter ID.</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
-##### Internal methods
-| Method         | Description                                                                                                                                                                                                                                                                                                                                                                                  |
-|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `_set_dtype`   | This method sets the `__dtype` attribute for numpy pixel data based on current port, speed and gain settings.<br><br>**Parameters:**<br><ul><li>None</li></ul>                                                                                                                                                                                                                               |
-| `_update_mode` | This method updates the mode of the camera, which is the bit-wise OR between exposure mode and expose out mode. It also sets up a temporary sequence to the exposure mode and expose out mode getters will read as expected. This should really only be called internally (and automatically) when exposure mode or expose out mode is modified.<br><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
-
 #### Getters/Setters
-All getters and setters can be accessed using the example below. There is one large implementation point to make note of: 
-<ul><li>All getters/setters are accessed by attribute. This means that it will appear that we are accessing instance variables from a camera, but in reality, these getters/setters are making specially formatted calls to the <code>Camera</code> methods <code>get_param</code> and <code>set_param</code>. These getters/setters make use of the property decorator that is built into Python. The reasoning behind the usage of the property decorator is that attributes will change dynamically during a Camera's lifetime and in order to abstract PVCAM as far away from the end user as possible, the property decorator allows for users to intuitively view and change camera settings. The downside to this approach is that when a new parameter is required, an associated getter/setter needs to be written and tested. Another downside to this implementation is that attribute lookup time is not instant; instead, a call must be made to the <code>pvcmodule</code> wrapper which will then call PVCAM, which will then return a result to the wrapper, which will finally return the result to the user. The time it takes is currently considered insignificant, but if this were to become an issue, the code could be refactored such that all attributes also have instance variables which are changed only when <code>set_param</code> or their associated setter is called on them. </li></ul>
+All getters and setters can be accessed using the example below. There is one large implementation
+point to make note of. 
+
+All getters/setters are accessed by attribute. This means that it will appear that we are accessing
+instance variables from a camera, but in reality, these getters/setters are making specially
+formatted calls to the `Camera` methods `get_param` and `set_param`. These getters/setters make use
+of the property decorator that is built into Python. The reasoning behind the usage of the property
+decorator is that attributes will change dynamically during a `Camera`'s lifetime and in order to
+abstract PVCAM as far away from the end user as possible, the property decorator allows for users to
+intuitively view and change camera settings.
+
+The downside to this approach is that when a new parameter is required, an associated getter/setter
+needs to be written and tested. Another downside to this implementation is that attribute lookup
+time is not instant; instead, a call must be made to the `pvcmodule` wrapper which will then call
+PVCAM, which will then return a result to the wrapper, which will finally return the result to the
+user. The time it takes is currently considered
+insignificant, but if this were to become an issue, the code could be refactored such that all
+attributes also have instance variables which are changed only when `set_param` or their associated
+setter is called on them.
 
 ##### Using Getters/Setters
 ```
@@ -237,23 +255,50 @@ curr_gain = cam.gain  # To call getter, simply access it by attribute from the c
 | `vtm_exp_time`          | (Getter and Setter): **Warning: Camera specific setting. Not all cameras support this attribute. If an unsupported camera attempts to access it, an `AttributeError` will be raised.**<br><br>Returns or changes the variable timed exposure time the camera uses for the `'Variable Timed'` exposure mode.                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### `constants.py`
-The `constants.py` is a large data file that contains various camera settings and internal PVCAM structures used to map meaningful variable names to predefined integer values that camera firmware interprets as settings. 
-This file is not (and should never be) constructed by hand. Instead, use the most recent version of `pvcam.h` and run `constants_generator.py` to (re)build this file. A more detailed explanation can be found under the `constants_generator.py` section, but the basic concept is that `pvcam.h` is parsed line by line, finding all predefined constants, enums, and structs to grant Python users access to the necessary data to perform basic PVCAM functions that have multiple settings. 
-There are four main sections to this file that are found following a formatted comment like this `# # # <SECTION_NAME> # # #`: 
+The `constants.py` is a large data file that contains various camera settings and internal PVCAM
+structures used to map meaningful variable names to predefined integer values that camera firmware
+interprets as settings.
+
+This file is not (and should never be) constructed by hand. Instead, use the most recent version
+of `pvcam.h` and run `constants_generator.py` to (re)build this file. A more detailed explanation
+can be found under the `constants_generator.py` section, but the basic concept is that `pvcam.h` is
+parsed line by line, finding all predefined constants, enums, and structs to grant Python users
+access to the necessary data to perform basic PVCAM functions that have multiple settings. 
+
+There are four main sections to this file that are found following a formatted comment like this
+`# # # <SECTION_NAME> # # #`:
+
 1. Defines
-   1. Much of the necessary data from `pvcam.h` is saved as C preprocessor macros which are easy to strip from the file and construct a Python variable whose name is the macros name and the value is what the macro expands to. 
-   2. Macros can be thought of as Python variables in this case, as none (of the necessary macros) in `pvcam.h` expand to more than a literal. 
+   1. Much of the necessary data from `pvcam.h` is saved as C preprocessor macros which are easy to
+      strip from the file and construct a Python variable whose name is the macros name and the
+      value is what the macro expands to. 
+   2. Macros can be thought of as Python variables in this case, as none (of the necessary macros)
+      in `pvcam.h` expand to more than a literal. 
 2. Enums
-   1. Enums (also known as enumerated types) are data types that contain named members used to identify certain integer values. Typically, if no values are specified, the first member will be assigned the value 0, and the successor will be 1+ the value of their predecessor. However, you can specify specific numbers for all members. 
-   2. Vanilla Python has no enum type (it must be imported; see documentation here), and even still Python's enum class behaves somewhat differently in terms of accessing members. Instead, we will insert a comment above all enumerated types and have their members just be simple Python variables whose values where the integer assigned to them in the `pvcam.h` file.
+   1. Enums (also known as enumerated types) are data types that contain named members used to
+      identify certain integer values. Typically, if no values are specified, the first member will
+      be assigned the value 0, and the successor will be 1+ the value of their predecessor. However,
+      you can specify specific numbers for all members. 
+   2. Vanilla Python has no enum type (it must be imported; see documentation here), and even still
+      Python's enum class behaves somewhat differently in terms of accessing members. Instead, we
+      will insert a comment above all enumerated types and have their members just be simple Python
+      variables whose values where the integer assigned to them in the `pvcam.h` file.
 3. Structs
-   1. Structs are preserved as Python classes. No testing/implementation has been done with these, so results may be unexpected if implemented.
+   1. Structs are preserved as Python classes. No testing/implementation has been done with these,
+      so results may be unexpected if implemented.
 4. Added By Hand
-   1. These are quality of life/readability dictionaries that map named settings of various camera modes to their `pvcam.h` integer value. These allow for fast look-up and intuitive setting changes for end users. 
+   1. These are quality of life/readability dictionaries that map named settings of various camera
+      modes to their `pvcam.h` integer value. These allow for fast look-up and intuitive setting
+      changes for end users. 
 
 ### `pvcmodule.cpp`
-The `pvcmodule.cpp` is a set of C++ functions that make use of and extend the Python C-API known as a Python Extension Module. The need for a Python extension module is two-fold: first to allow communication between the static PVCAM library and Python scripts, and second for fast acquisition and conversion from native C types (namely C arrays of pixel data) to Python data types. 
-The extension module needs to be compiled, so it will be necessary to have a C/C++ compiler to successfully install this application. The module will be compiled into a shared-object library, which can then be imported from Python; read more here. 
+The `pvcmodule.cpp` is a set of C++ functions that make use of and extend the Python C-API known as
+a Python Extension Module. The need for a Python extension module is two-fold: first to allow
+communication between the static PVCAM library and Python scripts, and second for fast acquisition
+and conversion from native C types (namely C arrays of pixel data) to Python data types. 
+The extension module needs to be compiled, so it will be necessary to have a C/C++ compiler to
+successfully install this application. The module will be compiled into a shared-object library,
+which can then be imported from Python; read more here. 
 
 #### General Structure of a `pvcmodule` Functions 
 The functions for a `pvcmodule` function usually follow a three-step process: 
@@ -262,7 +307,20 @@ The functions for a `pvcmodule` function usually follow a three-step process:
 3. Return data to Python script
 
 #### Retrieving Data
-Functions receive data dynamically through use of parameters, and the `pvcmodule`'s functions are no different. However, the Python API states that all data is of type `PyObject`, which the C/C++ programming language offer no builtin support for. In addition to, each Python-facing function must only have two arguments: `PyObject* self` (a pointer to the instance of whichever Python object called this C function) and `PyObject* args` (a Python tuple object that contains all the arguments passed into the C function call). However, we can make use of the `PyArg_ParseTuple` (see example here) function from the Python API to easily coerce the Python objects from the args tuple to their respective C type. In order for the conversion to occur, we must specify which type we want to coerce each Python argument to using a formatted string (see second argument for `PyArg_ParseTuple`). Each character in the formatted string are known as "format units" and are interpreted in the same order that the variables for the coerced C data are provided. Find below a small list of C data types and their corresponding format units. 
+Functions receive data dynamically through use of parameters, and the `pvcmodule`'s functions are no
+different. However, the Python API states that all data is of type `PyObject`, which the C/C++
+programming language offer no builtin support for. In addition to, each Python-facing function must
+only have two arguments: `PyObject* self` (a pointer to the instance of whichever Python object
+called this C function) and `PyObject* args` (a Python tuple object that contains all the arguments
+passed into the C function call).
+
+However, we can make use of the `PyArg_ParseTuple` (see example here) function from the Python API
+to easily coerce the Python objects from the args tuple to their respective C type. In order for
+the conversion to occur, we must specify which type we want to coerce each Python argument to using
+a formatted string (see second argument for `PyArg_ParseTuple`). Each character in the formatted
+string are known as "format units" and are interpreted in the same order that the variables for
+the coerced C data are provided. Find below a small list of C data types and their corresponding
+format units. 
 
 | C Type           | Character Representation |
 |------------------|--------------------------|
@@ -274,10 +332,17 @@ Functions receive data dynamically through use of parameters, and the `pvcmodule
 | `PyObject`       | `O`                      |
 
 #### Arguments of `PyArg_ParseTuple` 
-1. `args` (`PyObject*`) A Python tuple object that contains the arguments from the Python function call. For example, if a function call from Python is made: `my_c_func(1, "test")`, the `args` tuple would contain two `PyObject` pointers: one to the Python integer 1 and another to the Python Unicode-String `"test"`. 
-2. `format` (`char*`) A String containing the format units for all the arguments found in the args in the same order in which they appear in the tuple. Going off of the example from the previous argument, the desired formatted string would be `"is"`: `"i"` for the integer 1, and `"s"` for the string `"test"`. 
+1. `args` (`PyObject*`) A Python tuple object that contains the arguments from the Python function
+   call. For example, if a function call from Python is made: `my_c_func(1, "test")`, the `args`
+   tuple would contain two `PyObject` pointers: one to the Python integer 1 and another to the Python
+   Unicode-String `"test"`. 
+2. `format` (`char*`) A String containing the format units for all the arguments found in the args
+   in the same order in which they appear in the tuple. Going off of the example from the previous
+   argument, the desired formatted string would be `"is"`: `"i"` for the integer 1, and `"s"` for
+   the string `"test"`. 
 
-In addition to these two arguments, addresses to the variables in which the coerced C data should be stored must also be passed as arguments to the `PyArg_ParseTuple` call. (See example for more details).
+In addition to these two arguments, addresses to the variables in which the coerced C data should be
+stored must also be passed as arguments to the `PyArg_ParseTuple` call. (See example for more details).
 
 #### `PyArg_ParseTuple` Example
 ```
@@ -293,16 +358,26 @@ static PyObject* example(PyObject* self, PyObject* args)
 ```
 
 #### Processing Acquired Data 
-Using the data supplied by the Python function call, we can now perform normal camera operations using PVCAM library function calls. The most common form of processing acquired data is to read the camera handle from the arguments provided, then performing a camera operation (changing/reading settings, getting images, etc.) using the acquired handle to identify which camera to perform the action on. 
+Using the data supplied by the Python function call, we can now perform normal camera operations
+using PVCAM library function calls. The most common form of processing acquired data is to read the
+camera handle from the arguments provided, then performing a camera operation (changing/reading
+settings, getting images, etc.) using the acquired handle to identify which camera to perform the
+action on. 
 
-Generally speaking, this part of the function should be very similar to writing normal C/C++ modules that use the PVCAM library. If there is any confusion about how to write C/C++ code to make calls to PVCAM, refer to the PvcamCodeSamples found in the Examples directory of the PVCAM SDK. 
+Generally speaking, this part of the function should be very similar to writing normal C/C++ modules
+that use the PVCAM library. If there is any confusion about how to write C/C++ code to make calls to
+PVCAM, refer to the PvcamCodeSamples found in the Examples directory of the PVCAM SDK. 
 
-Sometimes, processing data from a Python function call may entail answering a query. If this is the case, we need to specify what to return, and how to convert it into a corresponding Python type.
+Sometimes, processing data from a Python function call may entail answering a query. If this is the
+case, we need to specify what to return, and how to convert it into a corresponding Python type.
 
 #### Return Data to a Python Script 
-Similar to how issues arose when passing data from the Python function call to the C/C++ module, there is no simple casting solution to convert C/C++ data types to Python data types when returning from a function. 
+Similar to how issues arose when passing data from the Python function call to the C/C++ module,
+there is no simple casting solution to convert C/C++ data types to Python data types when returning
+from a function. 
 
-Thankfully, there are some functions that were included in the Python header file included at the top of each module to allow us to cast data to an equivalent Python type. 
+Thankfully, there are some functions that were included in the Python header file included at the
+top of each module to allow us to cast data to an equivalent Python type. 
 
 #### Cast to Python Type 
 ```
@@ -313,16 +388,20 @@ Thankfully, there are some functions that were included in the Python header fil
 }
 ```
 
-There is one small catch, however. All Python functions must return an object; there is no such thing as a "void" function. This means that we must always return something in our C/C++ modules as well (which we can tell by looking at the signature!) 
-If you wish to return `None`, simply use the `Py_RETURN_NONE` macro (see the `PyArg_ParseTuple` example for a visual representation).
+There is one small catch, however. All Python functions must return an object; there is no such
+thing as a "void" function. This means that we must always return something in our C/C++ modules as
+well (which we can tell by looking at the signature!) 
+If you wish to return `None`, simply use the `Py_RETURN_NONE` macro (see the `PyArg_ParseTuple`
+example for a visual representation).
 
 #### Functions of `pvcmodule.cpp` 
-**Note:** All functions will always have the `PyObject* self` and `PyObject* args` parameters. When parameters are listed, they are the Python parameters that are passed into the module.
+**Note:** All functions will always have the `PyObject* self` and `PyObject* args` parameters.
+When parameters are listed, they are the Python parameters that are passed into the module.
 
 | Function Name             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 |---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `pvc_abort`               | Given a camera handle, aborts any ongoing acquisition and de-registers the frame handler callback function.<br><br>**Parameters:**<ul><li>Python int (camera handle).</li>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `pvc_check_frame_status`  | Given a camera handle, returns the current frame status as a string. Possible return values:<ul><li>READOUT_NOT_ACTIVE</li><li>EXPOSURE_IN_PROGRESS</li></li>READOUT_IN_PROGRESS</li><li>READOUT_COMPLETE/FRAME_AVAILABLE</li><li>READOUT_FAILED</li></ul>**Parameters:**<ul><li>Python int (camera handle).</li></ul>                                                                                                                                                                                                                                                                                                                                                               |
+| `pvc_check_frame_status`  | Given a camera handle, returns the current frame status as a string. Possible return values:<ul><li>`'READOUT_NOT_ACTIVE'`</li><li>`'EXPOSURE_IN_PROGRESS'`</li></li>`'READOUT_IN_PROGRESS'`</li><li>`'READOUT_COMPLETE'`/`'FRAME_AVAILABLE'`</li><li>`'READOUT_FAILED'`</li></ul>**Parameters:**<ul><li>Python int (camera handle).</li></ul>                                                                                                                                                                                                                                                                                                                                       |
 | `pvc_check_param`         | Given a camera handle and parameter ID, returns `True` if the parameter is available on the camera.<br><br>**Parameters:**<ul><li>Python int (camera handle).</li><li>Python int (parameter ID).</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `pvc_close_camera`        | Given a camera handle, closes the camera. Returns `True` upon success. `ValueError` is raised if invalid parameter is supplied. `RuntimeError` raised otherwise.<br><br>**Parameters:**<ul><li>Python int (camera handle).</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `pvc_finish_seq`          | Given a camera handle, finalizes sequence acquisition and cleans up resources. If a sequence is in progress, acquisition will be aborted.<br><br>**Parameters:**<ul><li>Python int (camera handle).</li></ul>                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -345,7 +424,11 @@ If you wish to return `None`, simply use the `Py_RETURN_NONE` macro (see the `Py
 | `pvc_uninit_pvcam`        | Uninitializes the PVCAM library. Raises `RuntimeError` on failure.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 #### The Method Table
-All functions that need to be exposed to Python programs need to be included in the method table. The method table is partially responsible for allowing Python programs to call functions from an extension module. It does this by creating a list of `PyMethodDef` structs with a sentinel struct at the end of the list. The list of method definitions are then passed to the `PyModuleDef` struct, which contains the necessary information to construct the module. 
+All functions that need to be exposed to Python programs need to be included in the method table.
+The method table is partially responsible for allowing Python programs to call functions from an
+extension module. It does this by creating a list of `PyMethodDef` structs with a sentinel struct
+at the end of the list. The list of method definitions are then passed to the `PyModuleDef` struct,
+which contains the necessary information to construct the module. 
 
 The method table is a list of `PyMethodDef` structs, which have the following four fields:
 
@@ -374,7 +457,8 @@ After creating the module definition structure, it can then be passed into the m
 #### Module Creation 
 The module initialization function will create and return the module object directly. 
 
-To initialize a module, write the `PyInit_{modulename}` function, which calls and returns the value of `PyModule_Create`. See example below: 
+To initialize a module, write the `PyInit_{modulename}` function, which calls and returns the value
+of `PyModule_Create`. See example below: 
 
 #### Creating Extension Module 
 ```
@@ -386,38 +470,49 @@ PyInit_pvc(void)
 ```
 
 ### `constants_generator.py`
-The purpose of the `constants_generator.py` file is to easily construct a new `constants.py` data file should the file become tainted or a new version of PVCAM is released. 
+The purpose of the `constants_generator.py` file is to easily construct a new `constants.py` data
+file should the file become tainted or a new version of PVCAM is released. 
 
-The script targets three main parts of the header file: the predefined macros, the enums, and the structs.
+The script targets three main parts of the header file: the predefined macros, the enums,
+and the structs.
 
 #### Requirements 
-The constants generator targets the installation location of the PVCAM SDK on your machine, meaning that the script will fail to run if you do not have the SDK installed. 
+The constants generator targets the installation location of the PVCAM SDK on your machine, meaning
+that the script will fail to run if you do not have the SDK installed. 
 
 #### Running the Script 
-In order to run the script, ensure that you are running it from `/PyVCAM/pyvcam/src/`, or else it will fail to find the correct directory to write the generated `constants.py` file to. 
+In order to run the script, ensure that you are running it from `/PyVCAM/pyvcam/src/`, or else it
+will fail to find the correct directory to write the generated `constants.py` file to. 
 
-The script can be run using the following command when you are in the correct directory: `python constants_generator.py`
+The script can be run using the following command when you are in the correct directory:
+`python constants_generator.py`
 
 ***
 
 ## `tests` Folder
-The `tests` directory contains unit tests to ensure the quality of the code of the module and to also include some basic examples on how to perform basic operations on a camera.
+The `tests` directory contains unit tests to ensure the quality of the code of the module and to
+also include some basic examples on how to perform basic operations on a camera.
 
 ### `change_settings_test.py` (needs `camera_settings.py`) 
-The `change_settings_test.py` is used to show one way of keeping camera settings in one file and importing them to update a camera's settings in another file. 
+The `change_settings_test.py` is used to show one way of keeping camera settings in one file and
+importing them to update a camera's settings in another file. 
 
-This allows the user to quickly change the settings they wish to test on a camera without having to dig through a large testing script and manually changing the settings within it.
+This allows the user to quickly change the settings they wish to test on a camera without having to
+dig through a large testing script and manually changing the settings within it.
 
 **Note:** `camera_settings.py` needs to be included in the same directory in order to run this test.
 
 ### `check_frame_status.py`
-The `check_frame_status.py` is used to demonstrate how to query frame status for both live and sequence acquisition modes. 
+The `check_frame_status.py` is used to demonstrate how to query frame status for both live and
+sequence acquisition modes. 
 
 ### `live_mode.py` 
-The `live_mode.py` is used to demonstrate how to perform live frame acquisition using the advanced frame acquisition features of PyVCAM. 
+The `live_mode.py` is used to demonstrate how to perform live frame acquisition using the advanced
+frame acquisition features of PyVCAM. 
 
 ### `meta_data.py` 
-The `meta_data.py` is used to demonstrate how to enable frame metadata. Metadata is only supported when using the advanced frame acquisition features of PyVCAM. 
+The `meta_data.py` is used to demonstrate how to enable frame metadata. Metadata is only supported
+when using the advanced frame acquisition features of PyVCAM. 
 
 ### `multi_camera.py` 
 The `multi_camera.py` is used to demonstrate how control acquire from multiple cameras simultaneously. 
@@ -426,28 +521,38 @@ The `multi_camera.py` is used to demonstrate how control acquire from multiple c
 The `multi_rois.py` is used to demonstrate how control acquire multiple regions of interest. 
 
 ### `newest_frame.py` 
-The `newest_frame.py` is used to demonstrate how to acquire both the newest frame using the optional parameter to `poll_frame`. 
+The `newest_frame.py` is used to demonstrate how to acquire both the newest frame using the optional
+parameter to `poll_frame`. 
 
 ### `seq_mode.py` 
-The `seq_mode.py` is used to demonstrate how to perform sequence frame acquisition using the advanced frame acquisition features of PyVCAM. 
+The `seq_mode.py` is used to demonstrate how to perform sequence frame acquisition using the
+advanced frame acquisition features of PyVCAM. 
 
 ### `single_image_polling.py` 
-The `single_image_polling.py` is used to demonstrate how to collect single frames from a camera, starting from the detection and opening of an available camera to calling the `get_frame` function. 
+The `single_image_polling.py` is used to demonstrate how to collect single frames from a camera,
+starting from the detection and opening of an available camera to calling the `get_frame` function. 
 
-Note that this test does not display the frame; only saves it locally to a variable and prints a few pixel points from it. If you want an example of how to quickly display a frame, see `single_image_polling_show.py`.
+Note that this test does not display the frame; only saves it locally to a variable and prints a few
+pixel points from it.
+If you want an example of how to quickly display a frame, see `single_image_polling_show.py`.
 
 ### `single_image_polling_show.py`
-The `single_image_polling_show.py` is used to demonstrate how to collect a single frame from a camera and use matplotlib's pyplot subpackage in order to display the captured frame. 
+The `single_image_polling_show.py` is used to demonstrate how to collect a single frame from
+a camera and use matplotlib's pyplot subpackage in order to display the captured frame. 
 
-**Note:** The test reverses the camera's sensor size when reshaping the array. This is because the camera sensor size tuple is row x column, and the shape of a numpy array is specified by column x row. 
+**Note:** The test reverses the camera's sensor size when reshaping the array. This is because the
+camera sensor size tuple is row x column, and the shape of a numpy array is specified by column x row. 
 
 ### `stream_to_disk.py`
-The `stream_to_disk.py` is used to demonstrate how to stream frames directly to disk from a PVCAM C++ call-back. 
+The `stream_to_disk.py` is used to demonstrate how to stream frames directly to disk from
+a PVCAM C++ callback. 
 
 ### `sw_trigger.py` 
-The `sw_trigger.py` is used to demonstrate how to perform a software trigger using two Python threads, one to configure acquisition and one to perform the trigger. 
+The `sw_trigger.py` is used to demonstrate how to perform a software trigger using two Python
+threads, one to configure acquisition and one to perform the trigger. 
 
 ### `test_camera.py`
-The `test_camera.py` contains the unit tests for this module. It tests the getting, setting, and edge cases of all available settings. 
+The `test_camera.py` contains the unit tests for this module. It tests the getting, setting,
+and edge cases of all available settings. 
 
 All unit tests can be run from the command line using the command `python -m unittest discover` 
