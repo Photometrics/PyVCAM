@@ -601,6 +601,7 @@ class Camera:
         """Calls the pvc.get_frame function with the current camera settings.
 
         Parameter:
+            timeout_ms (int): Duration to wait for new frames.
             oldestFrame (bool):
                 Selects whether to return the oldest or newest frame.
                 Only the oldest frame will be popped off the underlying queue of frames.
