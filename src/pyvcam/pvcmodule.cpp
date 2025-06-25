@@ -41,7 +41,7 @@
 // Local constants
 
 static constexpr int NUM_DIMS = 2;
-static constexpr uns16 MAX_ROIS = 15;
+static constexpr uns16 MAX_ROIS = 512; // Max 15 ROIs, but up to 512 centroids
 static constexpr uns32 ALIGNMENT_BOUNDARY = 4096;
 
 // Local types
@@ -75,12 +75,15 @@ class Camera
 public:
     Camera()
     {
+        if (!pl_md_create_frame_struct_cont(&m_mdFrame, MAX_ROIS))
+            throw std::bad_alloc();
     }
 
     ~Camera()
     {
         UnsetStreamToDisk();
         ReleaseAcqBuffer();
+        pl_md_release_frame_struct(m_mdFrame); // Ignore PVCAM errors
     }
 
     bool AllocateAcqBuffer(uns32 frameCount, uns32 frameBytes)
@@ -121,15 +124,6 @@ public:
         m_acqBufferBytes = 0;
         m_frameCount = 0;
         m_frameBytes = 0;
-    }
-
-    void InitializeMetadata()
-    {
-        memset(&m_mdFrame, 0, sizeof(m_mdFrame));
-        memset(&m_mdFrameRoiArray, 0, sizeof(m_mdFrameRoiArray));
-
-        m_mdFrame.roiArray = m_mdFrameRoiArray;
-        m_mdFrame.roiCapacity = MAX_ROIS;
     }
 
     bool SetStreamToDisk(const char* streamToDiskPath)
@@ -278,10 +272,7 @@ public:
     // Metadata objects
     bool m_metadataAvail{ false };
     bool m_metadataEnabled{ false };
-    // TODO: Allocate dynamically in camera open or acq. setup
-    md_frame m_mdFrame{};
-    // TODO: Allocate dynamically in camera open or acq. setup
-    md_frame_roi m_mdFrameRoiArray[MAX_ROIS]{};
+    md_frame* m_mdFrame{ NULL };
 
     // Stream to disk
     FileHandle m_streamFileHandle{ cInvalidFileHandle };
@@ -1061,14 +1052,13 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
 
     if (cam->m_metadataEnabled)
     {
-        cam->InitializeMetadata();
-        if (!pl_md_frame_decode(&cam->m_mdFrame, frame.address, cam->m_frameBytes))
+        if (!pl_md_frame_decode(cam->m_mdFrame, frame.address, cam->m_frameBytes))
         {
             Py_DECREF(pyFrameDict);
             return PvcamError();
         }
 
-        const md_frame_header* pFrameHdr = cam->m_mdFrame.header;
+        const md_frame_header* pFrameHdr = cam->m_mdFrame->header;
 
         PyObject* pyFrameHdrDict = GetNewPyDictFrameHdr(pFrameHdr);
         if (!pyFrameHdrDict)
@@ -1096,8 +1086,8 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
 
         for (uns32 i = 0; i < pFrameHdr->roiCount; i++)
         {
-            const md_frame_roi_header* pRoiHdr = cam->m_mdFrame.roiArray[i].header;
-            void* pRoiData = cam->m_mdFrame.roiArray[i].data;
+            const md_frame_roi_header* pRoiHdr = cam->m_mdFrame->roiArray[i].header;
+            void* pRoiData = cam->m_mdFrame->roiArray[i].data;
 
             PyObject* pyRoiHdr = GetNewPyDictRoiHdr(pRoiHdr);
             if (!pyRoiHdr)
