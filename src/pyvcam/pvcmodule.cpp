@@ -1396,7 +1396,7 @@ static PyObject* pvc_sw_trigger(PyObject* self, PyObject* args)
 
 // Module definition
 
-#define PVC_ADD_METHOD_(name, args, docstring) { #name, pvc_##name, args, docstring }
+#define PVC_ADD_METHOD_(name, args, docstring) { #name, pvc_##name, args, PyDoc_STR(docstring) }
 static PyMethodDef pvcMethods[] = {
 
     PVC_ADD_METHOD_(init_pvcam, METH_NOARGS,
