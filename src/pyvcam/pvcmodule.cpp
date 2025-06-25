@@ -329,67 +329,28 @@ static std::shared_ptr<Camera> GetCamera(int16 hcam)
     return cam;
 }
 
-static void PopulateMetadataFrameHeader(const md_frame_header* pFrameHdr, PyObject* hdrObj)
+/** Sets ValueError on error and returns empty list */
+static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
 {
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("signature"), PyUnicode_FromString(reinterpret_cast<const char*>(&pFrameHdr->signature)));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("version"), PyLong_FromLong(pFrameHdr->version));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("frameNr"), PyLong_FromLong(pFrameHdr->frameNr));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("roiCount"), PyLong_FromLong(pFrameHdr->roiCount));
-
-    if (pFrameHdr->version >= 3)
+    const Py_ssize_t count = PyList_Size(roiListObj);
+    if (count <= 0 || count > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
     {
-        auto pFrameHdrV3 = reinterpret_cast<const md_frame_header_v3*>(pFrameHdr);
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampBOF"), PyLong_FromUnsignedLongLong(pFrameHdrV3->timestampBOF));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampEOF"), PyLong_FromUnsignedLongLong(pFrameHdrV3->timestampEOF));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("exposureTime"), PyLong_FromUnsignedLongLong(pFrameHdrV3->exposureTime));
-    }
-    else
-    {
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampBOF"), PyLong_FromLong(pFrameHdr->timestampBOF));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampEOF"), PyLong_FromLong(pFrameHdr->timestampEOF));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampResNs"), PyLong_FromLong(pFrameHdr->timestampResNs));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("exposureTime"), PyLong_FromLong(pFrameHdr->exposureTime));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("exposureTimeResNs"), PyLong_FromLong(pFrameHdr->exposureTimeResNs));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("roiTimestampResNs"), PyLong_FromLong(pFrameHdr->roiTimestampResNs));
+        PyErr_SetString(PyExc_ValueError, "Invalid ROI count.");
+        return std::vector<rgn_type>();
     }
 
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("bitDepth"), PyLong_FromLong(pFrameHdr->bitDepth));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("colorMask"), PyLong_FromLong(pFrameHdr->colorMask));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("flags"), PyLong_FromLong(pFrameHdr->flags));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pFrameHdr->extendedMdSize));
+    auto ParseError = []() {
+        // Override the error
+        PyErr_SetString(PyExc_ValueError, "Failed to parse ROI members.");
+        return std::vector<rgn_type>();
+    };
 
-    if (pFrameHdr->version >= 2)
+    std::vector<rgn_type> roiArray((size_t)count);
+    for (Py_ssize_t i = 0; i < count; i++)
     {
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("imageFormat"), PyLong_FromLong(pFrameHdr->imageFormat));
-        PyDict_SetItem(hdrObj, PyUnicode_FromString("imageCompression"), PyLong_FromLong(pFrameHdr->imageCompression));
-    }
-}
-
-static void PopulateMetadataRoiHeader(const md_frame_roi_header* pRoiHdr, PyObject* hdrObj)
-{
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("roiNr"), PyLong_FromLong(pRoiHdr->roiNr));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampBOR"), PyLong_FromLong(pRoiHdr->timestampBOR));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("timestampEOR"), PyLong_FromLong(pRoiHdr->timestampEOR));
-
-    PyObject* roi = PyDict_New();
-    PyDict_SetItem(roi, PyUnicode_FromString("s1"), PyLong_FromLong(pRoiHdr->roi.s1));
-    PyDict_SetItem(roi, PyUnicode_FromString("s2"), PyLong_FromLong(pRoiHdr->roi.s2));
-    PyDict_SetItem(roi, PyUnicode_FromString("sbin"), PyLong_FromLong(pRoiHdr->roi.sbin));
-    PyDict_SetItem(roi, PyUnicode_FromString("p1"), PyLong_FromLong(pRoiHdr->roi.p1));
-    PyDict_SetItem(roi, PyUnicode_FromString("p2"), PyLong_FromLong(pRoiHdr->roi.p2));
-    PyDict_SetItem(roi, PyUnicode_FromString("pbin"), PyLong_FromLong(pRoiHdr->roi.pbin));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("roi"), roi);
-
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("flags"), PyLong_FromLong(pRoiHdr->flags));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("extendedMdSize"), PyLong_FromLong(pRoiHdr->extendedMdSize));
-    PyDict_SetItem(hdrObj, PyUnicode_FromString("roiDataSize"), PyLong_FromLong(pRoiHdr->roiDataSize));
-}
-
-static void PopulateRegions(std::vector<rgn_type>& roiArray, PyObject* roiListObj)
-{
-    for (size_t i = 0; i < roiArray.size(); i++)
-    {
-        PyObject* roiObj  = PyList_GetItem(roiListObj, (Py_ssize_t)i);
+        PyObject* roiObj  = PyList_GetItem(roiListObj, i);
+        if (!roiObj)
+            return ParseError();
 
         PyObject* s1Obj   = PyObject_GetAttrString(roiObj, "s1");
         PyObject* s2Obj   = PyObject_GetAttrString(roiObj, "s2");
@@ -397,14 +358,31 @@ static void PopulateRegions(std::vector<rgn_type>& roiArray, PyObject* roiListOb
         PyObject* p1Obj   = PyObject_GetAttrString(roiObj, "p1");
         PyObject* p2Obj   = PyObject_GetAttrString(roiObj, "p2");
         PyObject* pbinObj = PyObject_GetAttrString(roiObj, "pbin");
+        if (!s1Obj || !s2Obj || !sbinObj || !p1Obj || !p2Obj || !pbinObj)
+            return ParseError();
 
-        roiArray[i].s1   = (uns16)PyLong_AsLong(s1Obj);
-        roiArray[i].s2   = (uns16)PyLong_AsLong(s2Obj);
-        roiArray[i].sbin = (uns16)PyLong_AsLong(sbinObj);
-        roiArray[i].p1   = (uns16)PyLong_AsLong(p1Obj);
-        roiArray[i].p2   = (uns16)PyLong_AsLong(p2Obj);
-        roiArray[i].pbin = (uns16)PyLong_AsLong(pbinObj);
+        const long s1   = PyLong_AsLong(s1Obj);
+        const long s2   = PyLong_AsLong(s2Obj);
+        const long sbin = PyLong_AsLong(sbinObj);
+        const long p1   = PyLong_AsLong(p1Obj);
+        const long p2   = PyLong_AsLong(p2Obj);
+        const long pbin = PyLong_AsLong(pbinObj);
+        if (       s1   < 0 || s1   > (long)(std::numeric_limits<uns16>::max)()
+                || s2   < 0 || s2   > (long)(std::numeric_limits<uns16>::max)()
+                || sbin < 1 || sbin > (long)(std::numeric_limits<uns16>::max)()
+                || p1   < 0 || p1   > (long)(std::numeric_limits<uns16>::max)()
+                || p2   < 0 || p2   > (long)(std::numeric_limits<uns16>::max)()
+                || pbin < 1 || pbin > (long)(std::numeric_limits<uns16>::max)())
+            return ParseError();
+
+        roiArray[i].s1   = (uns16)s1;
+        roiArray[i].s2   = (uns16)s2;
+        roiArray[i].sbin = (uns16)sbin;
+        roiArray[i].p1   = (uns16)p1;
+        roiArray[i].p2   = (uns16)p2;
+        roiArray[i].pbin = (uns16)pbin;
     }
+    return roiArray;
 }
 
 static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
@@ -725,15 +703,9 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
                 &expTime, &expMode, &bufferFrameCount, &streamToDiskPath))
         return ParamParseError();
 
-    /* Construct ROI list */
-    const Py_ssize_t roiCount = PyList_Size(roiListObj);
-    if (roiCount <= 0 || roiCount > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
-    {
-        PyErr_SetString(PyExc_ValueError, "Invalid ROI count.");
+    const std::vector<rgn_type> roiArray = PopulateRegions(roiListObj);
+    if (roiArray.empty())
         return NULL;
-    }
-    std::vector<rgn_type> roiArray(roiCount);
-    PopulateRegions(roiArray, roiListObj);
 
     if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
         return PvcamError();
@@ -795,15 +767,9 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
                 &expTime, &expMode, &expTotal))
         return ParamParseError();
 
-    /* Construct ROI list */
-    const Py_ssize_t roiCount = PyList_Size(roiListObj);
-    if (roiCount <= 0 || roiCount > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
-    {
-        PyErr_SetString(PyExc_ValueError, "Invalid ROI count.");
+    const std::vector<rgn_type> roiArray = PopulateRegions(roiListObj);
+    if (roiArray.empty())
         return NULL;
-    }
-    std::vector<rgn_type> roiArray(roiCount);
-    PopulateRegions(roiArray, roiListObj);
 
     if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
         return PvcamError();
@@ -997,70 +963,230 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
 
     // Build Python object for new frame
 
-    PyObject* frameDict = PyDict_New();
-    PyObject* roiDataList = PyList_New(0);
+    auto GetNewPyArrayRoiData = [typenum](const rgn_type& roi, void* data) -> PyObject*
+    {
+        npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
+        npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
+        npy_intp dims[NUM_DIMS] = { h, w };
+        PyObject* pyArray = PyArray_SimpleNewFromData(NUM_DIMS, dims, typenum, data);
+        return pyArray;
+    };
+    auto GetNewPyDictRoiHdr = [](const md_frame_roi_header* pRoiHdr) -> PyObject*
+    {
+        PyObject* pyRoi = Py_BuildValue("{s:H,s:H,s:H,s:H,s:H,s:H}", // dict
+                "s1",   pRoiHdr->roi.s1,
+                "s2",   pRoiHdr->roi.s2,
+                "sbin", pRoiHdr->roi.sbin,
+                "p1",   pRoiHdr->roi.p1,
+                "p2",   pRoiHdr->roi.p2,
+                "pbin", pRoiHdr->roi.pbin);
+        if (!pyRoi)
+            return NULL;
+
+        PyObject* pyDict = Py_BuildValue("{s:H,s:I,s:I,s:N,s:B,s:H,s:I}", // dict
+                "roiNr", pRoiHdr->roiNr,
+                "timestampBOR", pRoiHdr->timestampBOR,
+                "timestampEOR", pRoiHdr->timestampEOR,
+                "roi", pyRoi,
+                "flags", pRoiHdr->flags,
+                "extendedMdSize", pRoiHdr->extendedMdSize,
+                "roiDataSize", pRoiHdr->roiDataSize);
+        if (!pyDict)
+        {
+            Py_DECREF(pyRoi);
+            return NULL;
+        }
+        return pyDict;
+    };
+    auto GetNewPyDictFrameHdr = [](const md_frame_header* pFrameHdr) -> PyObject*
+    {
+        ulong64 timestampBofPs;
+        ulong64 timestampEofPs;
+        ulong64 exposureTimePs;
+        if (pFrameHdr->version >= 3)
+        {
+            auto pFrameHdrV3 = reinterpret_cast<const md_frame_header_v3*>(pFrameHdr);
+            timestampBofPs = pFrameHdrV3->timestampBOF;
+            timestampEofPs = pFrameHdrV3->timestampEOF;
+            exposureTimePs = pFrameHdrV3->exposureTime;
+        }
+        else
+        {
+            timestampBofPs = 1000ULL * pFrameHdr->timestampResNs    * pFrameHdr->timestampBOF;
+            timestampEofPs = 1000ULL * pFrameHdr->timestampResNs    * pFrameHdr->timestampEOF;
+            exposureTimePs = 1000ULL * pFrameHdr->exposureTimeResNs * pFrameHdr->exposureTime;
+        }
+
+        uns8 imageFormat;
+        uns8 imageCompression;
+        if (pFrameHdr->version >= 2)
+        {
+            imageFormat = pFrameHdr->imageFormat;
+            imageCompression = pFrameHdr->imageCompression;
+        }
+        else
+        {
+            imageFormat = (uns8)PL_IMAGE_FORMAT_MONO16;
+            imageCompression = (uns8)PL_IMAGE_COMPRESSION_NONE;
+        }
+
+        PyObject* pyDict = Py_BuildValue(
+                "{s:s,s:B,s:I,s:H,s:K,s:K,s:K,s:B,s:B,s:B,s:H,s:B,s:B}", // dict
+                "signature", reinterpret_cast<const char*>(&pFrameHdr->signature),
+                "version", pFrameHdr->version,
+                "frameNr", pFrameHdr->frameNr,
+                "roiCount", pFrameHdr->roiCount,
+                "timestampBofPs", timestampBofPs,
+                "timestampEofPs", timestampEofPs,
+                "exposureTimePs", exposureTimePs,
+                "bitDepth", pFrameHdr->bitDepth,
+                "colorMask", pFrameHdr->colorMask,
+                "flags", pFrameHdr->flags,
+                "extendedMdSize", pFrameHdr->extendedMdSize,
+                "imageFormat", imageFormat,
+                "imageCompression", imageCompression);
+        return pyDict;
+    };
+
+    // Ensure the typenum is valid Numpy type
+    PyArray_Descr* descr = PyArray_DescrFromType(typenum);
+    if (!descr)
+        return PyErr_Format(PyExc_ValueError, "Invalid NumPy type number: %d", typenum);
+    Py_DECREF(descr);
+
+    PyObject* pyFrameDict = PyDict_New();
+    if (!pyFrameDict)
+        return NULL;
+    PyObject* pyRoiDataList = NULL;
+
     if (cam->m_metadataEnabled)
     {
-        PyObject* frameHeader = PyDict_New();
-        PyObject* roiHeaderList = PyList_New(0);
-        PyObject* metaDict = PyDict_New();
-        PyDict_SetItem(metaDict, PyUnicode_FromString("frame_header"), frameHeader);
-        PyDict_SetItem(metaDict, PyUnicode_FromString("roi_headers"), roiHeaderList);
-        PyDict_SetItem(frameDict, PyUnicode_FromString("meta_data"), metaDict);
-
         cam->InitializeMetadata();
         if (!pl_md_frame_decode(&cam->m_mdFrame, frame.address, cam->m_frameBytes))
+        {
+            Py_DECREF(pyFrameDict);
             return PvcamError();
+        }
 
         const md_frame_header* pFrameHdr = cam->m_mdFrame.header;
 
-        PopulateMetadataFrameHeader(pFrameHdr, frameHeader);
+        PyObject* pyFrameHdrDict = GetNewPyDictFrameHdr(pFrameHdr);
+        if (!pyFrameHdrDict)
+        {
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+
+        PyObject* pyRoiHdrList = PyList_New(pFrameHdr->roiCount);
+        if (!pyRoiHdrList)
+        {
+            Py_DECREF(pyFrameHdrDict);
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+
+        pyRoiDataList = PyList_New(pFrameHdr->roiCount);
+        if (!pyRoiDataList)
+        {
+            Py_DECREF(pyRoiHdrList);
+            Py_DECREF(pyFrameHdrDict);
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
 
         for (uns32 i = 0; i < pFrameHdr->roiCount; i++)
         {
             const md_frame_roi_header* pRoiHdr = cam->m_mdFrame.roiArray[i].header;
-            const rgn_type& roi = pRoiHdr->roi;
+            void* pRoiData = cam->m_mdFrame.roiArray[i].data;
 
-            PyObject* hdrObj = PyDict_New();
-            PopulateMetadataRoiHeader(pRoiHdr, hdrObj);
-            PyList_Append(roiHeaderList, hdrObj);
+            PyObject* pyRoiHdr = GetNewPyDictRoiHdr(pRoiHdr);
+            if (!pyRoiHdr)
+            {
+                Py_DECREF(pyRoiDataList);
+                Py_DECREF(pyRoiHdrList);
+                Py_DECREF(pyFrameHdrDict);
+                Py_DECREF(pyFrameDict);
+                return NULL;
+            }
+            PyList_SET_ITEM(pyRoiHdrList, (Py_ssize_t)i, pyRoiHdr);
 
-            npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
-            npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
-            npy_intp dims[NUM_DIMS] = { h, w };
-            PyObject* numpyFrame = PyArray_SimpleNewFromData(
-                    NUM_DIMS, dims, typenum, cam->m_mdFrame.roiArray[i].data);
-            PyList_Append(roiDataList, numpyFrame);
+            PyObject* pyRoiData = GetNewPyArrayRoiData(pRoiHdr->roi, pRoiData);
+            if (!pyRoiData)
+            {
+                Py_DECREF(pyRoiDataList);
+                Py_DECREF(pyRoiHdrList);
+                Py_DECREF(pyFrameHdrDict);
+                Py_DECREF(pyFrameDict);
+                return NULL;
+            }
+            PyList_SET_ITEM(pyRoiDataList, (Py_ssize_t)i, pyRoiData);
         }
+
+        PyObject* pyMetaDict = Py_BuildValue("{s:N,s:N}", // dict
+                "frame_header", pyFrameHdrDict,
+                "roi_headers", pyRoiHdrList);
+        if (!pyMetaDict)
+        {
+            Py_DECREF(pyRoiDataList);
+            Py_DECREF(pyRoiHdrList);
+            Py_DECREF(pyFrameHdrDict);
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+
+        if (PyDict_SetItemString(pyFrameDict, "meta_data", pyMetaDict) < 0)
+        {
+            Py_DECREF(pyMetaDict);
+            Py_DECREF(pyRoiDataList);
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+        Py_DECREF(pyMetaDict);
     }
     else
     {
         // Construct ROI list with 1 region only, because metadata is disabled
-        std::vector<rgn_type> roiArray(1);
-        PopulateRegions(roiArray, roiListObj);
-        const rgn_type& roi = roiArray[0];
+        const std::vector<rgn_type> rois = PopulateRegions(roiListObj);
+        if (rois.empty())
+        {
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
 
-        npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
-        npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
-        npy_intp dims[NUM_DIMS] = { h, w };
-        PyObject* numpyFrame = PyArray_SimpleNewFromData(
-                NUM_DIMS, dims, typenum, frame.address);
-        PyList_Append(roiDataList, numpyFrame);
+        pyRoiDataList = PyList_New(1);
+        if (!pyRoiDataList)
+        {
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+
+        PyObject* pyRoiData = GetNewPyArrayRoiData(rois[0], frame.address);
+        if (!pyRoiData)
+        {
+            Py_DECREF(pyRoiDataList);
+            Py_DECREF(pyFrameDict);
+            return NULL;
+        }
+        PyList_SET_ITEM(pyRoiDataList, 0, pyRoiData);
     }
 
-    PyDict_SetItem(frameDict, PyUnicode_FromString("pixel_data"), roiDataList);
+    if (PyDict_SetItemString(pyFrameDict, "pixel_data", pyRoiDataList) < 0)
+    {
+        Py_DECREF(pyRoiDataList);
+        Py_DECREF(pyFrameDict);
+        return NULL;
+    }
+    Py_DECREF(pyRoiDataList);
 
-    PyObject* fps = PyFloat_FromDouble(cam->m_fps);
-    PyObject* frameCount = PyLong_FromLong(frame.count);
-    //PyObject* frameNr = PyLong_FromLong(frame.nr);
+    // Create final tuple (takes ownership of pyFrameDict)
+    PyObject* pyResultTuple = Py_BuildValue("NdI", pyFrameDict, cam->m_fps, frame.count);
+    if (!pyResultTuple)
+    {
+        Py_DECREF(pyFrameDict);
+        return NULL;
+    }
 
-    PyObject* tup = PyTuple_New(3); //PyTuple_New(4);
-    PyTuple_SetItem(tup, 0, frameDict);
-    PyTuple_SetItem(tup, 1, fps);
-    PyTuple_SetItem(tup, 2, frameCount);
-    //PyTuple_SetItem(tup, 3, frameNr);
-
-    return tup;
+    return pyResultTuple;
 }
 
 static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
@@ -1187,7 +1313,7 @@ static PyObject* pvc_read_enum(PyObject* self, PyObject* args)
     if (!pl_get_param(hcam, paramId, ATTR_COUNT, &count))
         return PvcamError();
 
-    PyObject* result = PyDict_New();
+    std::vector<std::pair<std::vector<char>, int32>> items(count);
     for (uns32 i = 0; i < count; i++)
     {
         uns32 strLen;
@@ -1199,12 +1325,33 @@ static PyObject* pvc_read_enum(PyObject* self, PyObject* args)
         if (!pl_get_enum_param(hcam, paramId, i, &value, strBuf.data(), strLen))
             return PvcamError();
 
-        PyObject* pyName = PyUnicode_FromString(strBuf.data());
-        PyObject* pyValue = PyLong_FromSize_t(value);
-        PyDict_SetItem(result, pyName, pyValue);
+        items[i].first = strBuf;
+        items[i].second = value;
     }
 
-    return result;
+    PyObject* pyResultDict = PyDict_New();
+    if (!pyResultDict)
+        return NULL;
+    for (uns32 i = 0; i < count; i++)
+    {
+        const auto& item = items[i];
+        const char* name = item.first.data();
+        PyObject* pyValue = PyLong_FromLong(item.second);
+        if (!pyValue)
+        {
+            Py_DECREF(pyResultDict);
+            return NULL;
+        }
+
+        if (PyDict_SetItemString(pyResultDict, name, pyValue) < 0)
+        {
+            Py_DECREF(pyValue);
+            Py_DECREF(pyResultDict);
+            return NULL;
+        }
+        Py_DECREF(pyValue);
+    }
+    return pyResultDict;
 }
 
 /** Resets all prost-processing features of the open camera. */
