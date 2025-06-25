@@ -290,8 +290,7 @@ std::mutex                               g_cameraMapMutex{};
 /** Helper that always returns NULL and raises ValueError "Invalid parameters." message. */
 static PyObject* ParamParseError()
 {
-    PyErr_SetString(PyExc_ValueError, "Invalid parameters.");
-    return NULL;
+    return PyErr_Format(PyExc_ValueError, "Invalid parameters.");
 }
 
 /** Helper that always returns NULL and raises RuntimeError with PVCAM error message. */
@@ -299,8 +298,7 @@ static PyObject* PvcamError()
 {
     char errMsg[ERROR_MSG_LEN] = "<UNKNOWN ERROR>";
     pl_error_message(pl_error_code(), errMsg); // Ignore PVCAM error
-    PyErr_SetString(PyExc_RuntimeError, errMsg);
-    return NULL;
+    return PyErr_Format(PyExc_RuntimeError, errMsg);
 }
 
 /** Helper that returns Camera instance from global map, or NULL if doesn't exist. */
@@ -312,9 +310,9 @@ static std::shared_ptr<Camera> GetCamera(int16 hcam)
         std::lock_guard<std::mutex> lock(g_cameraMapMutex);
         cam = g_cameraMap.at(hcam);
     }
-    catch (const std::out_of_range& /*ex*/)
+    catch (const std::out_of_range& ex)
     {
-        PyErr_SetString(PyExc_KeyError, "Invalid camera handle.");
+        PyErr_Format(PyExc_KeyError, "Invalid camera handle (%s).", ex.what());
         return NULL;
     }
     return cam;
@@ -326,13 +324,13 @@ static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
     const Py_ssize_t count = PyList_Size(roiListObj);
     if (count <= 0 || count > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
     {
-        PyErr_SetString(PyExc_ValueError, "Invalid ROI count.");
+        PyErr_Format(PyExc_ValueError, "Invalid ROI count (%zd).", count);
         return std::vector<rgn_type>();
     }
 
     auto ParseError = []() {
         // Override the error
-        PyErr_SetString(PyExc_ValueError, "Failed to parse ROI members.");
+        PyErr_Format(PyExc_ValueError, "Failed to parse ROI members.");
         return std::vector<rgn_type>();
     };
 
@@ -412,7 +410,7 @@ static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
     if (!pl_exp_get_latest_frame_ex(pFrameInfo->hCam, &address, &fi))
     {
         // TODO: Will it be propagated to other threads?
-        PyErr_SetString(PyExc_RuntimeError, "Failed to get latest frame");
+        PyErr_Format(PyExc_RuntimeError, "Failed to get latest frame");
         return;
     }
 
@@ -530,11 +528,11 @@ static PyObject* pvc_open_camera(PyObject* self, PyObject* args)
     {
         cam = std::make_shared<Camera>();
     }
-    catch (const std::bad_alloc& /*ex*/)
+    catch (const std::bad_alloc& ex)
     {
         pl_cam_close(hcam); // Ignore PVCAM errors
-        PyErr_SetString(PyExc_MemoryError, "Unable to allocate new Camera instance.");
-        return NULL;
+        return PyErr_Format(PyExc_MemoryError,
+                "Unable to allocate new Camera instance (%s).", ex.what());
     }
 
     rs_bool avail;
@@ -585,10 +583,9 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
     if (!avail)
-    {
-        PyErr_SetString(PyExc_AttributeError, "Invalid setting for this camera.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_AttributeError,
+                "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
+                paramId);
 
     uns16 paramType;
     if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
@@ -634,8 +631,8 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
         break;
     }
 
-    PyErr_SetString(PyExc_RuntimeError, "Failed to match parameter type");
-    return NULL;
+    return PyErr_Format(PyExc_RuntimeError,
+            "Failed to match parameter type (%u).", (uns32)paramType);
 }
 
 /** Sets a specified parameter to a given value. */
@@ -652,10 +649,9 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
     if (!avail)
-    {
-        PyErr_SetString(PyExc_AttributeError, "Invalid setting for this camera.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_AttributeError,
+                "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
+                paramId);
 
     if (!pl_set_param(hcam, paramId, &paramValue))
         return PvcamError();
@@ -721,16 +717,13 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     }
 
     if (!cam->AllocateAcqBuffer(bufferFrameCount, frameBytes))
-    {
-        PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_MemoryError,
+                "Unable to allocate acquisition buffer for %u frame %u bytes each.",
+                bufferFrameCount, frameBytes);
 
     if (!cam->SetStreamToDisk(streamToDiskPath))
-    {
-        PyErr_SetString(PyExc_MemoryError, "Unable to set stream to disk. Check file path.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_MemoryError,
+                "Unable to set stream to disk to path '%s'.", streamToDiskPath);
 
     cam->m_acqQueue.swap(std::queue<Frame>());
     cam->m_acqQueueCapacity = bufferFrameCount;
@@ -786,10 +779,9 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     }
 
     if (!cam->AllocateAcqBuffer(expTotal, frameBytes))
-    {
-        PyErr_SetString(PyExc_MemoryError, "Unable to allocate acquisition buffer.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_MemoryError,
+                "Unable to allocate acquisition buffer for %u frame %u bytes each.",
+                (uns32)expTotal, frameBytes);
 
     cam->m_acqQueue.swap(std::queue<Frame>());
     cam->m_acqQueueCapacity = expTotal;
@@ -846,8 +838,8 @@ static PyObject* pvc_check_frame_status(PyObject* self, PyObject* args)
     case READOUT_FAILED:
         return PyUnicode_FromString("READOUT_FAILED");
     default:
-        PyErr_SetString(PyExc_ValueError, "Unrecognized frame status.");
-        return NULL;
+        return PyErr_Format(PyExc_ValueError,
+                "Unrecognized frame status (%d).", (int32)status);
     }
 }
 
@@ -911,29 +903,25 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
     if (status == READOUT_FAILED)
     {
         cam->m_acqNewFrame = false;
-        PyErr_SetString(PyExc_RuntimeError, "Frame readout failed.");
-        return NULL;
+        return PyErr_Format(PyExc_RuntimeError, "Frame readout failed.");
     }
     if (status == READOUT_NOT_ACTIVE)
     {
         cam->m_acqNewFrame = false;
-        PyErr_SetString(PyExc_RuntimeError, "Acquisition not active.");
-        return NULL;
+        return PyErr_Format(PyExc_RuntimeError, "Acquisition not active.");
     }
     if (cam->m_acqAbort)
     {
         cam->m_acqAbort = false;
         cam->m_acqNewFrame = false;
-        PyErr_SetString(PyExc_RuntimeError, "Acquisition aborted.");
-        return NULL;
+        return PyErr_Format(PyExc_RuntimeError, "Acquisition aborted.");
     }
     if (!cam->m_acqNewFrame)
     {
         cam->m_acqAbort = false;
-        PyErr_SetString(PyExc_RuntimeError, "Frame timeout."
+        return PyErr_Format(PyExc_RuntimeError, "Frame timeout."
                 " Verify the timeout exceeds the exposure time."
                 " If applicable, check external trigger source.");
-        return NULL;
     }
 
     Frame frame;
@@ -1294,10 +1282,9 @@ static PyObject* pvc_read_enum(PyObject* self, PyObject* args)
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
     if (!avail)
-    {
-        PyErr_SetString(PyExc_AttributeError, "Invalid setting for camera.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_AttributeError,
+                "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
+                paramId);
 
     uns32 count;
     if (!pl_get_param(hcam, paramId, ATTR_COUNT, &count))
@@ -1367,19 +1354,13 @@ static PyObject* pvc_sw_trigger(PyObject* self, PyObject* args)
     uns32 flags = 0;
     uns32 value = 0;
     if (!pl_exp_trigger(hcam, &flags, value))
-    //    return PvcamError();
-    {
+        //return PvcamError();
         // TODO: This should be rather RuntimeError
-        PyErr_SetString(PyExc_ValueError, "Failed to deliver software trigger.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_ValueError, "Failed to deliver software trigger.");
 
     if (flags != PL_SW_TRIG_STATUS_TRIGGERED)
-    {
         // TODO: This should be rather RuntimeError
-        PyErr_SetString(PyExc_ValueError, "Failed to perform software trigger.");
-        return NULL;
-    }
+        return PyErr_Format(PyExc_ValueError, "Failed to perform software trigger.");
 
     Py_RETURN_NONE;
 }
