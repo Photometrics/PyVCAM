@@ -65,8 +65,9 @@ def main():
     # Read out meta data from stored frames
     pixels_per_frame = WIDTH * HEIGHT
     bytes_per_frame_unpadded = pixels_per_frame * bytes_per_pixel + METADATA_SIZE
+    # frame_pad must be in range from 0 to FRAME_ALIGNMENT-1
     frame_pad = 0 if FRAME_ALIGNMENT == 0 \
-        else FRAME_ALIGNMENT - (bytes_per_frame_unpadded % FRAME_ALIGNMENT)
+        else (FRAME_ALIGNMENT - (bytes_per_frame_unpadded % FRAME_ALIGNMENT)) % FRAME_ALIGNMENT
     bytes_per_frame = bytes_per_frame_unpadded + frame_pad
     frame_buffer_alignment_pad = FRAME_BUFFER_ALIGNMENT \
         - ((BUFFER_FRAME_COUNT * bytes_per_frame) % FRAME_BUFFER_ALIGNMENT)
