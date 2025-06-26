@@ -304,7 +304,7 @@ class Camera:
 
             num_speeds = self.get_param(const.PARAM_SPDTAB_INDEX, const.ATTR_COUNT)
             for speed_index in range(num_speeds):
-                self.speed_table_index = speed_index
+                self.speed = speed_index
 
                 speed_name = self.speed_name
 
@@ -333,7 +333,7 @@ class Camera:
 
         # Reset speed table back to default
         self.readout_port = 0
-        self.speed_table_index = 0
+        self.speed = 0
         self.gain = 1
 
         # Learn post-processing features
@@ -1000,11 +1000,11 @@ class Camera:
         self._set_dtype()
 
     @property
-    def speed_table_index(self):
+    def speed(self):
         return self.get_param(const.PARAM_SPDTAB_INDEX)
 
-    @speed_table_index.setter
-    def speed_table_index(self, value):
+    @speed.setter
+    def speed(self, value):
         num_entries = self.get_param(const.PARAM_SPDTAB_INDEX,
                                      const.ATTR_COUNT)
         if value >= num_entries:
@@ -1014,10 +1014,20 @@ class Camera:
         self._set_dtype()
 
     @property
+    @deprecated("Use 'speed' property instead")
+    def speed_table_index(self):
+        return self.speed
+
+    @speed_table_index.setter
+    @deprecated("Use 'speed' property instead")
+    def speed_table_index(self, value):
+        self.speed = value
+
+    @property
     def speed_name(self):
         if self.__has_speed_name:
             return self.get_param(const.PARAM_SPDTAB_NAME)
-        return f'Speed_{self.speed_table_index}'
+        return f'Speed_{self.speed}'
 
     @property
     def trigger_table(self):

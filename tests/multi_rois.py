@@ -14,10 +14,17 @@ def main():
     cam.open()
     print(f'Camera: {cam.name}')
 
-    cam.metadata_enabled = True
+    # When changing anything in speed table it is strongly recommended to set
+    # all 3 properties (readout_port, speed, gain) in predefined order.
+    # After changing `readout_port` re-apply the value of `speed`.
+    # After changing `speed` re-apply the `gain` value.
 
-    # Kinetix supports multiple ROIs on HDR port only
+    # Kinetix supports multiple ROIs on HDR port only.
     # cam.readout_port = 'Dynamic Range'
+    # cam.speed = 0
+    # cam.gain = 1
+
+    cam.metadata_enabled = True
 
     max_roi_count = cam.get_param(const.PARAM_ROI_COUNT, const.ATTR_MAX)
     cam.set_roi(0, 0, 250, 250)

@@ -127,35 +127,35 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.test_cam.readout_port = 0
 
-    def test_get_speed_table_index(self):
+    def test_get_speed(self):
         self.test_cam.open()
         spdtab_index = pvc.get_param(self.test_cam.handle,
                                      const.PARAM_SPDTAB_INDEX,
                                      const.ATTR_CURRENT)
-        self.assertEqual(spdtab_index, self.test_cam.speed_table_index)
+        self.assertEqual(spdtab_index, self.test_cam.speed)
 
-    def test_get_speed_table_index_no_open_fail(self):
+    def test_get_speed_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            _ = self.test_cam.speed_table_index
+            _ = self.test_cam.speed
 
-    def test_set_speed_table_index(self):
+    def test_set_speed(self):
         self.test_cam.open()
         num_entries = self.test_cam.get_param(const.PARAM_SPDTAB_INDEX,
                                               const.ATTR_COUNT)
         for i in range(num_entries):
-            self.test_cam.speed_table_index = i
-            self.assertEqual(i, self.test_cam.speed_table_index)
+            self.test_cam.speed = i
+            self.assertEqual(i, self.test_cam.speed)
 
-    def test_set_speed_table_index_out_of_bounds(self):
+    def test_set__out_of_bounds(self):
         self.test_cam.open()
         num_entries = self.test_cam.get_param(const.PARAM_SPDTAB_INDEX,
                                               const.ATTR_COUNT)
         with self.assertRaises(ValueError):
-            self.test_cam.speed_table_index = num_entries
+            self.test_cam.speed = num_entries
 
-    def test_set_speed_table_index_no_open_fail(self):
+    def test_set_speed_no_open_fail(self):
         with self.assertRaises(RuntimeError):
-            self.test_cam.speed_table_index = 0
+            self.test_cam.speed = 0
 
     def test_get_speed_name(self):
         self.test_cam.open()

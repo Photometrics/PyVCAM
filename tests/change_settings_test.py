@@ -10,12 +10,12 @@ from pyvcam import pvc
 from pyvcam.camera import Camera
 
 
-def print_settings(camera):
-    print(f"  Clear mode: {camera.clear_mode} '{camera.clear_modes[camera.clear_mode]}'")
-    print(f"  Exposure mode: {camera.exp_mode} '{camera.exp_modes[camera.exp_mode]}'")
-    print(f"  Readout port: {camera.readout_port} '{camera.readout_ports[camera.readout_port]}'")
-    print(f"  Speed: {camera.speed_table_index} '{camera.speed_name}'")
-    print(f"  Gain: {camera.gain} '{camera.gain_name}'")
+def print_settings(cam):
+    print(f"  Clear mode: {cam.clear_mode} '{cam.clear_modes[cam.clear_mode]}'")
+    print(f"  Exposure mode: {cam.exp_mode} '{cam.exp_modes[cam.exp_mode]}'")
+    print(f"  Readout port: {cam.readout_port} '{cam.readout_ports[cam.readout_port]}'")
+    print(f"  Speed: {cam.speed} '{cam.speed_name}'")
+    print(f"  Gain: {cam.gain} '{cam.gain_name}'")
 
 
 def main():
@@ -23,23 +23,23 @@ def main():
     pvc.init_pvcam()
 
     # Find the first available camera.
-    camera = next(Camera.detect_camera())
-    camera.open()
+    cam = next(Camera.detect_camera())
+    cam.open()
 
     # Show camera name and speed table.
-    print(camera)
+    print(cam)
 
     print("\nBefore changing settings:")
-    print_settings(camera)
+    print_settings(cam)
 
     # Change the camera settings from the separate file.
-    apply_settings(camera)
+    apply_settings(cam)
 
     print("\nAfter changing settings:")
-    print_settings(camera)
+    print_settings(cam)
 
     # Cleanup before exit
-    camera.close()
+    cam.close()
     pvc.uninit_pvcam()
 
 
