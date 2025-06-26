@@ -153,6 +153,8 @@ class Camera:
             Camera.ReversibleEnumDict('exp_out_modes')
         self.__exp_resolutions: Camera.ReversibleEnumDict = \
             Camera.ReversibleEnumDict('exp_resolutions')
+        self.__fan_speeds: Camera.ReversibleEnumDict = \
+            Camera.ReversibleEnumDict('fan_speeds')
         self.__prog_scan_modes: Camera.ReversibleEnumDict = \
             Camera.ReversibleEnumDict('prog_scan_modes')
         self.__prog_scan_dirs: Camera.ReversibleEnumDict = \
@@ -288,6 +290,8 @@ class Camera:
             'exp_out_modes', self, const.PARAM_EXPOSE_OUT_MODE)
         self.__exp_resolutions = Camera.ReversibleEnumDict(
             'exp_resolutions', self, const.PARAM_EXP_RES)
+        self.__fan_speeds = Camera.ReversibleEnumDict(
+            'fan_speeds', self, const.PARAM_FAN_SPEED_SETPOINT)
         self.__prog_scan_modes = Camera.ReversibleEnumDict(
             'prog_scan_modes', self, const.PARAM_SCAN_MODE)
         self.__prog_scan_dirs = Camera.ReversibleEnumDict(
@@ -403,6 +407,7 @@ class Camera:
             self.__exp_modes = Camera.ReversibleEnumDict('exp_modes')
             self.__exp_out_modes = Camera.ReversibleEnumDict('exp_out_modes')
             self.__exp_resolutions = Camera.ReversibleEnumDict('exp_resolutions')
+            self.__fan_speeds = Camera.ReversibleEnumDict('fan_speeds')
             self.__prog_scan_modes = Camera.ReversibleEnumDict('prog_scan_modes')
             self.__prog_scan_dirs = Camera.ReversibleEnumDict('prog_scan_dirs')
             self.__port_speed_gain_table = {}
@@ -924,6 +929,10 @@ class Camera:
         return self.__exp_resolutions
 
     @property
+    def fan_speeds(self):
+        return self.__fan_speeds
+
+    @property
     def prog_scan_modes(self):
         return self.__prog_scan_modes
 
@@ -1260,6 +1269,24 @@ class Camera:
         _ = self.__clear_modes[value]
 
         self.set_param(const.PARAM_CLEAR_MODE, value)
+
+    @property
+    def fan_speed(self):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        return self.get_param(const.PARAM_FAN_SPEED_SETPOINT)
+
+    @fan_speed.setter
+    def fan_speed(self, key_or_value):
+        # Camera specific setting: will raise AttributeError if called with a
+        # camera that does not support this setting.
+        # Will raise ValueError if provided with an unrecognized key.
+        value = self.__fan_speeds[key_or_value] if isinstance(key_or_value, str) \
+            else key_or_value
+        # Verify value is in range by attempting to look up the key
+        _ = self.__fan_speeds[value]
+
+        self.set_param(const.PARAM_FAN_SPEED_SETPOINT, value)
 
     @property
     def temp(self):

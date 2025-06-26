@@ -1,6 +1,6 @@
 [project]
 name = "PyVCAM"
-version = "2.2.2"
+version = "2.2.3"
 description = "Python wrapper for PVCAM functionality"
 authors = [
     {name = "Teledyne Photometrics", email = "photometrics.support@teledyne.com"},

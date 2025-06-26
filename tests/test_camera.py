@@ -314,6 +314,54 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.test_cam.clear_mode = -1
 
+    def test_get_fan_speed(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_FAN_SPEED_SETPOINT):
+            curr_fan_speed = pvc.get_param(self.test_cam.handle,
+                                           const.PARAM_FAN_SPEED_SETPOINT,
+                                           const.ATTR_CURRENT)
+            self.assertEqual(curr_fan_speed, self.test_cam.fan_speed)
+
+    def test_get_fan_speed_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            _ = self.test_cam.fan_speed
+
+    def test_set_fan_speed_by_name(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_FAN_SPEED_SETPOINT):
+            for name, _ in self.test_cam.fan_speeds.items():
+                self.test_cam.fan_speed = name
+                curr_fan_speed = pvc.get_param(self.test_cam.handle,
+                                               const.PARAM_FAN_SPEED_SETPOINT,
+                                               const.ATTR_CURRENT)
+                self.assertEqual(curr_fan_speed, self.test_cam.fan_speed)
+
+    def test_set_fan_speed_by_value(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_FAN_SPEED_SETPOINT):
+            for _, value in self.test_cam.fan_speeds.items():
+                self.test_cam.fan_speed = value
+                curr_fan_speed = pvc.get_param(self.test_cam.handle,
+                                               const.PARAM_FAN_SPEED_SETPOINT,
+                                               const.ATTR_CURRENT)
+                self.assertEqual(curr_fan_speed, self.test_cam.fan_speed)
+
+    def test_set_fan_speed_bad_name_fail(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_FAN_SPEED_SETPOINT):
+            with self.assertRaises(ValueError):
+                self.test_cam.fan_speed = ''
+
+    def test_set_fan_speed_bad_value_fail(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_FAN_SPEED_SETPOINT):
+            with self.assertRaises(ValueError):
+                self.test_cam.fan_speed = -1
+
+    def test_set_fan_speed_no_open_fail(self):
+        with self.assertRaises(RuntimeError):
+            self.test_cam.fan_speed = 0
+
     def test_get_temp(self):
         self.test_cam.open()
         curr_temp = pvc.get_param(self.test_cam.handle,
