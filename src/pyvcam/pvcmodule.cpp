@@ -849,10 +849,11 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
     PyObject* roiListObj;
     int typenum; // Numpy typenum specifying data type for image data
     int timeoutMs; // Poll frame timeout in ms, negative values will wait forever
-    bool oldestFrame;
-    if (!PyArg_ParseTuple(args, "hO!iip", &hcam, &PyList_Type, &roiListObj,
-                &typenum, &timeoutMs, &oldestFrame))
+    int oldestFrameInt; // Must be int, "p" format for bool breaks other args
+    if (!PyArg_ParseTuple(args, "hO!iii", &hcam, &PyList_Type, &roiListObj,
+                &typenum, &timeoutMs, &oldestFrameInt))
         return ParamParseError();
+    bool oldestFrame = (bool)oldestFrameInt;
 
     std::shared_ptr<Camera> cam = GetCamera(hcam);
     if (!cam)
