@@ -694,7 +694,7 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     if (roiArray.empty())
         return NULL;
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
         return PvcamError();
 
     uns32 frameBytes;
@@ -725,7 +725,7 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
         return PyErr_Format(PyExc_MemoryError,
                 "Unable to set stream to disk to path '%s'.", streamToDiskPath);
 
-    cam->m_acqQueue.swap(std::queue<Frame>());
+    std::queue<Frame>().swap(cam->m_acqQueue);
     cam->m_acqQueueCapacity = bufferFrameCount;
     cam->m_acqAbort = false;
     cam->m_acqNewFrame = false;;
@@ -755,7 +755,7 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     if (roiArray.empty())
         return NULL;
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, NewFrameHandler, NULL))
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
         return PvcamError();
 
     uns32 acqBufferBytes;
@@ -783,7 +783,7 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
                 "Unable to allocate acquisition buffer for %u frame %u bytes each.",
                 (uns32)expTotal, frameBytes);
 
-    cam->m_acqQueue.swap(std::queue<Frame>());
+    std::queue<Frame>().swap(cam->m_acqQueue);
     cam->m_acqQueueCapacity = expTotal;
     cam->m_acqAbort = false;
     cam->m_acqNewFrame = false;
@@ -1180,7 +1180,7 @@ static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
     std::lock_guard<std::mutex> lock(cam->m_mutex);
 
     // Also internally aborts the acquisition if necessary
-    if (!pl_exp_finish_seq(hcam, cam->m_acqBuffer, NULL))
+    if (!pl_exp_finish_seq(hcam, cam->m_acqBuffer, 0))
         return PvcamError();
 
     if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
