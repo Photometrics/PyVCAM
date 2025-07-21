@@ -36,8 +36,8 @@ class TriggerThreadRun(threading.Thread):
             self.pixel_data = cv2.resize(frame['pixel_data'], self.dim,
                                          interpolation=cv2.INTER_AREA)
             # Cannot init windows from non-GUI threads
-            #cv2.imshow(self.cam.name, self.pixel_data)
-            #cv2.waitKey(10)
+            # cv2.imshow(self.cam.name, self.pixel_data)
+            # cv2.waitKey(10)
 
             self.append_output(f'Camera: {self.cam.name}\tFrame Rate: {fps:5.1f}'
                                f'  Frames: {frame_count:3}  Returned Count: {cnt:3}')
@@ -93,7 +93,7 @@ def main():
         print('To exit, close any image window, or press any key while an image window focused...')
         close = False
         while not close:
-            for c, camera_name in enumerate(camera_names):
+            for camera_name in camera_names:
                 if cv2.getWindowProperty(camera_name, cv2.WND_PROP_VISIBLE) < 1:
                     close = True
                     break
