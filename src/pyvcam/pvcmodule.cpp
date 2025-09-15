@@ -268,6 +268,7 @@ public:
     bool m_acqAbort{ false };
     bool m_acqNewFrame{ false };
     uns32 m_acqFrameCnt{ 0 };
+    std::string m_acqCbError{};
 
     // Metadata objects
     bool m_metadataAvail{ false };
@@ -302,7 +303,7 @@ static PyObject* PvcamError()
 }
 
 /** Helper that returns Camera instance from global map, or NULL if doesn't exist. */
-static std::shared_ptr<Camera> GetCamera(int16 hcam)
+static std::shared_ptr<Camera> GetCamera(int16 hcam, bool setPyErr = true)
 {
     std::shared_ptr<Camera> cam;
     try
@@ -312,7 +313,8 @@ static std::shared_ptr<Camera> GetCamera(int16 hcam)
     }
     catch (const std::out_of_range& ex)
     {
-        PyErr_Format(PyExc_KeyError, "Invalid camera handle (%s).", ex.what());
+        if (setPyErr)
+            PyErr_Format(PyExc_KeyError, "Invalid camera handle (%s).", ex.what());
         return NULL;
     }
     return cam;
@@ -376,14 +378,14 @@ static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
 
 static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
 {
-    std::shared_ptr<Camera> cam = GetCamera(pFrameInfo->hCam);
+    std::shared_ptr<Camera> cam = GetCamera(pFrameInfo->hCam, false);
     if (!cam)
     {
         printf("pvc.NewFrameHandler: Invalid camera instance key.\n");
-        return;
+        return; // No 'cam' means no mutex lock and no notify_all
     }
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
+    std::unique_lock<std::mutex> lock(cam->m_mutex);
 
     cam->m_acqFrameCnt++;
     //printf("New frame callback. Frame count %u\n", cam->m_acqFrameCnt);
@@ -405,12 +407,19 @@ static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
         }
     }
 
+    lock.unlock();
+
     void* address;
     FRAME_INFO fi;
-    if (!pl_exp_get_latest_frame_ex(pFrameInfo->hCam, &address, &fi))
+    const rs_bool getLatestFrameResult =
+        pl_exp_get_latest_frame_ex(pFrameInfo->hCam, &address, &fi);
+
+    lock.lock();
+
+    if (!getLatestFrameResult)
     {
-        // TODO: Will it be propagated to other threads?
-        PyErr_Format(PyExc_RuntimeError, "Failed to get latest frame");
+        cam->m_acqCbError = "Failed to get latest frame from PVCAM.";
+        cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
         return;
     }
 
@@ -710,9 +719,14 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
 
     if (cam->m_metadataAvail)
     {
+        lock.unlock();
+
         rs_bool cur;
         if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
             return PvcamError();
+
+        lock.lock();
+
         cam->m_metadataEnabled = cur != FALSE;
     }
 
@@ -728,12 +742,18 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     std::queue<Frame>().swap(cam->m_acqQueue);
     cam->m_acqQueueCapacity = bufferFrameCount;
     cam->m_acqAbort = false;
-    cam->m_acqNewFrame = false;;
+    cam->m_acqNewFrame = false;
     cam->m_isSequence = false;
     cam->m_fpsFrameCnt = 0;
     cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
+    cam->m_acqCbError.clear();
 
-    if (!pl_exp_start_cont(hcam, cam->m_acqBuffer, cam->m_acqBufferBytes))
+    void* acqBuffer = cam->m_acqBuffer;
+    uns32 acqBufferBytes = cam->m_acqBufferBytes;
+
+    lock.unlock();
+
+    if (!pl_exp_start_cont(hcam, acqBuffer, acqBufferBytes))
         return PvcamError();
 
     return PyLong_FromUnsignedLong(frameBytes);
@@ -768,13 +788,18 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     if (!cam)
         return NULL;
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
+    std::unique_lock<std::mutex> lock(cam->m_mutex);
 
     if (cam->m_metadataAvail)
     {
+        lock.unlock();
+
         rs_bool cur;
         if (!pl_get_param(hcam, PARAM_METADATA_ENABLED, ATTR_CURRENT, &cur))
             return PvcamError();
+
+        lock.lock();
+
         cam->m_metadataEnabled = cur != FALSE;
     }
 
@@ -790,8 +815,13 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     cam->m_isSequence = true;
     cam->m_fpsFrameCnt = 0;
     cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
+    cam->m_acqCbError.clear();
 
-    if (!pl_exp_start_seq(hcam, cam->m_acqBuffer))
+    void* acqBuffer = cam->m_acqBuffer;
+
+    lock.unlock();
+
+    if (!pl_exp_start_seq(hcam, acqBuffer))
         return PvcamError();
 
     return PyLong_FromUnsignedLong(frameBytes);
@@ -808,20 +838,19 @@ static PyObject* pvc_check_frame_status(PyObject* self, PyObject* args)
     if (!cam)
         return NULL;
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
+    bool isSequence = false;
+    {
+        std::lock_guard<std::mutex> lock(cam->m_mutex);
+        isSequence = cam->m_isSequence;
+    }
 
     int16 status;
     uns32 dummy;
-    if (cam->m_isSequence)
-    {
-        if (!pl_exp_check_status(hcam, &status, &dummy))
-            return PvcamError();
-    }
-    else
-    {
-        if (!pl_exp_check_cont_status(hcam, &status, &dummy, &dummy))
-            return PvcamError();
-    }
+    const rs_bool checkStatusResult = (isSequence)
+        ? pl_exp_check_status(hcam, &status, &dummy)
+        : pl_exp_check_cont_status(hcam, &status, &dummy, &dummy);
+    if (!checkStatusResult)
+        return PvcamError();
 
     switch (status)
     {
@@ -832,7 +861,7 @@ static PyObject* pvc_check_frame_status(PyObject* self, PyObject* args)
     case READOUT_IN_PROGRESS:
         return PyUnicode_FromString("READOUT_IN_PROGRESS");
     case FRAME_AVAILABLE:
-        return (cam->m_isSequence)
+        return (isSequence)
             ? PyUnicode_FromString("READOUT_COMPLETE")
             : PyUnicode_FromString("FRAME_AVAILABLE");
     case READOUT_FAILED:
@@ -861,9 +890,15 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
 
     std::unique_lock<std::mutex> lock(cam->m_mutex);
 
+    const bool isSequence = cam->m_isSequence;
+
+    lock.unlock();
+
     int16 status;
     uns32 dummy;
-    rs_bool checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
+    rs_bool checkStatusResult = (isSequence)
+        ? pl_exp_check_status(hcam, &status, &dummy)
+        : pl_exp_check_cont_status(hcam, &status, &dummy, &dummy);
 
     if (timeoutMs != 0)
     {
@@ -878,9 +913,12 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
         /* This macro has an open brace and must be paired */
         Py_BEGIN_ALLOW_THREADS
 
+        lock.lock();
+
         // Exit loop if readout finished or failed, new data available,
         // abort occurred or timeout expired
         while (checkStatusResult && !cam->m_acqNewFrame && !cam->m_acqAbort
+                && cam->m_acqCbError.empty()
                 && (status == EXPOSURE_IN_PROGRESS || status == READOUT_IN_PROGRESS))
         {
             const auto now = std::chrono::high_resolution_clock::now();
@@ -890,7 +928,13 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
             auto timeNext = (std::min)(now + timeStep, timeEnd);
             cam->m_acqCond.wait_until(lock, timeNext);
 
-            checkStatusResult = pl_exp_check_status(hcam, &status, &dummy);
+            lock.unlock();
+
+            checkStatusResult = (isSequence)
+                ? pl_exp_check_status(hcam, &status, &dummy)
+                : pl_exp_check_cont_status(hcam, &status, &dummy, &dummy);
+
+            lock.lock();
         }
 
         Py_END_ALLOW_THREADS
@@ -910,6 +954,11 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
     {
         cam->m_acqNewFrame = false;
         return PyErr_Format(PyExc_RuntimeError, "Acquisition not active.");
+    }
+    if (!cam->m_acqCbError.empty())
+    {
+        cam->m_acqNewFrame = false;
+        return PyErr_Format(PyExc_RuntimeError, "%s", cam->m_acqCbError.c_str());
     }
     if (cam->m_acqAbort)
     {
@@ -1178,14 +1227,20 @@ static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
     if (!cam)
         return NULL;
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
+    std::unique_lock<std::mutex> lock(cam->m_mutex);
+
+    void* acqBuffer = cam->m_acqBuffer;
+
+    lock.unlock();
 
     // Also internally aborts the acquisition if necessary
-    if (!pl_exp_finish_seq(hcam, cam->m_acqBuffer, 0))
+    if (!pl_exp_finish_seq(hcam, acqBuffer, 0))
         return PvcamError();
 
     if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
         return PvcamError();
+
+    lock.lock();
 
     cam->m_acqAbort = true;
 
@@ -1207,13 +1262,13 @@ static PyObject* pvc_abort(PyObject* self, PyObject* args)
     if (!cam)
         return NULL;
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
-
     if (!pl_exp_abort(hcam, CCS_HALT))
         return PvcamError();
 
     if (!pl_cam_deregister_callback(hcam, PL_CALLBACK_EOF))
         return PvcamError();
+
+    std::lock_guard<std::mutex> lock(cam->m_mutex);
 
     cam->m_acqAbort = true;
 
