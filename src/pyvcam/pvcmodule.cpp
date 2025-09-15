@@ -715,7 +715,7 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     if (!cam)
         return NULL;
 
-    std::lock_guard<std::mutex> lock(cam->m_mutex);
+    std::unique_lock<std::mutex> lock(cam->m_mutex);
 
     if (cam->m_metadataAvail)
     {
