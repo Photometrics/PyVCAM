@@ -919,7 +919,7 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
         // abort occurred or timeout expired
         while (checkStatusResult && !cam->m_acqNewFrame && !cam->m_acqAbort
                 && cam->m_acqCbError.empty()
-                && (status == EXPOSURE_IN_PROGRESS || status == READOUT_IN_PROGRESS))
+                && status != READOUT_FAILED && status != READOUT_NOT_ACTIVE)
         {
             const auto now = std::chrono::high_resolution_clock::now();
             if (now >= timeEnd)
