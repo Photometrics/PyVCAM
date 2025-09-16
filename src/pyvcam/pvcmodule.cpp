@@ -40,7 +40,6 @@
 
 // Local constants
 
-static constexpr int NUM_DIMS = 2;
 static constexpr uns16 MAX_ROIS = 512; // Max 15 ROIs, but up to 512 centroids
 static constexpr uns32 ALIGNMENT_BOUNDARY = 4096;
 
@@ -1019,12 +1018,52 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
 
     // Build Python object for new frame
 
-    auto GetNewPyArrayRoiData = [typenum](const rgn_type& roi, void* data) -> PyObject*
+    auto GetNewPyArrayRoiData = [typenum](const rgn_type& roi, void* data,
+                                          std::shared_ptr<AcqBuffer> acqBuffer) -> PyObject*
     {
+        // Make heap copy of shared_ptr
+        auto* owner = new(std::nothrow) std::shared_ptr<AcqBuffer>(acqBuffer);
+        if (!owner)
+            return PyErr_Format(PyExc_MemoryError, "Unable to allocate capsule owner");
+
         npy_intp w = (roi.s2 - roi.s1 + 1) / roi.sbin;
         npy_intp h = (roi.p2 - roi.p1 + 1) / roi.pbin;
+        constexpr int NUM_DIMS = 2;
         npy_intp dims[NUM_DIMS] = { h, w };
         PyObject* pyArray = PyArray_SimpleNewFromData(NUM_DIMS, dims, typenum, data);
+        if (!pyArray)
+        {
+            delete owner;
+            return NULL;
+        }
+
+        static constexpr const char* CAPSULE_NAME = "pvc.AcqBuffer";
+
+        auto capsuleDtor = [](PyObject* capsule)
+        {
+            void* ptr = PyCapsule_GetPointer(capsule, CAPSULE_NAME);
+            if (ptr)
+            {
+                auto* sp = reinterpret_cast<std::shared_ptr<AcqBuffer>*>(ptr);
+                delete sp; // Drops refcount, maybe frees buffer if last
+            }
+        };
+
+        PyObject* capsule = PyCapsule_New((void*)owner, CAPSULE_NAME, capsuleDtor);
+        if (!capsule)
+        {
+            Py_DECREF(pyArray);
+            delete owner;
+            return NULL;
+        }
+
+        if (PyArray_SetBaseObject((PyArrayObject*)pyArray, capsule) < 0)
+        {
+            Py_DECREF(capsule); // Calls owner's destructor, drops refcount
+            Py_DECREF(pyArray);
+            return NULL;
+        }
+
         return pyArray;
     };
     auto GetNewPyDictRoiHdr = [](const md_frame_roi_header* pRoiHdr) -> PyObject*
@@ -1165,7 +1204,8 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
             }
             PyList_SET_ITEM(pyRoiHdrList, (Py_ssize_t)i, pyRoiHdr);
 
-            PyObject* pyRoiData = GetNewPyArrayRoiData(pRoiHdr->roi, pRoiData);
+            PyObject* pyRoiData =
+                GetNewPyArrayRoiData(pRoiHdr->roi, pRoiData, cam->m_acqBuffer);
             if (!pyRoiData)
             {
                 Py_DECREF(pyRoiDataList);
@@ -1215,7 +1255,8 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
             return NULL;
         }
 
-        PyObject* pyRoiData = GetNewPyArrayRoiData(rois[0], frame.address);
+        PyObject* pyRoiData =
+            GetNewPyArrayRoiData(rois[0], frame.address, cam->m_acqBuffer);
         if (!pyRoiData)
         {
             Py_DECREF(pyRoiDataList);
