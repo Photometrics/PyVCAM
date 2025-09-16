@@ -46,9 +46,38 @@ static constexpr uns32 ALIGNMENT_BOUNDARY = 4096;
 
 // Local types
 
+struct AcqBuffer
+{
+    AcqBuffer(size_t size)
+        : size(size)
+    {
+        // Always align frameBuffer on a page boundary.
+        // This is required for non-buffered streaming to disk.
+#ifdef _WIN32
+        data = _aligned_malloc(size, ALIGNMENT_BOUNDARY);
+#else
+        data = aligned_alloc(ALIGNMENT_BOUNDARY, size);
+#endif
+        if (!data)
+            throw std::bad_alloc();
+    }
+
+    ~AcqBuffer()
+    {
+#ifdef _WIN32
+        _aligned_free(data);
+#else
+        free(data);
+#endif
+    }
+
+    void* data{ NULL };
+    size_t size;
+};
+
 struct Frame
 {
-    void* address{ NULL };
+    void* address{ NULL }; // Address within AcqBuffer received from PVCAM
     uns32 count{ 0 }; // Frame number that resets after every setup
     uns32 nr{ 0 }; // FrameNr from PVCAM's FRAME_INFO structure
 };
@@ -88,40 +117,35 @@ public:
 
     bool AllocateAcqBuffer(uns32 frameCount, uns32 frameBytes)
     {
-        ReleaseAcqBuffer();
-
-        const uint64_t bufferBytes64 = (uint64_t)frameBytes * frameCount;
         // PVCAM supports buffer up to 4GB only
+        const uint64_t bufferBytes64 = (uint64_t)frameBytes * frameCount;
         if (bufferBytes64 > (std::numeric_limits<uns32>::max)())
             return false;
-        const uns32 bufferBytes = (uns32)bufferBytes64;
 
-        // Always align frameBuffer on a page boundary.
-        // This is required for non-buffered streaming to disk.
-#ifdef _WIN32
-        m_acqBuffer = _aligned_malloc(bufferBytes, ALIGNMENT_BOUNDARY);
-#else
-        m_acqBuffer = aligned_alloc(ALIGNMENT_BOUNDARY, bufferBytes);
-#endif
-        if (!m_acqBuffer)
+        if (m_acqBuffer && m_acqBuffer->size == bufferBytes64)
+            return true; // Already allocated
+
+        ReleaseAcqBuffer();
+
+        try
+        {
+            auto acqBuffer = std::make_shared<AcqBuffer>(bufferBytes64);
+
+            m_acqBuffer = acqBuffer;
+            m_frameCount = frameCount;
+            m_frameBytes = frameBytes;
+        }
+        catch (const std::bad_alloc& /*ex*/)
+        {
             return false;
-
-        m_acqBufferBytes = bufferBytes;
-        m_frameCount = frameCount;
-        m_frameBytes = frameBytes;
+        }
 
         return true;
     }
 
     void ReleaseAcqBuffer()
     {
-#ifdef _WIN32
-        _aligned_free(m_acqBuffer);
-#else
-        free(m_acqBuffer);
-#endif
-        m_acqBuffer = NULL;
-        m_acqBufferBytes = 0;
+        m_acqBuffer.reset(); // Drop buffer ownership
         m_frameCount = 0;
         m_frameBytes = 0;
     }
@@ -178,7 +202,8 @@ public:
         // This routine may fall behind writing the latest data.
         // Attempt to catch up when the frameAddress is ahead of the
         // read index by more than a frame.
-        const uintptr_t availableIndex = (uintptr_t)frameAddress - (uintptr_t)m_acqBuffer;
+        const uintptr_t availableIndex =
+            (uintptr_t)frameAddress - (uintptr_t)m_acqBuffer->data;
         if (availableIndex > m_readIndex)
         {
             if (availableBytes < availableIndex - m_readIndex)
@@ -189,13 +214,13 @@ public:
 
         uns32 bytesToWrite = (availableBytes / ALIGNMENT_BOUNDARY) * ALIGNMENT_BOUNDARY;
         const bool lastFrameInBuffer =
-            (m_acqBufferBytes - (m_readIndex + bytesToWrite)) < ALIGNMENT_BOUNDARY;
+            (m_acqBuffer->size - m_readIndex - bytesToWrite) < ALIGNMENT_BOUNDARY;
         if (lastFrameInBuffer)
         {
             bytesToWrite += ALIGNMENT_BOUNDARY;
         }
 
-        void* alignedFrameData = &(reinterpret_cast<uns8*>(m_acqBuffer)[m_readIndex]);
+        void* alignedFrameData = reinterpret_cast<uns8*>(m_acqBuffer->data) + m_readIndex;
         uns32 bytesWritten = 0;
 #ifdef _WIN32
         ::WriteFile(m_streamFileHandle, alignedFrameData, (DWORD)bytesToWrite,
@@ -223,13 +248,15 @@ public:
 
         if (m_frameResidual != 0)
         {
-            void* alignedFrameData = &(reinterpret_cast<uns8*>(m_acqBuffer)[m_readIndex]);
+            void* alignedFrameData =
+                reinterpret_cast<uns8*>(m_acqBuffer->data) + m_readIndex;
             uns32 bytesWritten = 0;
 #ifdef _WIN32
-            ::WriteFile(m_streamFileHandle, alignedFrameData, (DWORD)ALIGNMENT_BOUNDARY,
-                    (LPDWORD)&bytesWritten, NULL);
+            ::WriteFile(m_streamFileHandle, alignedFrameData,
+                    (DWORD)ALIGNMENT_BOUNDARY, (LPDWORD)&bytesWritten, NULL);
 #else
-            bytesWritten += ::write(m_streamFileHandle, alignedFrameData, ALIGNMENT_BOUNDARY);
+            bytesWritten +=
+                ::write(m_streamFileHandle, alignedFrameData, ALIGNMENT_BOUNDARY);
 #endif
             if (bytesWritten != ALIGNMENT_BOUNDARY)
             {
@@ -250,8 +277,9 @@ public:
 public:
     std::mutex m_mutex{};
 
-    void* m_acqBuffer{ NULL };
-    uns32 m_acqBufferBytes{ 0 };
+    // Reference-counted ownership of the acq. buffer shared with NumPy objects
+    // to guarantee the buffer is valid until last capsule releases it.
+    std::shared_ptr<AcqBuffer> m_acqBuffer{ NULL };
     uns32 m_frameCount{ 0 };
     uns32 m_frameBytes{ 0 };
 
@@ -748,8 +776,8 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
     cam->m_acqCbError.clear();
 
-    void* acqBuffer = cam->m_acqBuffer;
-    uns32 acqBufferBytes = cam->m_acqBufferBytes;
+    void* acqBuffer = cam->m_acqBuffer->data;
+    uns32 acqBufferBytes = (uns32)cam->m_acqBuffer->size;
 
     lock.unlock();
 
@@ -817,7 +845,7 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
     cam->m_acqCbError.clear();
 
-    void* acqBuffer = cam->m_acqBuffer;
+    void* acqBuffer = cam->m_acqBuffer->data;
 
     lock.unlock();
 
@@ -909,8 +937,7 @@ static PyObject* pvc_get_frame(PyObject* self, PyObject* args)
                 ? std::chrono::milliseconds(timeoutMs)
                 : std::chrono::hours(24 * 365 * 100)); // WAIT_FOREVER ~ 100 years
 
-        /* Release the GIL to allow other Python threads to run */
-        /* This macro has an open brace and must be paired */
+        // Release the GIL to allow other Python threads to run
         Py_BEGIN_ALLOW_THREADS
 
         lock.lock();
@@ -1229,7 +1256,7 @@ static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
 
     std::unique_lock<std::mutex> lock(cam->m_mutex);
 
-    void* acqBuffer = cam->m_acqBuffer;
+    void* acqBuffer = cam->m_acqBuffer->data;
 
     lock.unlock();
 
