@@ -12,6 +12,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -157,7 +158,7 @@ public:
         if (m_streamFileHandle != cInvalidFileHandle)
             return false; // Already streaming
 
-        printf("Stream to disk path set: '%s'\n", streamToDiskPath);
+        //printf("Stream to disk path set: '%s'\n", streamToDiskPath);
 
 #ifdef _WIN32
         const int flags = FILE_FLAG_NO_BUFFERING;
@@ -178,10 +179,10 @@ public:
         return true;
     }
 
-    void StreamFrameToDisk(void* frameAddress)
+    bool StreamFrameToDisk(void* frameAddress)
     {
         if (m_streamFileHandle == cInvalidFileHandle)
-            return;
+            return true;
 
         // When streaming to a file, we must always write to an alignment boundary.
         // Since the frame may not be a multiple of the alignment boundary,
@@ -229,21 +230,27 @@ public:
 #endif
         if (bytesWritten != bytesToWrite)
         {
-            printf("Stream to disk error: Not all bytes written."
-                    " Corrupted frames written to disk. Expected: %u Written: %u\n",
-                    bytesToWrite, bytesWritten);
+            m_acqCbError =
+                std::string("Streaming to disk failed, not all bytes written")
+                + " - expected " + std::to_string(bytesToWrite)
+                + " but written " + std::to_string(bytesWritten) + ".";
+            return false;
         }
 
         // Store the count of frame bytes not written.
         // Increment read index or reset to start of frame buffer if needed
         m_frameResidual = (lastFrameInBuffer) ? 0 : availableBytes - bytesWritten;
         m_readIndex = (lastFrameInBuffer) ? 0 : m_readIndex + bytesWritten;
+
+        return true;
     }
 
-    void UnsetStreamToDisk()
+    bool UnsetStreamToDisk()
     {
         if (m_streamFileHandle == cInvalidFileHandle)
-            return;
+            return true;
+
+        bool writeOk = true;
 
         if (m_frameResidual != 0)
         {
@@ -259,9 +266,12 @@ public:
 #endif
             if (bytesWritten != ALIGNMENT_BOUNDARY)
             {
-                printf("Stream to disk error: Not all bytes written."
-                        " Corrupted frames written to disk. Expected: %u Written: %u\n",
-                        ALIGNMENT_BOUNDARY, bytesWritten);
+                // Set error but complete the cleanup first
+                m_acqCbError =
+                    std::string("Streaming to disk failed, not all bytes written")
+                    + " - expected " + std::to_string(ALIGNMENT_BOUNDARY)
+                    + " but written " + std::to_string(bytesWritten) + ".";
+                writeOk = false;
             }
         }
 
@@ -271,6 +281,8 @@ public:
         ::close(m_streamFileHandle);
 #endif
         m_streamFileHandle = cInvalidFileHandle;
+
+        return writeOk;
     }
 
 public:
@@ -408,7 +420,7 @@ static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
     std::shared_ptr<Camera> cam = GetCamera(pFrameInfo->hCam, false);
     if (!cam)
     {
-        printf("pvc.NewFrameHandler: Invalid camera instance key.\n");
+        fprintf(stderr, "pvc.NewFrameHandler: Invalid camera instance key.\n");
         return; // No 'cam' means no mutex lock and no notify_all
     }
 
@@ -467,7 +479,12 @@ static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
 
     if (cam->m_streamFileHandle != cInvalidFileHandle)
     {
-        cam->StreamFrameToDisk(frame.address);
+        if (!cam->StreamFrameToDisk(frame.address))
+        {
+            // cam->m_acqCbError already set in StreamFrameToDisk()
+            cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
+            return;
+        }
     }
 
     cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
