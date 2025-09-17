@@ -2,6 +2,11 @@
 
 PyVCAM Wrapper is a Python3.X wrapper for the PVCAM SDK. This project is a fork of the [PyVCAM Wrapper](https://github.com/Photometrics/PyVCAM) developed by the [Teledyne Photometrics](https://github.com/Photometrics) team and is dependent on PyVCAM v2.1.5.
 
+
+> ⚠️ Deprecated Notice
+> 
+> This repo is no longer maintained. Newest pyvcam code under development has been migrated to [pyvcam_ndsp](https://github.com/quantumion/pyvcam_ndsp).
+
 ## Getting Started
 
 Follow the instructions below to get PyVCAM up and running on your machine for development and testing.
@@ -138,3 +143,4 @@ TODO
 This program is developed and supported as part of the [QuantumIon project](https://tqt.uwaterloo.ca/project-details/quantumion-an-open-access-quantum-computing-platform/) at the [Institute for Quantum Computing](https://uwaterloo.ca/institute-for-quantum-computing/) at the [University of Waterloo](https://uwaterloo.ca/).
 
 This research was undertaken thanks in part to funding from the Canada First Research Excellence Fund.
+
