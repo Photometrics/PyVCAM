@@ -1340,7 +1340,6 @@ static PyObject* pvc_finish_seq(PyObject* self, PyObject* args)
         cam->m_acqAbort = true;
 
         cam->UnsetStreamToDisk();
-        cam->ReleaseAcqBuffer();
 
         cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
     }
@@ -1370,7 +1369,6 @@ static PyObject* pvc_abort(PyObject* self, PyObject* args)
         cam->m_acqAbort = true;
 
         cam->UnsetStreamToDisk();
-        cam->ReleaseAcqBuffer();
 
         cam->m_acqCond.notify_all(); // Wakeup get_frame if anybody waits
     }
