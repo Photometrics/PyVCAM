@@ -1,0 +1,32 @@
+name: Build sdist
+
+on:
+  workflow_call:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  _build-sdist_:
+    name: Build sdist
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip build setuptools
+
+      - name: Set PVCAM_SDK_PATH on Linux
+        run: echo "PVCAM_SDK_PATH=${GITHUB_WORKSPACE}/pvcam-sdk/linux" >> $GITHUB_ENV
+
+      - name: Build package
+        run: python -m build --sdist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyvcam_sdist
+          path: dist/
+          if-no-files-found: error
