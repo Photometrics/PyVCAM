@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - master
-      - ci-build  # TODO: Remove after testing
+    paths:
+      - '!docs/**'
+      - '!README.md'
   pull_request:
     branches:
       - master
+    paths:
+      - '!docs/**'
+      - '!README.md'
   workflow_dispatch:  # Manual trigger
 
 jobs:
