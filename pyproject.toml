@@ -12,8 +12,7 @@ authors = [
 ]
 keywords = ["microscopy"]
 readme = "README.md"
-license = {text = "MIT"}  # Deprecated
-#license = "MIT"  # Should be used since setuptools 77.0
+license = "MIT"
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Science/Research",
@@ -54,7 +53,7 @@ source = "https://github.com/Photometrics/PyVCAM"
 tracker = "https://github.com/Photometrics/PyVCAM/issues"
 
 [build-system]
-requires = ["setuptools >= 64.0", "wheel >= 0.38"]
+requires = ["setuptools >= 77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
