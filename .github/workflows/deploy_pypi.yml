@@ -41,5 +41,4 @@ jobs:
       - name: Print out packages
         run: ls -la dist
 
-      # TODO: Uncomment after testing
-#      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@release/v1

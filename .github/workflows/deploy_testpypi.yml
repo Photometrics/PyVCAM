@@ -7,7 +7,6 @@ on:
   release:
     types:
       - prereleased
-      - published
   workflow_dispatch:  # Manual trigger
 
 jobs:
@@ -42,12 +41,11 @@ jobs:
       - name: Print out downloaded artifacts
         run: ls -la dist
 
-      # TODO: Uncomment after testing
-#      - uses: pypa/gh-action-pypi-publish@release/v1
-#        with:
-#          repository-url: https://test.pypi.org/legacy/
-#          skip-existing: true
-#          # Using token instead of trusted publishing to allow
-#          # 'act' to publish to TestPyPI when testing actions locally.
-#          user: __token__
-#          password: ${{ secrets.TESTPYPI_API_TOKEN }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          # Using token instead of trusted publishing to allow
+          # 'act' to publish to TestPyPI when testing actions locally.
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
