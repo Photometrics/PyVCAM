@@ -5,14 +5,16 @@ on:
     branches:
       - master
     paths:
-      - '!docs/**'
-      - '!README.md'
+      - '**'          # include everything
+      - '!docs/**'    # exclude docs
+      - '!README.md'  # exclude README
   pull_request:
     branches:
       - master
     paths:
-      - '!docs/**'
-      - '!README.md'
+      - '**'          # include everything
+      - '!docs/**'    # exclude docs
+      - '!README.md'  # exclude README
   workflow_dispatch:  # Manual trigger
 
 jobs:
