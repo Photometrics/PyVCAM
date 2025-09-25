@@ -42,7 +42,7 @@ jobs:
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: 'auditwheel repair -w {dest_dir} {wheel} --exclude libpvcam.so.*'
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: ''
           CIBW_ENVIRONMENT_LINUX: "PVCAM_SDK_PATH=$PWD/pvcam-sdk/linux"
-          CIBW_ENVIRONMENT_WINDOWS: "PVCAM_SDK_PATH=%CD%\pvcam-sdk\windows"
+          CIBW_ENVIRONMENT_WINDOWS: "PVCAM_SDK_PATH=${{ github.workspace }}/pvcam-sdk/windows"
           CIBW_BEFORE_ALL_LINUX: >
             for d in i686 x86_64 aarch64; do
               cd "$PVCAM_SDK_PATH/library/$d" &&
