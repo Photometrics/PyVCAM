@@ -1,5 +1,8 @@
 [[Installation]]
-pip install .
+From PyPI:
+  pip install PyVCAM
+From GitHub clone:
+  pip install .
 
 [[Uninstallation]]
 pip uninstall PyVCAM
