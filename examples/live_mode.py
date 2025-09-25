@@ -5,6 +5,7 @@ import numpy as np
 
 from pyvcam import pvc
 from pyvcam.camera import Camera
+from pyvcam import constants as const
 
 
 def main():
@@ -12,6 +13,10 @@ def main():
     cam = next(Camera.detect_camera())
     cam.open()
     print(f'Camera: {cam.name}')
+
+    has_metadata = cam.check_param(const.PARAM_METADATA_ENABLED)
+    if has_metadata:
+        cam.set_param(const.PARAM_METADATA_ENABLED, True)
 
     # The 'bit_depth_host' provides a bit-depth of the pixels returned by PVCAM.
     # The 'bit_depth' is a bit-depth from the sensor. In most cases both values
@@ -46,8 +51,11 @@ def main():
         low = np.amin(frame['pixel_data'])
         high = np.amax(frame['pixel_data'])
         avg = np.average(frame['pixel_data'])
+        meta_str = f'\tNr.: {frame["meta_data"]["frame_header"]["frameNr"]}' \
+            if has_metadata else ''
         print(f'Min: {low}\tMax: {high}\tAverage: {avg:.0f}'
-              f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}')
+              f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}'
+              f'{meta_str}')
 
         # Shrink to smaller window
         disp_img = cv2.resize(frame['pixel_data'], dim,
