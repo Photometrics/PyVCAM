@@ -1,0 +1,71 @@
+name: Build wheels
+
+on:
+  workflow_call:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  _build-wheels_:
+    name: Build wheel (${{ matrix.os }} Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Don't use '*-latest' to ensure the oldest Python version is not
+        # dropped on upgrade.
+        # Use 'ubuntu-22.04' because 24.04 is not available for 'act' yet.
+        # The 'ubuntu-*-arm' runners are not free for open source yet.
+        os:
+          - 'ubuntu-22.04'
+          #- 'ubuntu-22.04-arm'
+          - 'windows-2022'
+        python:
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+        exclude:
+          # The 'ubuntu-*-arm' and 'windows*' runners are not supported by 'act'
+          #- os: ${{ github.event.act && 'ubuntu-22.04-arm' }}
+          - os: ${{ github.event.act && 'windows-2022' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip build setuptools
+
+      - if: runner.os == 'Windows'
+        name: Set PVCAM_SDK_PATH on Windows
+        shell: bash
+        run: echo "PVCAM_SDK_PATH=${GITHUB_WORKSPACE}/pvcam-sdk/windows" >> $GITHUB_ENV
+      - if: runner.os == 'Linux'
+        name: Set PVCAM_SDK_PATH on Linux
+        run: echo "PVCAM_SDK_PATH=${GITHUB_WORKSPACE}/pvcam-sdk/linux" >> $GITHUB_ENV
+
+      - if: runner.os == 'Linux'
+        name: Create PVCAM library symlinks on Linux
+        shell: bash
+        run: |
+          for d in i686 x86_64 aarch64; do
+            cd "$PVCAM_SDK_PATH/library/$d"
+            f=$(echo libpvcam.so.*.*)
+            chmod +x "$f"
+            ln -sf "$f" "${f%.*}"
+            ln -sf "$f" "${f%%.so.*}.so"
+          done
+
+      - name: Build package
+        run: python -m build --wheel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pyvcam_wheel_${{ matrix.os }}_py${{ matrix.python }}
+          path: dist/
+          if-no-files-found: error

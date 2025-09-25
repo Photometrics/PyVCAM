@@ -1,0 +1,52 @@
+name: TestPyPI Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types:
+      - prereleased
+      - released
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  _build-sdist:
+    if: github.repository == 'Photometrics/PyVCAM'
+    uses: './.github/workflows/_build_sdist_.yml'
+
+  _build-wheels:
+    if: github.repository == 'Photometrics/PyVCAM'
+    uses: './.github/workflows/_build_wheels_.yml'
+
+  deploy-testpypi:
+    if: github.repository == 'Photometrics/PyVCAM'
+    needs:
+      - _build-sdist
+      - _build-wheels
+
+    name: Upload to TestPyPI
+    runs-on: ubuntu-latest
+
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/PyVCAM
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pyvcam_*
+          path: dist/
+          merge-multiple: true
+
+      - name: Print out downloaded artifacts
+        run: ls -la dist
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          # Using token instead of trusted publishing to allow
+          # 'act' to publish to TestPyPI when testing actions locally.
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
