@@ -46,7 +46,7 @@ dev = [
 # Home page doesn't show up with 'pip show', used a workaround via setup.cfg or setup.py
 homepage = "https://github.com/Photometrics/PyVCAM"
 source = "https://github.com/Photometrics/PyVCAM"
-#download = "https://pypi.org/project/PyVCAM/"
+download = "https://pypi.org/project/PyVCAM/#files"
 tracker = "https://github.com/Photometrics/PyVCAM/issues"
 
 [build-system]
