@@ -35,10 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = [
-    "opencv-python",
-    "matplotlib",
-]
 dev = [
     "validate-pyproject[all]",
     "Flake8-pyproject",
