@@ -661,10 +661,7 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     case TYPE_FLT64:
         return PyFloat_FromDouble(paramValue.val_flt64);
     case TYPE_BOOLEAN:
-        if (paramValue.val_bool)
-            Py_RETURN_TRUE;
-        else
-            Py_RETURN_FALSE;
+        return PyBool_FromLong(paramValue.val_bool);
     // TODO: Add support for missing parameter types like smart streaming or ROI
     default:
         break;
