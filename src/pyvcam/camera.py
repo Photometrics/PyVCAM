@@ -1200,6 +1200,14 @@ class Camera:
         return self.__rois[roi_index].shape
 
     @property
+    def live_roi(self):
+        return self.get_param(const.PARAM_ROI)
+
+    @live_roi.setter
+    def live_roi(self, value):
+        self.set_param(const.PARAM_ROI, value)
+
+    @property
     def last_exp_time(self):
         return self.get_param(const.PARAM_EXPOSURE_TIME)
 

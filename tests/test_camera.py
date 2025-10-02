@@ -475,6 +475,55 @@ class CameraConstructionTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             _ = self.test_cam.exp_mode
 
+    def test_get_live_roi(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_ROI):
+            self.test_cam.get_frame()  # Just to apply all full sensor ROI
+            curr_roi = pvc.get_param(self.test_cam.handle,
+                                     const.PARAM_ROI,
+                                     const.ATTR_CURRENT)
+            self.assertEqual(curr_roi, self.test_cam.live_roi)
+            self.assertEqual(curr_roi['s2'], self.test_cam.sensor_size[0] - 1)
+            self.assertEqual(curr_roi['p2'], self.test_cam.sensor_size[1] - 1)
+
+    def test_set_live_roi_idle(self):
+        self.test_cam.open()
+        if (
+            pvc.check_param(self.test_cam.handle, const.PARAM_ROI) and
+            pvc.get_param(self.test_cam.handle, const.PARAM_ROI, const.ATTR_LIVE)
+        ):
+            self.test_cam.get_frame()  # Just to apply all full sensor ROI
+            new_roi = self.test_cam.rois[0]
+            # Set the same ROI back, should always succeed, even outside acq.
+            self.test_cam.live_roi = new_roi
+            curr_roi = pvc.get_param(self.test_cam.handle,
+                                     const.PARAM_ROI,
+                                     const.ATTR_CURRENT)
+            self.assertEqual(curr_roi, self.test_cam.live_roi)
+
+            new_roi.p2 = ((new_roi.p2 + 1) // 2) - 1  # Change to upper half
+            with self.assertRaises(RuntimeError):
+                # Set the ROI back, fails outside acq.
+                self.test_cam.live_roi = new_roi
+
+    def test_set_live_roi_active(self):
+        self.test_cam.open()
+        if (
+            pvc.check_param(self.test_cam.handle, const.PARAM_ROI) and
+            pvc.get_param(self.test_cam.handle, const.PARAM_ROI, const.ATTR_LIVE)
+        ):
+            self.test_cam.get_frame()  # Just to apply all full sensor ROI
+            new_roi = self.test_cam.rois[0]
+            new_roi.p2 = ((new_roi.p2 + 1) // 2) - 1  # Change to upper half
+            # Start live acq. to apply live ROI, then stop immediately
+            self.test_cam.start_live()
+            self.test_cam.live_roi = new_roi
+            self.test_cam.finish()
+            curr_roi = pvc.get_param(self.test_cam.handle,
+                                     const.PARAM_ROI,
+                                     const.ATTR_CURRENT)
+            self.assertEqual(curr_roi, self.test_cam.live_roi)
+
 
 def main():
     unittest.main()
