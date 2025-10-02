@@ -706,30 +706,56 @@ class Camera:
             A 3D np.array containing the pixel data from the captured sequence.
         """
 
-        old_res = self.exp_res
-        self.exp_res = exp_res
-
         if len(self.__rois) > 1:
             raise ValueError('get_vtm_sequence does not support multi-roi captures')
 
         shape = self.__rois[0].shape
         stack = np.empty((num_frames, shape[1], shape[0]), dtype=self.__dtype)
 
-        for i in range(num_frames):
-            exp_time = time_list[i % len(time_list)]
-            try:
-                self.vtm_exp_time = exp_time
-                stack[i] = self.get_frame(exp_time=self.vtm_exp_time,
-                                          timeout_ms=timeout_ms,
-                                          reset_frame_counter=reset_frame_counter)
-                reset_frame_counter = False
-            except Exception as ex:
-                raise ValueError('Could not collect vtm frame') from ex
+        old_res = self.exp_res
+        self.exp_res = exp_res
 
-            if isinstance(interval, int) and i + 1 < num_frames:
-                time.sleep(interval / 1000)
+        try:
+            uses_vtm = self.exp_mode == const.VARIABLE_TIMED_MODE
+            if uses_vtm:  # Native VTM
 
-        self.exp_res = old_res
+                if reset_frame_counter:
+                    pvc.reset_frame_counter(self.__handle)
+
+                # Use non-zero exposure time for VTM, the actual will be set later
+                pvc.setup_seq(self.__handle, self.__rois, 1, self.__mode, 1)
+                self.__acquisition_mode = 'Sequence'
+
+                for i in range(num_frames):
+                    exp_time = time_list[i % len(time_list)]
+
+                    self.vtm_exp_time = exp_time
+                    pvc.start_set_seq(self.__handle)
+
+                    frame, _, _ = self.poll_frame(timeout_ms=timeout_ms)
+                    stack[i] = frame['pixel_data']
+
+                    if isinstance(interval, int) and i + 1 < num_frames:
+                        time.sleep(interval / 1000)
+
+                self.finish()
+
+            else:  # Emulated VTM, very similar to get_sequence()
+
+                for i in range(num_frames):
+                    exp_time = time_list[i % len(time_list)]
+
+                    stack[i] = self.get_frame(exp_time=exp_time,
+                                              timeout_ms=timeout_ms,
+                                              reset_frame_counter=reset_frame_counter)
+                    reset_frame_counter = False
+
+                    if isinstance(interval, int) and i + 1 < num_frames:
+                        time.sleep(interval / 1000)
+
+        finally:
+            self.exp_res = old_res
+
         return stack
 
     def start_live(self, exp_time=None, buffer_frame_count=16,
@@ -1197,7 +1223,6 @@ class Camera:
 
     @property
     def exp_time(self):
-        # TODO: Testing
         if not self.__is_open:
             raise RuntimeError('Camera is not open')
         return self.__exp_time
@@ -1247,6 +1272,7 @@ class Camera:
     def vtm_exp_time(self, value):
         min_exp_time = self.get_param(const.PARAM_EXPOSURE_TIME, const.ATTR_MIN)
         max_exp_time = self.get_param(const.PARAM_EXPOSURE_TIME, const.ATTR_MAX)
+        max_exp_time = min(max_exp_time, 65535)  # uns16 limit
         if not min_exp_time <= value <= max_exp_time:
             raise ValueError(f'Invalid value: {value} - {self} only supports '
                              f'exposure times between {min_exp_time} and {max_exp_time}')

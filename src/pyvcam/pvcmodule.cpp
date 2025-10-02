@@ -716,8 +716,8 @@ static PyObject* pvc_check_param(PyObject* self, PyObject* args)
         Py_RETURN_FALSE;
 }
 
-/** Starts a live acquisition. */
-static PyObject* pvc_start_live(PyObject* self, PyObject* args)
+/** Sets up a live acquisition. */
+static PyObject* pvc_setup_live(PyObject* self, PyObject* args)
 {
     int16 hcam;
     PyObject* roiListObj;
@@ -733,9 +733,13 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
     if (roiArray.empty())
         return NULL;
 
-    std::shared_ptr<Camera> cam = GetCamera(hcam);
-    if (!cam)
-        return NULL;
+    uns32 frameBytes;
+    if (!pl_exp_setup_cont(hcam, (uns16)roiArray.size(), roiArray.data(),
+                expMode, expTime, &frameBytes, CIRC_OVERWRITE))
+        return PvcamError();
+
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
+        return PvcamError();
 
     bool metadataAvail = false;
     bool metadataEnabled = false;
@@ -753,16 +757,10 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
         }
     }
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
-        return PvcamError();
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
 
-    uns32 frameBytes;
-    if (!pl_exp_setup_cont(hcam, (uns16)roiArray.size(), roiArray.data(),
-                expMode, expTime, &frameBytes, CIRC_OVERWRITE))
-        return PvcamError();
-
-    void* acqBuffer = NULL;
-    uns32 acqBufferBytes = 0;
     {
         std::lock_guard<std::mutex> lock(cam->m_mutex);
 
@@ -782,22 +780,13 @@ static PyObject* pvc_start_live(PyObject* self, PyObject* args)
         cam->m_acqAbort = false;
         cam->m_acqNewFrame = false;
         cam->m_isSequence = false;
-        cam->m_fpsFrameCnt = 0;
-        cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
-        cam->m_acqCbError.clear();
-
-        acqBuffer = cam->m_acqBuffer->data;
-        acqBufferBytes = (uns32)cam->m_acqBuffer->size;
     }
-
-    if (!pl_exp_start_cont(hcam, acqBuffer, acqBufferBytes))
-        return PvcamError();
 
     return PyLong_FromUnsignedLong(frameBytes);
 }
 
-/** Starts a sequence acquisition. */
-static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
+/** Sets up a sequence acquisition. */
+static PyObject* pvc_setup_seq(PyObject* self, PyObject* args)
 {
     int16 hcam;
     PyObject* roiListObj;
@@ -812,9 +801,14 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     if (roiArray.empty())
         return NULL;
 
-    std::shared_ptr<Camera> cam = GetCamera(hcam);
-    if (!cam)
-        return NULL;
+    uns32 acqBufferBytes;
+    if (!pl_exp_setup_seq(hcam, expTotal, (uns16)roiArray.size(), roiArray.data(),
+                expMode, expTime, &acqBufferBytes))
+        return PvcamError();
+    const uns32 frameBytes = acqBufferBytes / expTotal;
+
+    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
+        return PvcamError();
 
     bool metadataAvail = false;
     bool metadataEnabled = false;
@@ -832,16 +826,10 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
         }
     }
 
-    if (!pl_cam_register_callback_ex3(hcam, PL_CALLBACK_EOF, (void*)NewFrameHandler, NULL))
-        return PvcamError();
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
 
-    uns32 acqBufferBytes;
-    if (!pl_exp_setup_seq(hcam, expTotal, (uns16)roiArray.size(), roiArray.data(),
-                expMode, expTime, &acqBufferBytes))
-        return PvcamError();
-    const uns32 frameBytes = acqBufferBytes / expTotal;
-
-    void* acqBuffer = NULL;
     {
         std::lock_guard<std::mutex> lock(cam->m_mutex);
 
@@ -857,6 +845,56 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
         cam->m_acqAbort = false;
         cam->m_acqNewFrame = false;
         cam->m_isSequence = true;
+    }
+
+    return PyLong_FromUnsignedLong(frameBytes);
+}
+
+/** Starts already set up live acquisition. */
+static PyObject* pvc_start_set_live(PyObject* self, PyObject* args)
+{
+    int16 hcam;
+    if (!PyArg_ParseTuple(args, "h", &hcam))
+        return ParamParseError();
+
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    void* acqBuffer = NULL;
+    uns32 acqBufferBytes = 0;
+    {
+        std::lock_guard<std::mutex> lock(cam->m_mutex);
+
+        cam->m_fpsFrameCnt = 0;
+        cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
+        cam->m_acqCbError.clear();
+
+        acqBuffer = cam->m_acqBuffer->data;
+        acqBufferBytes = (uns32)cam->m_acqBuffer->size;
+    }
+
+    if (!pl_exp_start_cont(hcam, acqBuffer, acqBufferBytes))
+        return PvcamError();
+
+    Py_RETURN_NONE;
+}
+
+/** Starts already set up sequence acquisition. */
+static PyObject* pvc_start_set_seq(PyObject* self, PyObject* args)
+{
+    int16 hcam;
+    if (!PyArg_ParseTuple(args, "h", &hcam))
+        return ParamParseError();
+
+    std::shared_ptr<Camera> cam = GetCamera(hcam);
+    if (!cam)
+        return NULL;
+
+    void* acqBuffer = NULL;
+    {
+        std::lock_guard<std::mutex> lock(cam->m_mutex);
+
         cam->m_fpsFrameCnt = 0;
         cam->m_fpsLastTime = std::chrono::high_resolution_clock::now();
         cam->m_acqCbError.clear();
@@ -867,7 +905,43 @@ static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
     if (!pl_exp_start_seq(hcam, acqBuffer))
         return PvcamError();
 
-    return PyLong_FromUnsignedLong(frameBytes);
+    Py_RETURN_NONE;
+}
+
+/** Starts a live acquisition. */
+static PyObject* pvc_start_live(PyObject* self, PyObject* args)
+{
+    PyObject* frameBytesObj = pvc_setup_live(self, args);
+    if (!frameBytesObj)
+        return NULL;
+
+    PyObject* arg1 = PyTuple_GetSlice(args, 0, 1); // Just hcam
+    if (!arg1)
+        return NULL;
+
+    if (!pvc_start_set_live(self, arg1))
+        frameBytesObj = NULL;
+
+    Py_DECREF(arg1);
+    return frameBytesObj;
+}
+
+/** Starts a sequence acquisition. */
+static PyObject* pvc_start_seq(PyObject* self, PyObject* args)
+{
+    PyObject* frameBytesObj = pvc_setup_seq(self, args);
+    if (!frameBytesObj)
+        return NULL;
+
+    PyObject* arg1 = PyTuple_GetSlice(args, 0, 1); // Just hcam
+    if (!arg1)
+        return NULL;
+
+    if (!pvc_start_set_seq(self, arg1))
+        frameBytesObj = NULL;
+
+    Py_DECREF(arg1);
+    return frameBytesObj;
 }
 
 /** Returns current acquisition status, works during acquisition only. */
@@ -1547,14 +1621,22 @@ static PyMethodDef pvcMethods[] = {
     PVC_ADD_METHOD_(check_param, METH_VARARGS,
             "Checks if a specified setting of a camera is available."),
 
+    PVC_ADD_METHOD_(setup_live, METH_VARARGS,
+            "Sets up live mode acquisition."),
+    PVC_ADD_METHOD_(setup_seq, METH_VARARGS,
+            "Sets up sequence mode acquisition."),
+    PVC_ADD_METHOD_(start_set_live, METH_VARARGS,
+            "Starts already set up live mode acquisition."),
+    PVC_ADD_METHOD_(start_set_seq, METH_VARARGS,
+            "Starts already set up sequence mode acquisition."),
     PVC_ADD_METHOD_(start_live, METH_VARARGS,
-            "Starts live mode acquisition."),
+            "Sets up and starts live mode acquisition."),
     PVC_ADD_METHOD_(start_seq, METH_VARARGS,
-            "Starts sequence mode acquisition."),
+            "Sets up and starts sequence mode acquisition."),
     PVC_ADD_METHOD_(check_frame_status, METH_VARARGS,
             "Checks status of frame transfer."),
     PVC_ADD_METHOD_(get_frame, METH_VARARGS,
-            "Gets latest frame."),
+            "Gets oldest or latest frame."),
     PVC_ADD_METHOD_(finish_seq, METH_VARARGS,
             "Finishes sequence mode acquisition. Must be called before another start_seq with different configuration."),
     PVC_ADD_METHOD_(abort, METH_VARARGS,

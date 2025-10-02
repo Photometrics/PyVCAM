@@ -40,7 +40,12 @@ def main():
         cnt += 1
         print_frame_details(frame, cnt)
 
-    print('\nUsing get_vtm_sequence:')
+    has_vtm = const.VARIABLE_TIMED_MODE in cam.exp_modes.values()
+    print(f'\nUsing get_vtm_sequence with '
+          f'{"native" if has_vtm else "emulated"} VTM:')
+    if has_vtm:
+        old_exp_mode = cam.exp_mode
+        cam.exp_mode = const.VARIABLE_TIMED_MODE
     time_list = [i * 10 for i in range(1, 8)]
     frames = cam.get_vtm_sequence(time_list, const.EXP_RES_ONE_MILLISEC, NUM_FRAMES)
     i = 0
@@ -48,6 +53,8 @@ def main():
         cnt += 1
         print_frame_details(frame, cnt, f'\tExp. time: {time_list[i]}')
         i = (i + 1) % len(time_list)
+    if has_vtm:
+        cam.exp_mode = old_exp_mode
 
     try:
         print('\nUsing poll_frame without starting acquisition:')

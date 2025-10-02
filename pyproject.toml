@@ -1,6 +1,6 @@
 [project]
 name = "PyVCAM"
-version = "2.2.4"
+version = "2.3.0.dev0"
 description = "Python wrapper for PVCAM functionality"
 authors = [
     {name = "Teledyne Photometrics", email = "photometrics.support@teledyne.com"},
@@ -35,10 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-gui = [
-    "opencv-python",
-    "matplotlib",
-]
 dev = [
     "validate-pyproject[all]",
     "Flake8-pyproject",
@@ -50,7 +46,7 @@ dev = [
 # Home page doesn't show up with 'pip show', used a workaround via setup.cfg or setup.py
 homepage = "https://github.com/Photometrics/PyVCAM"
 source = "https://github.com/Photometrics/PyVCAM"
-#download = "https://pypi.org/project/PyVCAM/"
+download = "https://pypi.org/project/PyVCAM/#files"
 tracker = "https://github.com/Photometrics/PyVCAM/issues"
 
 [build-system]
