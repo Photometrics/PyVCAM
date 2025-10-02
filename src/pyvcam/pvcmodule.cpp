@@ -649,15 +649,36 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
                 "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
                 paramId);
 
-    uns16 paramType;
-    if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
-        return PvcamError();
-
     ParamValue paramValue;
     if (!pl_get_param(hcam, paramId, paramAttr, &paramValue))
         return PvcamError();
 
-    switch(paramType)
+    switch (paramAttr)
+    {
+    case ATTR_AVAIL:
+    case ATTR_LIVE:
+        return PyBool_FromLong(paramValue.val_bool);
+    case ATTR_TYPE:
+    case ATTR_ACCESS:
+        return PyLong_FromUnsignedLong(paramValue.val_uns16);
+    case ATTR_COUNT:
+        return PyLong_FromUnsignedLong(paramValue.val_uns32);
+    case ATTR_CURRENT:
+    case ATTR_DEFAULT:
+    case ATTR_MIN:
+    case ATTR_MAX:
+    case ATTR_INCREMENT:
+        break; // Handle each type below
+    default:
+        return PyErr_Format(PyExc_RuntimeError,
+                "Failed to match parameter attribute (%u).", (uns32)paramAttr);
+    }
+
+    uns16 paramType;
+    if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
+        return PvcamError();
+
+    switch (paramType)
     {
     case TYPE_CHAR_PTR:
         return PyUnicode_FromString(paramValue.val_str);
@@ -732,7 +753,7 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
         return PvcamError();
 
     ParamValue paramValue;
-    switch(paramType)
+    switch (paramType)
     {
     case TYPE_CHAR_PTR: {
         Py_ssize_t size;
