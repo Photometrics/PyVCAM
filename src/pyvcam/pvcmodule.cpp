@@ -657,9 +657,9 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     case TYPE_UNS64:
         return PyLong_FromUnsignedLongLong(paramValue.val_ulong64);
     case TYPE_FLT32:
-        return PyLong_FromDouble(paramValue.val_flt32);
+        return PyFloat_FromDouble(paramValue.val_flt32);
     case TYPE_FLT64:
-        return PyLong_FromDouble(paramValue.val_flt64);
+        return PyFloat_FromDouble(paramValue.val_flt64);
     case TYPE_BOOLEAN:
         if (paramValue.val_bool)
             Py_RETURN_TRUE;
