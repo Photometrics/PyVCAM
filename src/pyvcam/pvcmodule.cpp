@@ -98,6 +98,7 @@ union ParamValue
     flt64 val_flt64;
     rs_bool val_bool;
     rgn_type val_roi;
+    smart_stream_type val_ss;
 };
 
 class Camera
@@ -437,6 +438,38 @@ static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
     return roiArray;
 }
 
+/** Sets ValueError on error */
+static std::vector<uns32> PopulateSsParams(PyObject* ssListObj)
+{
+    const Py_ssize_t count = PyList_Size(ssListObj);
+    if (count < 0 || count > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
+    {
+        PyErr_Format(PyExc_ValueError, "Invalid SMART item count (%zd).", count);
+        return std::vector<uns32>();
+    }
+
+    auto ParseError = []() {
+        // Override the error
+        PyErr_Format(PyExc_ValueError, "Failed to parse SMART items.");
+        return std::vector<uns32>();
+    };
+
+    std::vector<uns32> ssArray((size_t)count);
+    for (Py_ssize_t i = 0; i < count; i++)
+    {
+        PyObject* ssObj  = PyList_GetItem(ssListObj, i);
+        if (!ssObj)
+            return ParseError();
+
+        uns32 ssItem = (uns32)PyLong_AsUnsignedLong(ssObj);
+        if (PyErr_Occurred())
+            return ParseError();
+
+        ssArray[i] = ssItem;
+    }
+    return ssArray;
+}
+
 static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
 {
     std::shared_ptr<Camera> cam = GetCamera(pFrameInfo->hCam, false);
@@ -638,24 +671,39 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     int16 hcam;
     uns32 paramId;
     int16 paramAttr;
-    if (!PyArg_ParseTuple(args, "hih", &hcam, &paramId, &paramAttr))
+    if (!PyArg_ParseTuple(args, "hIh", &hcam, &paramId, &paramAttr))
         return ParamParseError();
 
     rs_bool avail;
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
+    if (paramAttr == ATTR_AVAIL)
+        return PyBool_FromLong(avail);
     if (!avail)
         return PyErr_Format(PyExc_AttributeError,
                 "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
                 paramId);
 
+    uns16 paramType;
+    if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
+        return PvcamError();
+
     ParamValue paramValue;
+    std::vector<uns32> ssItems; // Helper container to hold data for SMART streaming
+    if (paramType == TYPE_SMART_STREAM_TYPE_PTR && paramAttr == ATTR_CURRENT)
+    {
+        if (!pl_get_param(hcam, paramId, ATTR_MAX, &paramValue.val_ss.entries))
+            return PvcamError();
+        ssItems.resize(paramValue.val_ss.entries);
+        paramValue.val_ss.params = ssItems.data();
+    }
+
     if (!pl_get_param(hcam, paramId, paramAttr, &paramValue))
         return PvcamError();
 
     switch (paramAttr)
     {
-    case ATTR_AVAIL:
+    //case ATTR_AVAIL: // Already handled above
     case ATTR_LIVE:
         return PyBool_FromLong(paramValue.val_bool);
     case ATTR_TYPE:
@@ -664,19 +712,18 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     case ATTR_COUNT:
         return PyLong_FromUnsignedLong(paramValue.val_uns32);
     case ATTR_CURRENT:
+        break; // Handle all param types below
     case ATTR_DEFAULT:
     case ATTR_MIN:
     case ATTR_MAX:
     case ATTR_INCREMENT:
-        break; // Handle each type below
+        if (paramType == TYPE_SMART_STREAM_TYPE_PTR)
+            return PyLong_FromUnsignedLong(paramValue.val_ss.entries);
+        break; // Handle other param types below
     default:
         return PyErr_Format(PyExc_RuntimeError,
                 "Failed to match parameter attribute (%u).", (uns32)paramAttr);
     }
-
-    uns16 paramType;
-    if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
-        return PvcamError();
 
     switch (paramType)
     {
@@ -706,9 +753,22 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
         return PyFloat_FromDouble(paramValue.val_flt64);
     case TYPE_BOOLEAN:
         return PyBool_FromLong(paramValue.val_bool);
-    //case TYPE_SMART_STREAM_TYPE_PTR:
-    //    // TODO: Add support for this parameter type
-    //    break;
+    case TYPE_SMART_STREAM_TYPE_PTR: {
+        PyObject* pySsList = PyList_New(paramValue.val_ss.entries);
+        if (!pySsList)
+            return NULL;
+        for (uns32 i = 0; i < paramValue.val_ss.entries; i++)
+        {
+            PyObject* pySsItem = PyLong_FromUnsignedLong(paramValue.val_ss.params[i]);
+            if (!pySsItem)
+            {
+                Py_DECREF(pySsList);
+                return NULL;
+            }
+            PyList_SET_ITEM(pySsList, (Py_ssize_t)i, pySsItem);
+        }
+        return pySsList;
+    }
     case TYPE_RGN_TYPE:
         // Matches format in metadata and is compatible with Camera.RegionOfInterest
         return Py_BuildValue("{s:H,s:H,s:H,s:H,s:H,s:H}", // dict
@@ -718,7 +778,6 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
                 "p1",   paramValue.val_roi.p1,
                 "p2",   paramValue.val_roi.p2,
                 "pbin", paramValue.val_roi.pbin);
-    case TYPE_SMART_STREAM_TYPE_PTR: // TODO: Remove once implemented above
     case TYPE_SMART_STREAM_TYPE: // Not used in PVCAM
     case TYPE_VOID_PTR: // Not used in PVCAM
     case TYPE_VOID_PTR_PTR: // Not used in PVCAM
@@ -737,7 +796,7 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
     int16 hcam;
     uns32 paramId;
     PyObject* paramValueObj;
-    if (!PyArg_ParseTuple(args, "hiO", &hcam, &paramId, &paramValueObj))
+    if (!PyArg_ParseTuple(args, "hIO", &hcam, &paramId, &paramValueObj))
         return ParamParseError();
 
     rs_bool avail;
@@ -753,13 +812,14 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
         return PvcamError();
 
     ParamValue paramValue;
+    std::vector<uns32> ssItems; // Helper container to hold data for SMART streaming
     switch (paramType)
     {
     case TYPE_CHAR_PTR: {
         Py_ssize_t size;
         const char* str = PyUnicode_AsUTF8AndSize(paramValueObj, &size);
         if (!str)
-            break;
+            return NULL;
         const size_t strLen = (std::min)((size_t)size, sizeof(paramValue.val_str));
         memcpy(paramValue.val_str, str, strLen);
         break;
@@ -800,15 +860,19 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
     case TYPE_BOOLEAN:
         paramValue.val_uns16 = (uns16)PyLong_AsUnsignedLong(paramValueObj);
         break;
-    //case TYPE_SMART_STREAM_TYPE_PTR:
-    //    // TODO: Add support for this parameter type
-    //    break;
+    case TYPE_SMART_STREAM_TYPE_PTR: {
+        ssItems = PopulateSsParams(paramValueObj);
+        if (PyErr_Occurred())
+            return NULL;
+        paramValue.val_ss.entries = (uns16)ssItems.size();
+        paramValue.val_ss.params = ssItems.data();
+        break;
+    }
     case TYPE_RGN_TYPE:
         paramValue.val_roi = PopulateRegion(paramValueObj);
         if (paramValue.val_roi.sbin == 0) // Invalid roi has all zeroes, let's check sbin only
             return PyErr_Format(PyExc_ValueError, "Failed to parse ROI members.");
         break;
-    case TYPE_SMART_STREAM_TYPE_PTR: // TODO: Remove once implemented above
     case TYPE_SMART_STREAM_TYPE: // Not used in PVCAM
     case TYPE_VOID_PTR: // Not used in PVCAM
     case TYPE_VOID_PTR_PTR: // Not used in PVCAM
@@ -833,17 +897,14 @@ static PyObject* pvc_check_param(PyObject* self, PyObject* args)
 {
     int16 hcam;
     uns32 paramId;
-    if (!PyArg_ParseTuple(args, "hi", &hcam, &paramId))
+    if (!PyArg_ParseTuple(args, "hI", &hcam, &paramId))
         return ParamParseError();
 
     rs_bool avail;
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
 
-    if (avail)
-        Py_RETURN_TRUE;
-    else
-        Py_RETURN_FALSE;
+    return PyBool_FromLong(avail);
 }
 
 /** Sets up a live acquisition. */
@@ -1631,7 +1692,7 @@ static PyObject* pvc_read_enum(PyObject* self, PyObject* args)
 {
     int16 hcam;
     uns32 paramId;
-    if (!PyArg_ParseTuple(args, "hi", &hcam, &paramId))
+    if (!PyArg_ParseTuple(args, "hI", &hcam, &paramId))
         return ParamParseError();
 
     rs_bool avail;

@@ -1469,3 +1469,27 @@ class Camera:
     @deprecated("Use 'metadata_enabled' property instead")
     def meta_data_enabled(self, value):
         self.metadata_enabled = value
+
+    @property
+    def smart_stream_mode_enabled(self):
+        return self.get_param(const.PARAM_SMART_STREAM_MODE_ENABLED)
+
+    @smart_stream_mode_enabled.setter
+    def smart_stream_mode_enabled(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_MODE_ENABLED, value)
+
+    @property
+    def smart_stream_mode(self):
+        return self.get_param(const.PARAM_SMART_STREAM_MODE)
+
+    @smart_stream_mode.setter
+    def smart_stream_mode(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_MODE, value)
+
+    @property
+    def smart_stream_exp_params(self):
+        return self.get_param(const.PARAM_SMART_STREAM_EXP_PARAMS)
+
+    @smart_stream_exp_params.setter
+    def smart_stream_exp_params(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_EXP_PARAMS, value)

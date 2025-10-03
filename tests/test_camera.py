@@ -524,6 +524,73 @@ class CameraConstructionTests(unittest.TestCase):
                                      const.ATTR_CURRENT)
             self.assertEqual(curr_roi, self.test_cam.live_roi)
 
+    def test_get_smart_stream_mode_enabled(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_MODE_ENABLED):
+            cur_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_MODE_ENABLED,
+                                      const.ATTR_CURRENT)
+            self.assertEqual(cur_value, self.test_cam.smart_stream_mode_enabled)
+
+    def test_set_smart_stream_mode_enabled(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_MODE_ENABLED):
+            for new_value in (True, False):
+                self.test_cam.smart_stream_mode_enabled = new_value
+                cur_value = pvc.get_param(self.test_cam.handle,
+                                          const.PARAM_SMART_STREAM_MODE_ENABLED,
+                                          const.ATTR_CURRENT)
+                self.assertEqual(new_value, cur_value)
+                self.assertEqual(new_value, self.test_cam.smart_stream_mode_enabled)
+
+    def test_get_smart_stream_mode(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_MODE):
+            cur_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_MODE,
+                                      const.ATTR_CURRENT)
+            self.assertEqual(cur_value, self.test_cam.smart_stream_mode)
+
+    def test_set_smart_stream_mode(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_MODE):
+            min_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_MODE,
+                                      const.ATTR_MIN)
+            max_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_MODE,
+                                      const.ATTR_MAX)
+            for new_value in range(min_value, max_value + 1):
+                self.test_cam.smart_stream_mode = new_value
+                cur_value = pvc.get_param(self.test_cam.handle,
+                                          const.PARAM_SMART_STREAM_MODE,
+                                          const.ATTR_CURRENT)
+                self.assertEqual(new_value, cur_value)
+                self.assertEqual(new_value, self.test_cam.smart_stream_mode)
+
+    def test_get_smart_stream_exp_params(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_EXP_PARAMS):
+            cur_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_EXP_PARAMS,
+                                      const.ATTR_CURRENT)
+            self.assertEqual(cur_value, self.test_cam.smart_stream_exp_params)
+
+    def test_set_smart_stream_exp_params(self):
+        self.test_cam.open()
+        if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_EXP_PARAMS):
+            max_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_EXP_PARAMS,
+                                      const.ATTR_MAX)
+            max_value -= 1  # Known bug, cameras report 16 but accept 15 only
+            new_value = list(range(max_value))
+            self.test_cam.smart_stream_exp_params = new_value
+            cur_value = pvc.get_param(self.test_cam.handle,
+                                      const.PARAM_SMART_STREAM_EXP_PARAMS,
+                                      const.ATTR_CURRENT)
+            self.assertEqual(new_value, cur_value)
+            self.assertEqual(new_value, self.test_cam.smart_stream_exp_params)
+
 
 def main():
     unittest.main()
