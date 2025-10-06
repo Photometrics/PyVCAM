@@ -446,7 +446,47 @@ class Camera:
         return status
 
     def get_param(self, param_id, param_attr=const.ATTR_CURRENT):
-        """Gets the current value of a specified parameter.
+        """Gets the value of a specified parameter and attribute.
+
+        The type of the value returned depends on parameter type and attribute.
+
+        Some attributes provide a value of the same type for all parameters:
+
+        - ATTR_AVAIL: Always returns a `bool`.
+                      It doesn't fail even for unavailable and unknown parameter ID.
+        - ATTR_TYPE: Always returns an `int`.
+                     It doesn't fail even for unavailable parameter.
+                     An actual type for parameter attributes min., max., increment,
+                     default and current.
+        - ATTR_ACCESS: Always returns an `int`.
+                       It doesn't fail even for unavailable parameter.
+                       Defines whether the parameter is read-only, read-write, etc.
+        - ATTR_LIVE: Always returns a `bool`.
+                     If True, the parameter can be accessed also during acquisition.
+        - ATTR_COUNT: Always return an `int`.
+                      The meaning varies with parameter type. For example,
+                      it defines number of enumeration items of TYPE_ENUM
+                      parameter (use `read_enum` function to get all items),
+                      number of characters in string for TYPE_CHAR_PTR parameters.
+                      For numeric parameters it reports number of valid values
+                      between min. and max. and given increment
+                      (e.g. if min=0, max=10, inc=2, the count will be 6),
+                      or zero if either all values for given types are supported
+                      or the number of valid values doesn't fit `uns32` C type.
+
+        Remaining attributes (ATTR_CURRENT, ATTR_MIN, ATTR_MAX, ATTR_INCREMENT,
+        ATTR_DEFAULT) provide a value with type according to parameter type:
+
+        - TYPE_INT*, TYPE_UNS*, TYPE_ENUM: Returns an `int`.
+        - TYPE_FLT*: Returns a `float`.
+        - TYPE_CHAR_PTR: Returns a `str`.
+        - TYPE_RGN_TYPE: Returns a `dict` with keys `s1`, `s2`, `sbin`, `p1`, `p2`, `pbin`.
+        - TYPE_SMART_STREAM_TYPE_PTR: Returns a `list` of `int` values.
+                    The list can be empty, or in case of ATTR_MAX it contains
+                    all zeroes where th number of zeroes means the max. number
+                    of smart stream exposures.
+                    **Warning**: It is known FW bug, the cameras actually
+                    supports max-1 values only.
 
         Parameter(s):
             param_id (int): The parameter to get. Refer to constants.py for
@@ -456,7 +496,7 @@ class Camera:
                               constants for each attribute.
 
         Returns:
-            Value of specified parameter.
+            Value of specified parameter and attribute.
         """
 
         return pvc.get_param(self.__handle, param_id, param_attr)
@@ -475,6 +515,7 @@ class Camera:
             param_id (int): An int that corresponds to a camera setting. Refer to
                             constants.py for valid parameter values.
             value (Varies): The value to set the camera setting to.
+                            See the get_param documentation for value type.
         """
 
         pvc.set_param(self.__handle, param_id, value)
@@ -1200,6 +1241,14 @@ class Camera:
         return self.__rois[roi_index].shape
 
     @property
+    def live_roi(self):
+        return self.get_param(const.PARAM_ROI)
+
+    @live_roi.setter
+    def live_roi(self, value):
+        self.set_param(const.PARAM_ROI, value)
+
+    @property
     def last_exp_time(self):
         return self.get_param(const.PARAM_EXPOSURE_TIME)
 
@@ -1381,10 +1430,6 @@ class Camera:
         self.set_param(const.PARAM_CENTROIDS_MODE, value)
 
     @property
-    def scan_line_time(self):
-        return self.get_param(const.PARAM_SCAN_LINE_TIME)
-
-    @property
     def prog_scan_mode(self):
         # Camera specific setting: Will raise AttributeError if called with a
         # camera that does not support this setting.
@@ -1437,6 +1482,15 @@ class Camera:
         self.set_param(const.PARAM_SCAN_LINE_DELAY, value)
 
     @property
+    def prog_scan_line_time(self):
+        return self.get_param(const.PARAM_SCAN_LINE_TIME)
+
+    @property
+    @deprecated("Use 'prog_scan_line_time' property instead")
+    def scan_line_time(self):
+        return self.prog_scan_line_time
+
+    @property
     def prog_scan_width(self):
         return self.get_param(const.PARAM_SCAN_WIDTH)
 
@@ -1461,3 +1515,27 @@ class Camera:
     @deprecated("Use 'metadata_enabled' property instead")
     def meta_data_enabled(self, value):
         self.metadata_enabled = value
+
+    @property
+    def smart_stream_mode_enabled(self):
+        return self.get_param(const.PARAM_SMART_STREAM_MODE_ENABLED)
+
+    @smart_stream_mode_enabled.setter
+    def smart_stream_mode_enabled(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_MODE_ENABLED, value)
+
+    @property
+    def smart_stream_mode(self):
+        return self.get_param(const.PARAM_SMART_STREAM_MODE)
+
+    @smart_stream_mode.setter
+    def smart_stream_mode(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_MODE, value)
+
+    @property
+    def smart_stream_exp_params(self):
+        return self.get_param(const.PARAM_SMART_STREAM_EXP_PARAMS)
+
+    @smart_stream_exp_params.setter
+    def smart_stream_exp_params(self, value):
+        self.set_param(const.PARAM_SMART_STREAM_EXP_PARAMS, value)

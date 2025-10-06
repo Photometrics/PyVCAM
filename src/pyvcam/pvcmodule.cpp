@@ -97,6 +97,8 @@ union ParamValue
     flt32 val_flt32;
     flt64 val_flt64;
     rs_bool val_bool;
+    rgn_type val_roi;
+    smart_stream_type val_ss;
 };
 
 class Camera
@@ -358,6 +360,52 @@ static std::shared_ptr<Camera> GetCamera(int16 hcam, bool setPyErr = true)
     return cam;
 }
 
+/** Sets ValueError on error and returns rgn_type with all zeroes */
+static rgn_type PopulateRegion(PyObject* roiObj)
+{
+    rgn_type roi{ 0, 0, 0, 0, 0, 0 };
+
+    PyObject* s1Obj   = PyObject_GetAttrString(roiObj, "s1");
+    PyObject* s2Obj   = PyObject_GetAttrString(roiObj, "s2");
+    PyObject* sbinObj = PyObject_GetAttrString(roiObj, "sbin");
+    PyObject* p1Obj   = PyObject_GetAttrString(roiObj, "p1");
+    PyObject* p2Obj   = PyObject_GetAttrString(roiObj, "p2");
+    PyObject* pbinObj = PyObject_GetAttrString(roiObj, "pbin");
+
+    if (s1Obj && s2Obj && sbinObj && p1Obj && p2Obj && pbinObj)
+    {
+        const long s1   = PyLong_AsLong(s1Obj);
+        const long s2   = PyLong_AsLong(s2Obj);
+        const long sbin = PyLong_AsLong(sbinObj);
+        const long p1   = PyLong_AsLong(p1Obj);
+        const long p2   = PyLong_AsLong(p2Obj);
+        const long pbin = PyLong_AsLong(pbinObj);
+        if (       s1   >= 0 && s1   <= (long)(std::numeric_limits<uns16>::max)()
+                && s2   >= 0 && s2   <= (long)(std::numeric_limits<uns16>::max)()
+                && sbin >= 1 && sbin <= (long)(std::numeric_limits<uns16>::max)()
+                && p1   >= 0 && p1   <= (long)(std::numeric_limits<uns16>::max)()
+                && p2   >= 0 && p2   <= (long)(std::numeric_limits<uns16>::max)()
+                && pbin >= 1 && pbin <= (long)(std::numeric_limits<uns16>::max)())
+        {
+            roi.s1   = (uns16)s1;
+            roi.s2   = (uns16)s2;
+            roi.sbin = (uns16)sbin;
+            roi.p1   = (uns16)p1;
+            roi.p2   = (uns16)p2;
+            roi.pbin = (uns16)pbin;
+        }
+    }
+
+    Py_XDECREF(s1Obj);
+    Py_XDECREF(s2Obj);
+    Py_XDECREF(sbinObj);
+    Py_XDECREF(p1Obj);
+    Py_XDECREF(p2Obj);
+    Py_XDECREF(pbinObj);
+
+    return roi;
+}
+
 /** Sets ValueError on error and returns empty list */
 static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
 {
@@ -381,37 +429,45 @@ static std::vector<rgn_type> PopulateRegions(PyObject* roiListObj)
         if (!roiObj)
             return ParseError();
 
-        PyObject* s1Obj   = PyObject_GetAttrString(roiObj, "s1");
-        PyObject* s2Obj   = PyObject_GetAttrString(roiObj, "s2");
-        PyObject* sbinObj = PyObject_GetAttrString(roiObj, "sbin");
-        PyObject* p1Obj   = PyObject_GetAttrString(roiObj, "p1");
-        PyObject* p2Obj   = PyObject_GetAttrString(roiObj, "p2");
-        PyObject* pbinObj = PyObject_GetAttrString(roiObj, "pbin");
-        if (!s1Obj || !s2Obj || !sbinObj || !p1Obj || !p2Obj || !pbinObj)
+        rgn_type roi = PopulateRegion(roiObj);
+        if (roi.sbin == 0) // Invalid roi has all zeroes, let's check sbin only
             return ParseError();
 
-        const long s1   = PyLong_AsLong(s1Obj);
-        const long s2   = PyLong_AsLong(s2Obj);
-        const long sbin = PyLong_AsLong(sbinObj);
-        const long p1   = PyLong_AsLong(p1Obj);
-        const long p2   = PyLong_AsLong(p2Obj);
-        const long pbin = PyLong_AsLong(pbinObj);
-        if (       s1   < 0 || s1   > (long)(std::numeric_limits<uns16>::max)()
-                || s2   < 0 || s2   > (long)(std::numeric_limits<uns16>::max)()
-                || sbin < 1 || sbin > (long)(std::numeric_limits<uns16>::max)()
-                || p1   < 0 || p1   > (long)(std::numeric_limits<uns16>::max)()
-                || p2   < 0 || p2   > (long)(std::numeric_limits<uns16>::max)()
-                || pbin < 1 || pbin > (long)(std::numeric_limits<uns16>::max)())
-            return ParseError();
-
-        roiArray[i].s1   = (uns16)s1;
-        roiArray[i].s2   = (uns16)s2;
-        roiArray[i].sbin = (uns16)sbin;
-        roiArray[i].p1   = (uns16)p1;
-        roiArray[i].p2   = (uns16)p2;
-        roiArray[i].pbin = (uns16)pbin;
+        roiArray[i] = roi;
     }
     return roiArray;
+}
+
+/** Sets ValueError on error */
+static std::vector<uns32> PopulateSsParams(PyObject* ssListObj)
+{
+    const Py_ssize_t count = PyList_Size(ssListObj);
+    if (count < 0 || count > (Py_ssize_t)(std::numeric_limits<uns16>::max)())
+    {
+        PyErr_Format(PyExc_ValueError, "Invalid SMART item count (%zd).", count);
+        return std::vector<uns32>();
+    }
+
+    auto ParseError = []() {
+        // Override the error
+        PyErr_Format(PyExc_ValueError, "Failed to parse SMART items.");
+        return std::vector<uns32>();
+    };
+
+    std::vector<uns32> ssArray((size_t)count);
+    for (Py_ssize_t i = 0; i < count; i++)
+    {
+        PyObject* ssObj  = PyList_GetItem(ssListObj, i);
+        if (!ssObj)
+            return ParseError();
+
+        uns32 ssItem = (uns32)PyLong_AsUnsignedLong(ssObj);
+        if (PyErr_Occurred())
+            return ParseError();
+
+        ssArray[i] = ssItem;
+    }
+    return ssArray;
 }
 
 static void NewFrameHandler(FRAME_INFO* pFrameInfo, void* context)
@@ -615,12 +671,14 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     int16 hcam;
     uns32 paramId;
     int16 paramAttr;
-    if (!PyArg_ParseTuple(args, "hih", &hcam, &paramId, &paramAttr))
+    if (!PyArg_ParseTuple(args, "hIh", &hcam, &paramId, &paramAttr))
         return ParamParseError();
 
     rs_bool avail;
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
+    if (paramAttr == ATTR_AVAIL)
+        return PyBool_FromLong(avail);
     if (!avail)
         return PyErr_Format(PyExc_AttributeError,
                 "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
@@ -631,10 +689,55 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
         return PvcamError();
 
     ParamValue paramValue;
+    std::vector<uns32> ssItems; // Helper container to hold data for SMART streaming
+    if (paramType == TYPE_SMART_STREAM_TYPE_PTR)
+    {
+        switch (paramAttr)
+        {
+        case ATTR_CURRENT:
+        case ATTR_DEFAULT:
+        case ATTR_MIN:
+        case ATTR_MAX:
+        case ATTR_INCREMENT:
+            if (!pl_get_param(hcam, paramId, ATTR_MAX, &paramValue.val_ss.entries))
+                return PvcamError();
+            ssItems.resize(paramValue.val_ss.entries);
+            paramValue.val_ss.params = ssItems.data();
+            break;
+        default:
+            break;
+        }
+    }
+
     if (!pl_get_param(hcam, paramId, paramAttr, &paramValue))
         return PvcamError();
 
-    switch(paramType)
+    switch (paramAttr)
+    {
+    //case ATTR_AVAIL: // Already handled above
+    case ATTR_LIVE:
+        return PyBool_FromLong(paramValue.val_bool);
+    case ATTR_TYPE:
+    case ATTR_ACCESS:
+        return PyLong_FromUnsignedLong(paramValue.val_uns16);
+    case ATTR_COUNT:
+        return PyLong_FromUnsignedLong(paramValue.val_uns32);
+    case ATTR_CURRENT:
+        break; // Handle all param types below
+    case ATTR_DEFAULT:
+    case ATTR_MIN:
+    case ATTR_MAX:
+    case ATTR_INCREMENT:
+        if (paramType == TYPE_SMART_STREAM_TYPE_PTR)
+            for (uns32 i = 0; i < paramValue.val_ss.entries; i++)
+                paramValue.val_ss.params[i] = 0;
+        break; // Continue handling as other param types below
+    default:
+        return PyErr_Format(PyExc_RuntimeError,
+                "Failed to match parameter attribute (%u).", (uns32)paramAttr);
+    }
+
+    switch (paramType)
     {
     case TYPE_CHAR_PTR:
         return PyUnicode_FromString(paramValue.val_str);
@@ -657,21 +760,46 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     case TYPE_UNS64:
         return PyLong_FromUnsignedLongLong(paramValue.val_ulong64);
     case TYPE_FLT32:
-        return PyLong_FromDouble(paramValue.val_flt32);
+        return PyFloat_FromDouble(paramValue.val_flt32);
     case TYPE_FLT64:
-        return PyLong_FromDouble(paramValue.val_flt64);
+        return PyFloat_FromDouble(paramValue.val_flt64);
     case TYPE_BOOLEAN:
-        if (paramValue.val_bool)
-            Py_RETURN_TRUE;
-        else
-            Py_RETURN_FALSE;
-    // TODO: Add support for missing parameter types like smart streaming or ROI
-    default:
-        break;
+        return PyBool_FromLong(paramValue.val_bool);
+    case TYPE_SMART_STREAM_TYPE_PTR: {
+        PyObject* pySsList = PyList_New(paramValue.val_ss.entries);
+        if (!pySsList)
+            return NULL;
+        for (uns32 i = 0; i < paramValue.val_ss.entries; i++)
+        {
+            PyObject* pySsItem = PyLong_FromUnsignedLong(paramValue.val_ss.params[i]);
+            if (!pySsItem)
+            {
+                Py_DECREF(pySsList);
+                return NULL;
+            }
+            PyList_SET_ITEM(pySsList, (Py_ssize_t)i, pySsItem);
+        }
+        return pySsList;
     }
-
-    return PyErr_Format(PyExc_RuntimeError,
-            "Failed to match parameter type (%u).", (uns32)paramType);
+    case TYPE_RGN_TYPE:
+        // Matches format in metadata and is compatible with Camera.RegionOfInterest
+        return Py_BuildValue("{s:H,s:H,s:H,s:H,s:H,s:H}", // dict
+                "s1",   paramValue.val_roi.s1,
+                "s2",   paramValue.val_roi.s2,
+                "sbin", paramValue.val_roi.sbin,
+                "p1",   paramValue.val_roi.p1,
+                "p2",   paramValue.val_roi.p2,
+                "pbin", paramValue.val_roi.pbin);
+    case TYPE_SMART_STREAM_TYPE: // Not used in PVCAM
+    case TYPE_VOID_PTR: // Not used in PVCAM
+    case TYPE_VOID_PTR_PTR: // Not used in PVCAM
+    case TYPE_RGN_TYPE_PTR: // Not used in PVCAM
+    case TYPE_RGN_LIST_TYPE: // Not used in PVCAM
+    case TYPE_RGN_LIST_TYPE_PTR: // Not used in PVCAM
+    default:
+        return PyErr_Format(PyExc_RuntimeError,
+                "Failed to match parameter type (%u).", (uns32)paramType);
+    }
 }
 
 /** Sets a specified parameter to a given value. */
@@ -679,9 +807,8 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
 {
     int16 hcam;
     uns32 paramId;
-    // TODO: Fix! The value parsed as 32-bit integer
-    void* paramValue;
-    if (!PyArg_ParseTuple(args, "hii", &hcam, &paramId, &paramValue))
+    PyObject* paramValueObj;
+    if (!PyArg_ParseTuple(args, "hIO", &hcam, &paramId, &paramValueObj))
         return ParamParseError();
 
     rs_bool avail;
@@ -691,6 +818,85 @@ static PyObject* pvc_set_param(PyObject* self, PyObject* args)
         return PyErr_Format(PyExc_AttributeError,
                 "Invalid setting for this camera. Parameter ID 0x%08X is not available.",
                 paramId);
+
+    uns16 paramType;
+    if (!pl_get_param(hcam, paramId, ATTR_TYPE, &paramType))
+        return PvcamError();
+
+    ParamValue paramValue;
+    std::vector<uns32> ssItems; // Helper container to hold data for SMART streaming
+    switch (paramType)
+    {
+    case TYPE_CHAR_PTR: {
+        Py_ssize_t size;
+        const char* str = PyUnicode_AsUTF8AndSize(paramValueObj, &size);
+        if (!str)
+            return NULL;
+        const size_t strLen = (std::min)((size_t)size, sizeof(paramValue.val_str));
+        memcpy(paramValue.val_str, str, strLen);
+        break;
+    }
+    case TYPE_ENUM:
+        paramValue.val_enum = (int32)PyLong_AsLong(paramValueObj);
+        break;
+    case TYPE_INT8:
+        paramValue.val_int8 = (int8)PyLong_AsLong(paramValueObj);
+        break;
+    case TYPE_UNS8:
+        paramValue.val_uns8 = (uns8)PyLong_AsUnsignedLong(paramValueObj);
+        break;
+    case TYPE_INT16:
+        paramValue.val_int16 = (int16)PyLong_AsLong(paramValueObj);
+        break;
+    case TYPE_UNS16:
+        paramValue.val_uns16 = (uns16)PyLong_AsUnsignedLong(paramValueObj);
+        break;
+    case TYPE_INT32:
+        paramValue.val_int32 = (int32)PyLong_AsLong(paramValueObj);
+        break;
+    case TYPE_UNS32:
+        paramValue.val_uns32 = (uns32)PyLong_AsUnsignedLong(paramValueObj);
+        break;
+    case TYPE_INT64:
+        paramValue.val_long64 = (long64)PyLong_AsLongLong(paramValueObj);
+        break;
+    case TYPE_UNS64:
+        paramValue.val_ulong64 = (ulong64)PyLong_AsUnsignedLongLong(paramValueObj);
+        break;
+    case TYPE_FLT32:
+        paramValue.val_flt32 = (flt32)PyLong_AsDouble(paramValueObj);
+        break;
+    case TYPE_FLT64:
+        paramValue.val_flt64 = (flt64)PyLong_AsDouble(paramValueObj);
+        break;
+    case TYPE_BOOLEAN:
+        paramValue.val_uns16 = (uns16)PyLong_AsUnsignedLong(paramValueObj);
+        break;
+    case TYPE_SMART_STREAM_TYPE_PTR: {
+        ssItems = PopulateSsParams(paramValueObj);
+        if (PyErr_Occurred())
+            return NULL;
+        paramValue.val_ss.entries = (uns16)ssItems.size();
+        paramValue.val_ss.params = ssItems.data();
+        break;
+    }
+    case TYPE_RGN_TYPE:
+        paramValue.val_roi = PopulateRegion(paramValueObj);
+        if (paramValue.val_roi.sbin == 0) // Invalid roi has all zeroes, let's check sbin only
+            return PyErr_Format(PyExc_ValueError, "Failed to parse ROI members.");
+        break;
+    case TYPE_SMART_STREAM_TYPE: // Not used in PVCAM
+    case TYPE_VOID_PTR: // Not used in PVCAM
+    case TYPE_VOID_PTR_PTR: // Not used in PVCAM
+    case TYPE_RGN_TYPE_PTR: // Not used in PVCAM
+    case TYPE_RGN_LIST_TYPE: // Not used in PVCAM
+    case TYPE_RGN_LIST_TYPE_PTR: // Not used in PVCAM
+    default:
+        return PyErr_Format(PyExc_RuntimeError,
+                "Failed to match parameter type (%u).", (uns32)paramType);
+    }
+    if (PyErr_Occurred())
+        return NULL;
 
     if (!pl_set_param(hcam, paramId, &paramValue))
         return PvcamError();
@@ -703,17 +909,14 @@ static PyObject* pvc_check_param(PyObject* self, PyObject* args)
 {
     int16 hcam;
     uns32 paramId;
-    if (!PyArg_ParseTuple(args, "hi", &hcam, &paramId))
+    if (!PyArg_ParseTuple(args, "hI", &hcam, &paramId))
         return ParamParseError();
 
     rs_bool avail;
     if (!pl_get_param(hcam, paramId, ATTR_AVAIL, &avail))
         return PvcamError();
 
-    if (avail)
-        Py_RETURN_TRUE;
-    else
-        Py_RETURN_FALSE;
+    return PyBool_FromLong(avail);
 }
 
 /** Sets up a live acquisition. */
@@ -1501,7 +1704,7 @@ static PyObject* pvc_read_enum(PyObject* self, PyObject* args)
 {
     int16 hcam;
     uns32 paramId;
-    if (!PyArg_ParseTuple(args, "hi", &hcam, &paramId))
+    if (!PyArg_ParseTuple(args, "hI", &hcam, &paramId))
         return ParamParseError();
 
     rs_bool avail;
