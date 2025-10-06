@@ -1430,10 +1430,6 @@ class Camera:
         self.set_param(const.PARAM_CENTROIDS_MODE, value)
 
     @property
-    def scan_line_time(self):
-        return self.get_param(const.PARAM_SCAN_LINE_TIME)
-
-    @property
     def prog_scan_mode(self):
         # Camera specific setting: Will raise AttributeError if called with a
         # camera that does not support this setting.
@@ -1484,6 +1480,15 @@ class Camera:
     @prog_scan_line_delay.setter
     def prog_scan_line_delay(self, value):
         self.set_param(const.PARAM_SCAN_LINE_DELAY, value)
+
+    @property
+    def prog_scan_line_time(self):
+        return self.get_param(const.PARAM_SCAN_LINE_TIME)
+
+    @property
+    @deprecated("Use 'prog_scan_line_time' property instead")
+    def scan_line_time(self):
+        return self.prog_scan_line_time
 
     @property
     def prog_scan_width(self):
