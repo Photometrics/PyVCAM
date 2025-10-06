@@ -579,11 +579,13 @@ class CameraConstructionTests(unittest.TestCase):
     def test_set_smart_stream_exp_params(self):
         self.test_cam.open()
         if pvc.check_param(self.test_cam.handle, const.PARAM_SMART_STREAM_EXP_PARAMS):
+            # ATTR_MAX returns a list too, only the list length is important
             max_value = pvc.get_param(self.test_cam.handle,
                                       const.PARAM_SMART_STREAM_EXP_PARAMS,
                                       const.ATTR_MAX)
-            max_value -= 1  # Known bug, cameras report 16 but accept 15 only
-            new_value = list(range(max_value))
+            # Known bug, cameras report 16 but accept 15 values only
+            max_value_count = len(max_value) - 1
+            new_value = list(range(max_value_count))
             self.test_cam.smart_stream_exp_params = new_value
             cur_value = pvc.get_param(self.test_cam.handle,
                                       const.PARAM_SMART_STREAM_EXP_PARAMS,
