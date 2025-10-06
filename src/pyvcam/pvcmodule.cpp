@@ -690,12 +690,23 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
 
     ParamValue paramValue;
     std::vector<uns32> ssItems; // Helper container to hold data for SMART streaming
-    if (paramType == TYPE_SMART_STREAM_TYPE_PTR && paramAttr == ATTR_CURRENT)
+    if (paramType == TYPE_SMART_STREAM_TYPE_PTR)
     {
-        if (!pl_get_param(hcam, paramId, ATTR_MAX, &paramValue.val_ss.entries))
-            return PvcamError();
-        ssItems.resize(paramValue.val_ss.entries);
-        paramValue.val_ss.params = ssItems.data();
+        switch (paramAttr)
+        {
+        case ATTR_CURRENT:
+        case ATTR_DEFAULT:
+        case ATTR_MIN:
+        case ATTR_MAX:
+        case ATTR_INCREMENT:
+            if (!pl_get_param(hcam, paramId, ATTR_MAX, &paramValue.val_ss.entries))
+                return PvcamError();
+            ssItems.resize(paramValue.val_ss.entries);
+            paramValue.val_ss.params = ssItems.data();
+            break;
+        default:
+            break;
+        }
     }
 
     if (!pl_get_param(hcam, paramId, paramAttr, &paramValue))
@@ -718,8 +729,9 @@ static PyObject* pvc_get_param(PyObject* self, PyObject* args)
     case ATTR_MAX:
     case ATTR_INCREMENT:
         if (paramType == TYPE_SMART_STREAM_TYPE_PTR)
-            return PyLong_FromUnsignedLong(paramValue.val_ss.entries);
-        break; // Handle other param types below
+            for (uns32 i = 0; i < paramValue.val_ss.entries; i++)
+                paramValue.val_ss.params[i] = 0;
+        break; // Continue handling as other param types below
     default:
         return PyErr_Format(PyExc_RuntimeError,
                 "Failed to match parameter attribute (%u).", (uns32)paramAttr);
