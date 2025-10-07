@@ -25,14 +25,34 @@ def main():
     # or even 32-bit pixels to the application.
     # Ideally, max_pix_value should be based on PARAM_IMAGE_FORMAT_HOST.
     bit_depth = cam.bit_depth_host
-    bytes_per_pixel = int((bit_depth + 7) / 8)
+    bytes_per_pixel = (bit_depth + 7) // 8
     max_pix_value = 2 ** (bytes_per_pixel * 8) - 1
 
-    cam.start_live(exp_time=5)
+    # For color camera prepare OpenCV code to de-bayer to its native BGR format
+    cvt_code = None
+    if cam.check_param(const.PARAM_COLOR_MODE):
+        color_mode = cam.get_param(const.PARAM_COLOR_MODE)
+        if color_mode == const.COLOR_RGGB:
+            cvt_code = cv2.COLOR_BayerRGGB2BGR
+        if color_mode == const.COLOR_GRBG:
+            cvt_code = cv2.COLOR_BayerGRBG2BGR
+        if color_mode == const.COLOR_GBRG:
+            cvt_code = cv2.COLOR_BayerGBRG2BGR
+        if color_mode == const.COLOR_BGGR:
+            cvt_code = cv2.COLOR_BayerBGGR2BGR
 
-    width = 800
-    height = int(cam.sensor_size[1] * width / cam.sensor_size[0])
-    dim = (width, height)
+    # Calculate shrunken display window size that keeps ratio with sensor
+    win_width = 800
+    win_height = (cam.sensor_size[1] * win_width) // cam.sensor_size[0]
+    win_dim = (win_width, win_height)
+
+    # Create the window in advance
+    win_name = 'Live Mode'
+    cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)  # Non-resizable by user
+    cv2.resizeWindow(win_name, win_dim)
+    cv2.setWindowTitle(win_name, f'{win_name} - <no image yet>')
+
+    cam.start_live(exp_time=5)
 
     cnt = 0
     dropped = 0
@@ -57,16 +77,22 @@ def main():
               f'\tFrames: {frame_count}\tFrame Rate: {fps:.1f}'
               f'{meta_str}')
 
+        disp_img = frame['pixel_data']
+        # De-bayer the original image, if it is color
+        if cvt_code is not None:
+            disp_img = cv2.cvtColor(disp_img, cvt_code)
         # Shrink to smaller window
-        disp_img = cv2.resize(frame['pixel_data'], dim,
+        disp_img = cv2.resize(disp_img, win_dim,
                               interpolation=cv2.INTER_AREA)
         # Normalize to min-max range to make even background noise visible
         disp_img = cv2.normalize(disp_img, dst=None,
                                  alpha=0, beta=max_pix_value,
                                  norm_type=cv2.NORM_MINMAX)
-        cv2.imshow('Live Mode', disp_img)
 
-        if cv2.waitKey(10) == 27:
+        cv2.imshow(win_name, disp_img)
+        cv2.setWindowTitle(win_name, f'{win_name} - #{frame_count}, {fps:.1f} FPS')
+
+        if cv2.waitKey(10) == 27:  # Exit on <ESC> key
             break
 
     t_end = time.time()
