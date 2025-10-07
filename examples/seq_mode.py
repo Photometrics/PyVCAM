@@ -46,7 +46,7 @@ def main():
     if has_vtm:
         old_exp_mode = cam.exp_mode
         cam.exp_mode = const.VARIABLE_TIMED_MODE
-    time_list = [i * 10 for i in range(1, 8)]
+    time_list = [i * 10 for i in range(1, 8)]  # [10, 20, 30, 40, 50, 60, 70]
     frames = cam.get_vtm_sequence(time_list, const.EXP_RES_ONE_MILLISEC, NUM_FRAMES)
     i = 0
     for frame in frames:
@@ -55,6 +55,21 @@ def main():
         i = (i + 1) % len(time_list)
     if has_vtm:
         cam.exp_mode = old_exp_mode
+
+    print('\nUsing get_sequence with S.M.A.R.T. streaming:')
+    if cam.check_param(const.PARAM_SMART_STREAM_MODE_ENABLED):
+        time_list = list(range(0, 51, 10))  # [0, 10, 20, 30, 40, 50]
+        cam.smart_stream_mode_enabled = True
+        cam.smart_stream_exp_params = time_list
+        frames = cam.get_sequence(NUM_FRAMES, exp_time=1)  # Non-zero exp_time!
+        i = 0
+        for frame in frames:
+            cnt += 1
+            print_frame_details(frame, cnt, f'\tExp. time: {time_list[i]}')
+            i = (i + 1) % len(time_list)
+        cam.smart_stream_mode_enabled = False
+    else:
+        print('Camera does not support S.M.A.R.T. streaming.')
 
     try:
         print('\nUsing poll_frame without starting acquisition:')
