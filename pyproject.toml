@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "PyVCAM"
-version = "2.3.1.dev0"
+dynamic = ["version"]  # Taken form pyvcam/__init__.py
 description = "Python wrapper for PVCAM functionality"
 authors = [
     {name = "Teledyne Photometrics", email = "photometrics.support@teledyne.com"},
@@ -10,7 +14,10 @@ authors = [
     {name = "Vojtěch Ondřej"},
     {name = "Tomáš Hanák"},
 ]
-keywords = ["microscopy"]
+keywords = [
+    "PVCAM",
+    "microscopy",
+]
 readme = "README.md"
 license = "MIT"
 classifiers = [
@@ -49,16 +56,15 @@ source = "https://github.com/Photometrics/PyVCAM"
 download = "https://pypi.org/project/PyVCAM/#files"
 tracker = "https://github.com/Photometrics/PyVCAM/issues"
 
-[build-system]
-requires = ["setuptools >= 77.0.3"]
-build-backend = "setuptools.build_meta"
-
 [tool.setuptools.packages.find]
 where = ["src"]
 include = [
     "pyvcam",
 ]
 exclude = []
+
+[tool.setuptools.dynamic]
+version = {attr = "pyvcam.__version__"}
 
 # Thanks to Flake8-pyproject, we can configure flake8 here
 [tool.flake8]
@@ -100,3 +106,5 @@ max-statements=100
 #   python -m validate_pyproject pyproject.toml
 #   python -m flake8 src tests --count --statistics
 #   python -m pylint src
+# Or run GitHub tests locally in Docker via 'act' (https://nektosact.com/):
+#   act -j check
