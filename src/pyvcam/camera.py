@@ -1539,4 +1539,4 @@ class Camera:
     @smart_stream_exp_params.setter
     def smart_stream_exp_params(self, value):
         self.set_param(const.PARAM_SMART_STREAM_EXP_PARAMS, value)
-
+        
