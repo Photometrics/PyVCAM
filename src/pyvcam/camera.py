@@ -322,7 +322,6 @@ class Camera:
                 self.__port_speed_gain_table[port_name][speed_name] = {
                     'speed_index': speed_index,
                     'pixel_time': self.pix_time,
-                    'bit_depth': self.bit_depth,
                     'gain_range': gains,
                 }
 
@@ -333,6 +332,7 @@ class Camera:
 
                     self.__port_speed_gain_table[port_name][speed_name][gain_name] = {
                         'gain_index': gain_index,
+                        'bit_depth': self.bit_depth,
                     }
 
         # Reset speed table back to default
